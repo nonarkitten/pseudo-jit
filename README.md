@@ -28,7 +28,7 @@ The inner interpreter is subroutine threaded where each opcode is implemented in
 
 ### The Outer Interpreter
 
-The outer interpreter[^1] will find the entry point into the cache and if necessary, invalidate the page when a cache miss occurs. In this case, the cache is preloaded with the address of the opcode lookup function. This function will use the current real program counter to determine what the 68000 program counter ought to be, looks up the opcode in the table and the substitutes the cache entry with a call to the opcode itself. It then calls the opcode immediately before returning.
+The outer interpreter[^1] will find the entry point into the cache and if necessary, invalidate the page when a cache miss occurs. In this case, the cache is preloaded with the address of the opcode lookup function. This function will use the current real program counter to determine what the 68000 program counter ought to be, looks up the opcode in the table and substitutes the cache entry with a call to the opcode itself. It then calls the opcode immediately before returning.
 
 ### Opcode Handlers
 
