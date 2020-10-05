@@ -54,4 +54,4 @@ This optimized approach will not be implemented in the first version of PJIT.
 
 # Notes
 
-[^1] In classic Forth, the outer interpreter is always constructed of statements of the inner interpreter which means that the true state of the machine never leaves of inner interpreter context; with a machine implementation of the inner interpreter, this model doesn't make sense, so the outer interpreter shall be regular ARM code as compiled by the C compiler.
+[^1]: In classic Forth, the outer interpreter is always constructed of statements of the inner interpreter which means that the true state of the machine never leaves of inner interpreter context; with a machine implementation of the inner interpreter, this model doesn't make sense, so the outer interpreter shall be regular ARM code as compiled by the C compiler.
