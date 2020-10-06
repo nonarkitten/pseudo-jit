@@ -42,38 +42,6 @@ static uint16_t tags[1<<INDEX_BITS];
 #error OFFSET_BITS is too big
 #endif
 
-static int m68_is_cond(uint16_t op) {
-    // BCC
-    if(op >= 0x6200 && op < 0x7000) return 1;
-    // DBCC/SCC
-    if(op >= 0x50C0 && op < 0x6000) return 1;
-    // Not Conditional
-    return 0;
-}
-
-static void m68_decode(void) {
-    pc.offset = ip.offset;
-    uint16_t op = __m68k_read_memory_16(pc.op);
-    uint32_t fn;
-
-    if(m68_is_cond(op)) {
-
-    }
-
-#ifdef FAST_BRANCHING
-    if((op & 0x6000) != 0x6000) fn = fast_opcodes[op];
-    else {
-        int32_t diff = (int32_t)(uint16_t)ip.offset + (int8_t)(op & 0xFF);
-        if(diff < 0 || diff > ((1<<OFFSET_BITS)-1)) fn = fast_opcodes[op];
-        else fn = fast_branch[op & 0xFFF];
-    }
-#else
-    fn = fast_opcodes[op];
-#endif
-    cache[ip.index][ip.offset] = fn;
-    goto *(void*)fn;
-}
-
 __attribute__((optimize(3),leaf)) int32_t m68_addrext(void) {
     uint16_t ext = *pc_wp++;
     int32_t x = (int8_t)ext;
@@ -114,25 +82,70 @@ __attribute__((optimize(3),leaf)) int32_t m68_addrext(void) {
     return x;
 }
 
-void m68_enter(uint32_t addr) {
-    pc.u = addr;
-    if (tags[pc.index] != pc.tag) {
-        int i;
-        tags[pc.index] = pc.tag;
-        for(i=0; i<(1<<OFFSET_BITS); i++) {
-            cache[pc.index][i] = (uint32_t)m68_decode;
-        }
-    }
-    ip.ux = &cache[pc.index][pc.offset];
+static int m68_is_cond(uint16_t op) {
+    // BCC
+    if(op >= 0x6200 && op < 0x7000) return 1;
+    // DBCC/SCC
+    if(op >= 0x50C0 && op < 0x6000) return 1;
+    // Not Conditional
+    return 0;
 }
 
+static void m68_decode(void) {
+    pc.offset = ip.offset;
+    uint16_t op = __m68k_read_memory_16(pc.op);
+    uint32_t fn;
+
+    if(m68_is_cond(op)) {
+
+    }
+
+#ifdef FAST_BRANCHING
+    if((op & 0x6000) != 0x6000) fn = fast_opcodes[op];
+    else {
+        int32_t diff = (int32_t)(uint16_t)ip.offset + (int8_t)(op & 0xFF);
+        if(diff < 0 || diff > ((1<<OFFSET_BITS)-1)) fn = fast_opcodes[op];
+        else fn = fast_branch[op & 0xFFF];
+    }
+#else
+    fn = fast_opcodes[op];
+#endif
+    cache[ip.index][ip.offset] = fn;
+    goto *(void*)fn;
+}
+
+// Given the entry point, check our cache and start execution
+void m68_enter(void) {
+    uint16_t offset = pc_l & ((1 << OFFSET_BITS) - 1);
+    uint16_t index = pc_l >> OFFSET_BITS;
+    uint32_t tag = pc_l - offset;
+
+    // Cache miss? Reset cache
+    if (tags[index] != tag) {
+        tags[index] = tag;
+        for(int i=0; i<(1 << OFFSET_BITS); i++)
+            cache[index][i] = (uint32_t)m68_decode;
+    }
+
+    // Kick-off the subroutine threader
+    caller_t call;
+    call.address = &cache[index][offset];
+    call.invoke();
+}
+
+// Start the emulator as a cold boot
 void m68_start(uint32_t m68_address) {
+    // Initialize the cache; we use the padding to avoid issues
+    // with the return from operands where the emulator will
+    // advance the return program counter (ld pc, [lr, #offset])
     for(int i=0; i<(1<<INDEX_BITS);i++) {
         for(int j=0; j<CACHE_PADDING; j++) {
             cache[i][j + (1<<OFFSET_BITS)] = (uint32_t)m68_enter;
         }
     }
-	pc.u = *(uint32_t*)m68_address;
-	m68_enter();
-    m68_decode();
+
+    // Grab our initial PC and SP from our address and jump
+    //sp.u = *(uint32_t*)(m68_address + 4);
+    pc_l = *(uint32_t*)m68_address;
+	while(1) m68_enter();
 }

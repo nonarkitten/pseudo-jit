@@ -5,6 +5,11 @@
 #ifndef __PJIT_H__
 #define __PJIT_H__
 
+typedef union { 
+    uint32_t address;
+    void (*invoke)(void);    
+} caller_t;
+
 // r0~r12, r14 are available for abuse
 // r0~r1 sratch registers
 // r2~r9 for a0~a7

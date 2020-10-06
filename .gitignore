@@ -1,7 +1,7 @@
 *~
 .#*
 *#
-*ops.c
+*_ops.c
 *.o
 makeops
 pjit
