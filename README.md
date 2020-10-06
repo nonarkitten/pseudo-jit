@@ -53,6 +53,12 @@ All conditional branches within the table will either return (branch not-taken) 
 
 ## PJIT Optimizations
 
+### Short Branches
+
+If a branch is guaranteed to be in the same cache page then its possible to do a direct branch without returning to the outer interpreter. This will incur some branch misprediction performance, but should still be faster.
+
+### Multipass Reduction and Inlining
+
 The process of the outer interpreter may be broken into several phases, or passes.
 
 On the first pass, the most generic form of the opcode may be used to ensure maximum correctness. Because handling control flow and 68000 processor flags are complicated by architectural differences between the ARM and 68K processors, this results in sub-optimal execution. The outer interpreter will track which flags are set at which points and when those flags are used by any conditional code.
