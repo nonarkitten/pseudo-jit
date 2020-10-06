@@ -1,6 +1,19 @@
 # Pseudo JIT
 
-PJIT is a real-time version of JIT that avoids the traditional issues of dynamic memory allocation and non-determinism.
+PJIT is a real-time version of JIT that avoids the traditional issues of dynamic memory allocation and non-determinism. It is designed to run as a bare metal process on ARM microprocessors operating in big endian mode to provide transparent access to a traditional 68K bus.
+
+PJIT does not attempt to be a full system emulator, however, where required, the low level bus arbitration of the 68000 itself is emulated.
+
+PJIT does not provide any OS type restrictions on the guest system nor does it grant any obvious benefit such as being able to call drivers or libraries of a hypothetical host OS.
+
+## PJIT Features
+- full 68030/882 compatibility including MMU and FPU
+- operating at up to 1000MHz 68040 speeds
+- move from sr patch for legacy 68000 applications
+- full control of the clock speeds from 0 to 1GHz
+- up to 512KB of on chip L1/L2 cache
+- up to 128MB of instruction transkation cache
+- possible inclusion of Apollo 68K extensions
 
 # Summary of PJIT
 
