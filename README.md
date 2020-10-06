@@ -12,7 +12,7 @@ PJIT does not provide any OS type restrictions on the guest system nor does it g
 - move from sr patch for legacy 68000 applications
 - full control of the clock speeds from 0 to 1GHz
 - up to 512KB of on chip L1/L2 cache
-- up to 128MB of instruction transkation cache
+- up to 128MB of instruction translation cache
 - possible inclusion of Apollo 68K extensions
 
 # Summary of PJIT
