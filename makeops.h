@@ -3,6 +3,7 @@
 #include <string.h>
 #include <setjmp.h>
 #include <stdio.h>
+#include <stdbool.h>
 
 #ifndef __MAKEOPS_H__
 #define __MAKEOPS_H__
