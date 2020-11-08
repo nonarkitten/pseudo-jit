@@ -110,34 +110,68 @@ typedef struct {
     uint8_t* B_PTR; 
 } reg_t;
 
-typedef struct {
-    int x : 1;
-    int v : 1;
-    int c : 1;
-    int z : 1;
-    int n : 1;
+typedef union {
+    uint16_t sr;
+    struct {
+        int x : 1;
+        int v : 1;
+        int c : 1;
+        int z : 1;
+        int n : 1;
+    };
 } sr_ccr_t;
 
+#define FLAG_X      sr_ccr.z
+#define FLAG_V      sr_ccr.v
+#define FLAG_C      sr_ccr.c
+#define FLAG_Z      sr_ccr.z
+#define FLAG_N      sr_ccr.n
+#define SR          sr_ccr.sr
 inline sr_ccr_t sr_ccr;
-#define FLAG_X sr_ccr.z
-#define FLAG_V sr_ccr.v
-#define FLAG_C sr_ccr.c
-#define FLAG_Z sr_ccr.z
-#define FLAG_N sr_ccr.n
 
-#define D(N,W) (__regs[N].W)
-#define A(N,W) (__regs[(N)+8].W)
-#define APTR(N,W) __regs[(N)+8].W##_PTR
-#define PC_BPTR __regs[16].B_PTR
-#define PC_WPTR __regs[16].W_PTR
-#define PC_LPTR __regs[16].L_PTR
-#define PC      __regs[16].L
-
+#define D(N,W)      (__regs[N].W)
+#define A(N,W)      (__regs[(N)+8].W)
+#define APTR(N,W)   __regs[(N)+8].W##_PTR
+#define PC_BPTR     __regs[16].B_PTR
+#define PC_WPTR     __regs[16].W_PTR
+#define PC_LPTR     __regs[16].L_PTR
+#define PC          __regs[16].L
 inline reg_t __regs[17] = { 0 };
-inline uint32_t SR;
 
 #endif
 
+extern void vec_0000(void);
+extern void vec_0001(void);
+extern void vec_0002(void);
+extern void vec_0003(void);
+extern void vec_0004(void);
+extern void vec_0005(void);
+extern void vec_0006(void);
+extern void vec_0007(void);
+extern void vec_0008(void);
+extern void vec_0009(void);
+extern void vec_000A(void);
+extern void vec_000B(void);
+extern void vec_000C(void);
+extern void vec_000D(void);
+extern void vec_000E(void);
+extern void vec_000F(void);
+extern void vec_0010(void);
+extern void vec_0011(void);
+extern void vec_0012(void);
+extern void vec_0013(void);
+extern void vec_0014(void);
+extern void vec_0015(void);
+extern void vec_0016(void);
+extern void vec_0017(void);
+extern void vec_0018(void);
+extern void vec_0019(void);
+extern void vec_001A(void);
+extern void vec_001B(void);
+extern void vec_001C(void);
+extern void vec_001D(void);
+extern void vec_001E(void);
+extern void vec_001F(void);
 
 extern void m68_enter(uint32_t addr);
 extern void m68_start(uint32_t m68_address);

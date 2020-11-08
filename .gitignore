@@ -1,7 +1,7 @@
 *~
 .#*
 *#
-pjit_*.[c|h]
+generated/
 *.o
 makeops
 pjit
