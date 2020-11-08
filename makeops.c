@@ -142,25 +142,33 @@ void generate_5_ops(char* buffer, int op) {
     char s[EA_BUFFER_SIZE], d[EA_BUFFER_SIZE];
 
     if((op & 0x0C00) == 0xC00) {
-        // uint8_t cond = (op >> 8) & 15;
-        // if((op & 0x0F80) == 0x0C80) {
-        //     // DBcc
-        //     append(buffer, "\tconst int32_t off = m68_read_16(pc.u); pc.u += 2; ip.u += 4;\n"); 
-        //     append(buffer, "\tif(!(%s)) {\n\t", condition[cond]);
-        //     emit_read_ea(0, 16, op); // get register
-        //     append(buffer, "\t\tx -= 1;\n\t");
-        //     emit_write_ea(0, 16, op); // set register
-        //     append(buffer, "\t\tif(x == 0xFFFF) m68_enter(pc.u + off);\n\t}\n");
-        // } else {
-        //     // Scc
-        //     //rmw = 1;
-        //     if(emit_read_ea(buffer2, op >> 3, 8, op))
-        //         append(buffer, "\n\tm68_syncpc();\n");
+        append(buffer, "\n");
 
-        //     append(buffer, "\tif(%s) x |= 0xFF;\n", condition[cond]);
-        //     append(buffer, "\telse x &= ~0xFF;\n");
-        //     if(!emit_write_ea(op >> 3, 8, op)) return OPCODE_BAD_ADDR_MODE;
-        // }
+        uint8_t cond = (op >> 8) & 15;
+        if((op & 0x0F80) == 0x0C80) {
+            // DBcc
+            append(buffer, "\tPC = m68_syncpc();\n");
+            append(buffer, "\tconst int32_t off = *(int16_t*)PC_WPTR++;\n");
+            append(buffer, "\tif(!(%s)) {\n", condition[cond]);
+                emit_read_ea(s, 0, 16, op); // get register
+                append(buffer, "\t\t%s -= 1;\n", s);
+                append(buffer, "\t\tif(%s == 0xFFFF) m68_enter(PC + off);\n", s);
+            append(buffer, "\t}\n");
+            return;
+
+        } else {
+            // Scc
+            int need = emit_write_modify_ea(d, op >> 3, 8, op);
+
+            append(buffer, "\tSR = m68_get_ccr();\n");
+
+            if(need) append(buffer, "\tPC = m68_syncpc();\n");
+            if(need & NEED_EXT) append(buffer, "\tint32_t %s = m68_addrext(*PC_WPTR++);\n", ext_vars[1]);
+
+            append(buffer, "\t%s = (%s) ? 0xFF : 0x00;\n", d, condition[cond]);
+            return;
+
+        }
     } else {
         // ADDQ/SUBQ
         uint32_t bits = (8 << ((op >> 6) & 3));
@@ -187,10 +195,14 @@ void generate_6_ops(char* buffer, int op) {
     else if(offset & 1) longjmp(error, Bus_Error); 
     else emit_int(buffer2, offset);
 
-    append(buffer, "\n\tm68_syncpc();\n");
+    append(buffer, "\n\tPC = m68_syncpc();\n");
     append(buffer, "\tconst int32_t off = %s;\n", buffer2);     
 
-    if(cond == 1) {
+    if(cond == 0) {
+        // unconditional branch
+        append(buffer, "\tm68_enter(PC + off);\n");
+
+    } else if(cond == 1) {
         // branch subroutine, push to stack
         emit_read_ea(buffer2, 4, 32, 7);
         append(buffer, "\t%s = PC;\n", buffer2); 
@@ -198,13 +210,17 @@ void generate_6_ops(char* buffer, int op) {
 
     } else {
         // conditional branch
-        append(buffer, "\tm68_get_ccr();\n");
+        append(buffer, "\tSR = m68_get_ccr();\n");
         append(buffer, "\tif(%s) m68_enter(PC + off);\n", condition[cond]);
     }
 }
 
+// MOVEQ
 void generate_7_ops(char* buffer, int op) {
-    longjmp(error, Illegal_Instruction);
+    char s[EA_BUFFER_SIZE];
+    int8_t value = op;
+    emit_read_ea(s, 0, 32, op >> 9);
+    append(buffer, "%s = %d; ", s, value);
 }
 
 void generate_8_ops(char* buffer, int op) {
@@ -238,7 +254,6 @@ void generate_E_ops(char* buffer, int op) {
 void generate_F_ops(char* buffer, int op) {
     longjmp(error, Unimplemented_FLine);
 }
-
 
 int main(void) {
     char function_buffer[2048];
