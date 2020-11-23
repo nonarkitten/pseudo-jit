@@ -10,7 +10,7 @@ Recompilers omit the threading overhead by translating blocks of code into nativ
 
 However, they are not perfect. 
 
-First of all, the time to recompile code can be quite expensive and is much slower than interpretered code. This overhead leads to micro-stutters (jitter, pun not intended) in the execution of code and a worsening of performance for rarely executed code. Recompilers can perform so poorly that most also implement stanadard interpreters for these cases and only use recompilation when obvious loops or frequently used subroutines are known.
+First of all, the time to recompile code can be quite expensive and is much slower than interpretered code. This overhead leads to micro-stutters (jitter, pun not intended) in the execution of code and a worsening of performance for rarely executed code. Recompilers can perform so poorly that most also implement standard interpreters for these cases and only use recompilation when obvious loops or frequently used subroutines are known.
 
 Secondly, the code which is produced may be an order of magnitude larger than the original, resulting in a proportional demand on memory. While the cost of memory is relatively cheap, this can impact cache locality and negatively impact performance. This is exacerbated when the emulator recompiles the same region of memory several times over due to different entry points.
 
@@ -98,11 +98,11 @@ All conditional branches within the table will either return (branch not-taken) 
 
 ### Branch and Return to NOP
 
-The ARM processor does not handle a branch-to-a-branch condition; it is always preferable to branch to an instruction. With that in mind, it may make sense to increase the size of the cache by two to interleave NOP and BL commands with the return inevitably connecting with the subsequent NOP and not another branch. 
+The ARM processor does not handle a branch-to-a-branch condition; it is always preferable to branch to an instruction. With that in mind, it may make sense to increase the size of the cache by two to interleave NOP and BL commands with the return inevitably connecting with the subsequent NOP and not another branch. Since NOP is a "perfect superscalar opcode" (it can always be executed in parallel if there's a slot free), the extra overhead of this should be much smaller than any pipeline stall.
 
 ### Flag Elimination
 
-On the 68000, nearly every instruction can set various flags in the condition register and these have to be captured in the emulator. However, if it is clear that the very next instruction resets the same flags that this instruction sets, then a version of the opcode which does not set any flags may be used. This often omits one or two instructions from each and every opcode
+On the 68000, nearly every instruction can set various flags in the condition register and these have to be captured in the emulator. However, if it is clear that the very next instruction resets the same flags that this instruction sets, then a version of the opcode which does not set any flags may be used. This often omits one or two instructions from each and every opcode.
 
 ### Short Branches
 
@@ -110,7 +110,7 @@ If a branch or jump is guaranteed to be in the same cache page then its possible
 
 ### Selective Inlining
 
-Some subroutines may be no bigger than the subroutine call to them and this is certainly the case with NOP. With NOP padding, this may be even more true. A simple table of each opcode's size can be crafted which is then used to determine if inlining is possible and how much NOP padding is needed.
+Some subroutines may be no bigger than the subroutine call to them and this is certainly the case with NOP. With NOP padding, this may be even more true. A simple table of each opcode's size can be crafted which is then used to determine if inlining is possible and how much NOP padding is needed. This is more work for the outer interpretter and might not actually be beneficial -- we'll see.
 
 # Notes
 
