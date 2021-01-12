@@ -1,7 +1,13 @@
-*~
-.#*
-*#
+# General
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Thumbnails
+._*
+
+# Actual project stuff
 generated/
-*.o
-makeops
-pjit
+bin/
+src/
+obj/
