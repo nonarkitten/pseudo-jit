@@ -9,5 +9,4 @@
 # Actual project stuff
 generated/
 bin/
-src/
 obj/
