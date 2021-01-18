@@ -1,3 +1,7 @@
+# The Buffy Accelerator
+
+PJIT is part of the Buffy Project. The hardware can be viewed [here](https://easyeda.com/Renee/buffy2).
+
 # Pseudo JIT
 
 ## A Brief bit of Background
