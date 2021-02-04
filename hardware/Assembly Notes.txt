@@ -1,0 +1,15 @@
+Assembly Notes
+
+- All SMT components are on the TOP
+- Thru-hole headers are to be soldered on the BOTTOM
+- Board is intended to be install like a DIP chip
+- Board is quite dense; suggest installing small components first
+- PCB Copper Layer Orders (numbers are out-of-order)
+	* TopLayer
+	* Inner1
+	* Inner2
+	* Inner3
+	* Inner4
+	* BottomLayer
+
+
