@@ -10,36 +10,79 @@ typedef union {
     void (*invoke)(void);    
 } caller_t;
 
-// r0~r12, r14 are available for abuse
+typedef union {
+    uint32_t ul; int32_t sl;
+    uint16_t uw; int16_t sw;
+    uint8_t ub;  int8_t sb;
+} data_reg_t;
+
+typedef union {
+    uint32_t* ul; int32_t* sl;
+    uint16_t* uw; int16_t* sw;
+    uint8_t* ub;  int8_t* sb;
+    signed long int raw;
+} addr_reg_t;
+
+typedef union {
+    uint16_t sr;
+    uint8_t ccr;
+    struct {
+        int t : 1; // trace
+        int   : 1; // reserved
+        int s : 1; // supervisor
+        int   : 2; // reserved
+        int i : 3; // interrupt level
+        int   : 3; // reserved
+        int x : 1; // extra carry flag
+        int n : 1; // negative result
+        int z : 1; // zero result
+        int v : 1; // result overflow
+        int c : 1; // carry flag
+    };
+} sr_ccr_t;
+
+#if defined(__aarch64__)
+// ARM64
+#define DATAREG(X,Y) register data_reg_t X asm(#Y);
+DATAREG(d0,x2) DATAREG(d1,w3) DATAREG(d2,w4) DATAREG(d3,w5)
+DATAREG(d4,w6) DATAREG(d5,w7) DATAREG(d6,w8) DATAREG(d7,w9)
+
+
+#elif defined(__arm__)
+// ARM32
+
 // r0~r1 sratch registers
 // r2~r9 for a0~a7
+// d0~d7 (NEON regs) for d0~d7
 // r10 pc
 // r11 ip
-
-// 68000 STATE
-#define DATAREG(X) \
-register uint32x2_t X##_l asm(#X); \
-register uint16x4_t X##_w asm(#X); \
-register uint8x8_t X##_b asm(#X);
+#define DATAREG(X) register data_reg_t X asm(#X);
 DATAREG(d0) DATAREG(d1) DATAREG(d2) DATAREG(d3)
 DATAREG(d4) DATAREG(d5) DATAREG(d6) DATAREG(d7)
 
-#define FPUREG(X,Y) register double fp##X asm(#Y);
-FPUREG(0,d8)  FPUREG(1,d9)  FPUREG(2,d10) FPUREG(3,d11)
-FPUREG(4,d12) FPUREG(5,d13) FPUREG(6,d14) FPUREG(7,d15)
-
-#define ADDRREG(X,Y) \
-register uint16_t X##_w asm(#Y); \
-register uint32_t X##_l asm(#Y); \
-register uint8_t* X##_bp asm(#Y); \
-register uint16_t* X##_wp asm(#Y); \
-register uint32_t* X##_lp asm(#Y);
+#define ADDRREG(X,Y) register addr_reg_t X asm(#Y)
 ADDRREG(a0,r2) ADDRREG(a1,r3) ADDRREG(a2,r4) ADDRREG(a3,r5) 
 ADDRREG(a4,r6) ADDRREG(a5,r7) ADDRREG(a6,r8) ADDRREG(a7,r9) 
+
+register uint32_t lr asm("lr");
 
 #define SET_NZ_B(R) asm volatile("rors %0, %0, #8 @ set nz flags" :: "r"(R))
 #define SET_NZ_W(R) asm volatile("rors %0, %0, #16 @ set nz flags" :: "r"(R))
 #define SET_NZ_L(R) asm volatile("teq %0, #0 @ set nz flags" :: "r"(R))
+
+register uint32_t sr_ccr asm("r11");
+extern uint8_t arm_sr_ccr[16];
+#define m68_get_ccr() do { uint32_t t;\
+    asm volatile("mrs %0, cpsr" : "=r" (t)); \
+    sr_ccr.ccr = arm_sr_ccr[t >> 28]; } while(0)
+
+register addr_reg_t pc asm("r10");
+#define m68_syncpc() pc.raw = (pc.raw & 0xFFFFF000) | ((lr >> 1) & 0xFFF)
+
+#else
+// GENERIC
+
+#endif
 
 #define EXP_ADD_CVNZ(TYPE,OP,BITS) \
 static inline TYPE add_##TYPE(TYPE d, TYPE s) { \
@@ -61,23 +104,6 @@ EXP_ADD_CVNZ(int8_t, __builtin_saddl_overflow,8)
 #define sub_int32_t(X,Y) add_int32_t(X,-(Y))
 #define sub_int16_t(X,Y) add_int16_t(X,-(Y))
 #define sub_int8_t(X,Y)  add_int8_t(X,-(Y))
-
-register uint8_t*  pc_bp asm("r10"); 
-register uint16_t* pc_wp asm("r10"); 
-register uint32_t* pc_lp asm("r10");
-register uint32_t  pc_l  asm("r10");
-
-register uint32_t  sr_ccr  asm("r11");
-
-register uint32_t lr asm("lr");
-
-extern uint8_t arm_sr_ccr[16];
-
-#define m68_syncpc() pc_l = (pc_l & 0xFFFFF000) | ((lr >> 1) & 0xFFF)
-#define m68_get_ccr() do { \
-    asm volatile("mrs r0, cpsr"); \
-    sr_ccr = (sr_ccr & 0xFF00) | arm_sr_ccr[r0 >> 28]; \
-} while(0)
 
 extern void vec_0000(void);
 extern void vec_0001(void);
