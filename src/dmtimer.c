@@ -86,20 +86,20 @@ static volatile struct timer1_ctrl* timer1 =
 void am335x_dmtimer1_init()
 {
     static bool is_initialized = false;
-    printf("...Entering %s\n", __func__);
-    printf("...timer1 @ 0x%p\n", (uint32_t)timer1);
+    //printf("...Entering %s\n", __func__);
+    //printf("...timer1 @ 0x%p\n", (uint32_t)timer1);
     if (!is_initialized) {
-        printf("...Configure DMTimer1 for internal use (resolution 24MHz)\n");
+        //printf("...Configure DMTimer1 for internal use (resolution 24MHz)\n");
         am335x_clock_enable_timer_module(AM335X_CLOCK_TIMER1);
 
-        printf("...Forcing timer reset\n");
+        //printf("...Forcing timer reset\n");
         timer1->tiocp_cfg = __builtin_bswap32(TIOCP_CFG_SOFTRESET);
         
-        printf("...Waiting for software reset to complete\n");
+        //printf("...Waiting for software reset to complete\n");
         while ((timer1->tistat & __builtin_bswap32(TISTAT_RESETDONE)) == 0)
             continue;
         
-        printf("...Completing initialization\n");
+        //printf("...Completing initialization\n");
         timer1->tldr = 0;
         timer1->tcrr = 0;
         timer1->ttgr = 0;
@@ -107,7 +107,7 @@ void am335x_dmtimer1_init()
 
         is_initialized = true;
     }
-    printf("...Exiting %s\n", __func__);
+    //printf("...Exiting %s\n", __func__);
 }
 
 // ----------------------------------------------------------------------------

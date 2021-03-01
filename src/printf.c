@@ -9,12 +9,12 @@
 static const char* l_base_chars = "0123456789abcdef";
 static const char* u_base_chars = "0123456789ABCDEF";
 
-static void writeUART(int c) {
+static inline void writeUART(int c) {
 	while(*((volatile uint8_t*)(UART + 0x68)) >= 63) continue;	
 	*(volatile uint8_t*)UART = (uint8_t)c;
 }
 
-static void printUART(int c) {
+static inline void printUART(int c) {
 	if(c == '\n') writeUART('\r');
 	writeUART(c);
 }
@@ -37,7 +37,7 @@ static inline int __attribute__ ((optimize("Os"))) _strlen(char *buf) {
 #define PAD_RIGHT 1
 #define PAD_ZERO 2 
 
-static inline int prints(char **out, char *str, int width, int pad) {
+static int prints(char **out, char *str, int width, int pad) {
 	if(str == NULL) return prints(out, "(null)", width, pad);
 	
 	int pad_char = (pad&PAD_ZERO)?'0':' ';

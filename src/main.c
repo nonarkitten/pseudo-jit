@@ -13,45 +13,10 @@
 
 extern uint8_t m68kcode[];
 
-static const char bootstrapName_BE[] = "Emu68 runtime/ARM v7-a big endian";
-static const char bootstrapName_LE[] = "Emu68 runtime/ARM v7-a little endian";
+static const char bootstrapName_BE[] = ;
 
 __attribute__ ((used, aligned (0x4000)))
 static uint32_t mmu_table[4096] = { 0 }; 
-
-static const char banner[] = 
-"                       @@@.      ..@@@@@@@@@@@..      .@@@                       \n"
-"                       @'@@@. .@@@@:@       @:@@@@. .@@@'@                       \n"
-"                       @   '@@@@'' :@       @: ''@@@@'   @                       \n"
-"                       @      '@@. :@       @: .@@'      @                       \n"
-"                       @        '@@:@       @:@@'        @                       \n"
-"                       @          '@@       @@'          @                       \n"
-"                     .@@           @@       @@           @@.                     \n"
-"                     @@@           '@.     .@'           @@@                     \n"
-"                    @@'@            '@.   .@'            @'@@                    \n"
-"                   .@' @             '@. .@'             @ '@.                   \n"
-"                   @@                 '@.@'                 @@                   \n"
-"                  .@@                  '@'                  @@.                  \n"
-"                  :@.                                       .@:                  \n"
-"                  @@@@@@@@@@@@@@.              .@@@@@@@@@@@@@@@                  \n"
-"                  @@     @@.   '@@.           .@@'   .@@     @@                  \n"
-"                  @@     '@@.    '@@.       .@@'    .@@'     @@                  \n"
-"    .@@@.         :@.      '@@@@@@@@@       @@@@@@@@@'      .@:         .@@@.    \n"
-"    @: :@         '@@              @@       @@              @@'         @: :@    \n"
-"    '@@@'          @@              @@       @@              @@          '@@@'    \n"
-"       '@@@@@@@@@@@@@@@@@@@@@@     @@       @@     @@@@@@@@@@@@@@@@@@@@@@'       \n"
-" .@@@.              '@@            @@       @@            @@'              .@@@. \n"
-" @: :@@@@@@@@@@@@@@@@@@@@@@@@@     @@@@@@@@@@@     @@@@@@@@@@@@@@@@@@@@@@@@@: :@ \n"
-" '@@@'                '@@          '@@.   .@@'          @@'                '@@@' \n"
-"         @@@@@@@@@@@@@@@@@@@@@@      '@@.@@'      @@@@@@@@@@@@@@@@@@@@@          \n"
-"     .@@@.               '@@.         .@@@          .@@'              .@@@.      \n"
-"     @: :@                 '@@.      .@@'@@.      .@@'                @: :@      \n"
-"     '@@@'                   '@@@. .@@'   '@@. .@@@'                  '@@@'      \n"
-"                               ''@@@@@@@@@@@@@@@''                               \n"
-"                                     ''''''''                                    \n" 
-;
-
-
 
 /* Linker variables */
 extern char _stack_end, _stack_top, _bss_start, _bss_end;
@@ -96,78 +61,6 @@ extern char _stack_end, _stack_top, _bss_start, _bss_end;
     
 */
 
-#define OFFSET                      0x44C00000
-
-#define CM_DIV_M2_DPLL_MPU          0x002004A8
-#define CM_CLKSEL_DPLL_MPU          0x0020042C
-#define CM_CLKMODE_DPLL_MPU         0x00200488
-#define CM_IDLEST_DPLL_MPU          0x00200420
-
-#define DPLL_MN_BYP_MODE            4
-#define DPLL_LOCK_MODE              7
-#define ST_MN_BYPASS                1
-#define ST_DPLL_CLK                 1
-#define CLKINP                      24
-
-typedef struct Dpll_mpu_struct {
-	uint8_t N_divider;
-	uint16_t M_multiplier;
-	uint8_t M2_divider;
-} Dpll_mpu;
-
-//__attribute__((optimize("O0")))
-//static void set_dpll(Dpll_mpu* dpll_mpu) {	
-//    volatile uint8_t* map = (volatile uint8_t*)OFFSET;
-//    bool pll_needs_lock = (dpll_mpu-> N_divider != (map[CM_CLKSEL_DPLL_MPU] & 0x7f))
-//        || (dpll_mpu->M_multiplier != (map[CM_CLKSEL_DPLL_MPU + 1] | ((map[CM_CLKSEL_DPLL_MPU + 2] & 0x3f) << 8)));
-//        
-//    if(pll_needs_lock) {
-//        // Switch PLL to bypass mode by setting CM_CLKMODE_DPLL_MPU.DPLL_EN to 0x4
-//        // This also clears CM_CLKSEL_DPLL_MPU register to 0
-//        map[CM_CLKMODE_DPLL_MPU] = (map[CM_CLKMODE_DPLL_MPU] & ~7) | DPLL_MN_BYP_MODE;
-//        putchar('1');
-//
-//        // Wait for CM_IDLEST_DPLL_MPU.ST_MN_BYPASS = 1 to ensure PLL is in bypass
-//        while ( !(map[CM_IDLEST_DPLL_MPU+1] & ST_MN_BYPASS) );
-//        putchar('2');
-//    
-//        // Configure Multiply by setting CM_CLKSEL_DPLL_MPU.DPLL_MULT to the desired value.
-//        map[CM_CLKSEL_DPLL_MPU + 1] = dpll_mpu->M_multiplier & 0xff;
-//        putchar('3');
-//        map[CM_CLKSEL_DPLL_MPU + 2] = (dpll_mpu->M_multiplier >> 8) & 0x07;
-//        putchar('4');
-// 
-//        // Configure Divide by setting CM_CLKSEL_DPLL_MPU.DPLL_DIV to the desired value.
-//        map[CM_CLKSEL_DPLL_MPU] = dpll_mpu->N_divider & 0x7f;
-//        putchar('5');
-//    }
-//        
-//    // M2 divider can also be changed on-the-fly; there is no need to put the PLL in bypass and back to lock mode
-//    // Configure M2 divider by setting CM_DIV_M2_DPLL_MPU.DPLL_CLKOUT_DIV to the desired value.
-//	if (dpll_mpu-> M2_divider !=  (map[CM_DIV_M2_DPLL_MPU] & 0x1f )) {
-//        map[CM_DIV_M2_DPLL_MPU] = dpll_mpu->M2_divider & 0x1f;
-//        putchar('6');
-//    }
-//
-//    if(pll_needs_lock) {
-//        // Switch over to lock mode by setting CM_CLKMODE_DPLL_MPU.DPLL_EN to 0x7.
-//        map[CM_CLKMODE_DPLL_MPU] = (map[CM_CLKMODE_DPLL_MPU] & ~7) | DPLL_LOCK_MODE;
-//        putchar('7');
-//        
-//        // Wait for CM_IDLEST_DPLL_MPU.ST_DPLL_CLK = 1 to ensure PLL is locked
-//        while( !(map[CM_IDLEST_DPLL_MPU] & ST_DPLL_CLK) );
-//        putchar('8'); 
-//    }
-//}
-
-static void get_dpll_mpu(Dpll_mpu* dpll_mpu) {
-    uint8_t* map = (uint8_t*)OFFSET;
-    
-	dpll_mpu->N_divider = map[CM_CLKSEL_DPLL_MPU] & 0x7f;
-	dpll_mpu->M_multiplier = map[CM_CLKSEL_DPLL_MPU + 1] | ((map[CM_CLKSEL_DPLL_MPU + 2] & 0x07) << 8);
-	dpll_mpu->M2_divider = map[CM_DIV_M2_DPLL_MPU] & 0x1f;
-}
-
 static double seconds(void) {
     uint32_t up = am335x_dmtimer1_get_counter();
     return (double)up / 24000000.0;
@@ -202,6 +95,8 @@ static inline char* psize(uint32_t size) {
 */ 
 __attribute__((naked, section(".startup @")))
 void main(void) { 
+    board_init();
+
     // Brian Fraser's fix for UBoot and enable big endian mode
     asm volatile (
     "           sub     r0, r0, r0              \n" /* Brian Fraser's fix for UBoot            */
@@ -225,7 +120,7 @@ void main(void) {
     "           ldr     sp,=_stack_top          \n"
     );
 
-    //†Invalidate cache and Enable Branch Prediction 
+    // Invalidate cache and Enable Branch Prediction 
     // Allow unaligned access, effective only when MMU is enabled
     // Enable both instruction and data caches
     asm volatile (                                                                      
@@ -283,22 +178,12 @@ void main(void) {
     am335x_clock_enable_l3_l4wkup();
     am335x_dmtimer1_init();
 
-    printf(banner);
-
-    /* Check that we're running in big endian mode */
-    { 
-    uint32_t endian = 0x00000001;
-    printf("[BOOT] Booting %s\n", (*(uint8_t*)&endian==0x01)?bootstrapName_LE:bootstrapName_BE);
-    }
-    printf("[BOOT] Built on %s at %s\n", __DATE__, __TIME__);     
-    //printf("[BOOT] Boot address is %p (%s)\n", top_of_ram, (top_of_ram==0x98000000)?"good":"bad");    
-    printf("[BOOT] Stack %p-%p (size=%s)\n", &_stack_end, &_stack_top, psize(&_stack_top - &_stack_end));
-    printf("[BOOT] BSS %p-%p (size=%s)\n", &_bss_end, 0x9FFFFFFF, psize((char*)0xA0000000 - &_bss_end));
+    printf("PJIT starting up...");     
+    printf("[PJIT] Built on %s at %s\n", __DATE__, __TIME__);
+    printf("[PJIT] CPU Clock Speed = %d MHz\n", (int)get_cpu_mhz());	
+    printf("[PJIT] Stack %p-%p (size=%s)\n", &_stack_end, &_stack_top, psize(&_stack_top - &_stack_end));
+    printf("[PJIT] BSS %p-%p (size=%s)\n", &_bss_end, 0x9FFFFFFF, psize((char*)0xA0000000 - &_bss_end));
     
-    //tlsf = tlsf_init();
-    //tlsf_add_memory(tlsf, &_bss_end, 0x9FFFFFFF - (uint32_t)&_bss_end);
-    
-    printf("[BOOT] Initializing MMU ... ");
     // 0x000 to 0x7FF, GPMC/PIO strongly ordered, no caching
     for (int i=0x000; i < 0x800; i++) mmu_table[i] = (i << 20) | 0x0c06;
     // 0x800 to 0x9FF, SDRAM, Caches write-through, write allocate, access for all
@@ -307,8 +192,8 @@ void main(void) {
     for (int i=0x400; i < 0x403; i++) mmu_table[i] = (i << 20) | 0x1c0e;
     
     arm_flush_cache((uint32_t)mmu_table, sizeof(mmu_table));
-    // Load new pointer to the mmu table
-    
+
+    // Load new pointer to the mmu table    
     asm volatile(
     "       dsb                         \n"
     "       mcr     p15,0,r0,c7,c5,0    \n" /* invalidate icache */
@@ -327,22 +212,7 @@ void main(void) {
     "       mcr     p15,0,r4,c1,c0,0    \n" /* Set control register and thus really enable mmu */
     "       isb                         \n"
     );
-    printf("done\n");
-         
-    /* Get (and optionally set) CPU PLL */
-    {
-    Dpll_mpu mpu_pll;
-    get_dpll_mpu(&mpu_pll);
-    
-	double MHz = (1.0 / ((double)mpu_pll.N_divider+1.0)) * \
-        (double) mpu_pll.M_multiplier * CLKINP * (1.0 / (double)mpu_pll.M2_divider);
-        
-	printf("[BOOT] CPU Clock Speed = %d MHz (NDIV=%d, M1MULT=%d, M2DIV=%d)\n",  
-        (int)MHz, mpu_pll.N_divider, mpu_pll.M_multiplier, mpu_pll.M2_divider);
-
-    }
-	
-	printf("[BOOT] Boot time: %s", ptime(seconds()));
+	printf("[PJIT] Boot complete in %s seconds.\n", ptime(seconds()));
     
     init_led_output();
     heartbeat_forever();

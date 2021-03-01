@@ -44,7 +44,7 @@ typedef union {
 #if defined(__aarch64__)
 // ARM64
 #define DATAREG(X,Y) register data_reg_t X asm(#Y);
-DATAREG(d0,x2) DATAREG(d1,w3) DATAREG(d2,w4) DATAREG(d3,w5)
+DATAREG(d0,w2) DATAREG(d1,w3) DATAREG(d2,w4) DATAREG(d3,w5)
 DATAREG(d4,w6) DATAREG(d5,w7) DATAREG(d6,w8) DATAREG(d7,w9)
 
 

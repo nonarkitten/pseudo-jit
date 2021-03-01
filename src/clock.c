@@ -339,35 +339,35 @@ static inline void setbit(volatile uint32_t* ctrl, uint32_t bit)
 
 void am335x_clock_enable_l3_l4wkup(void)
 {
-    printf("...Entering %s\n", __func__);
-    printf("...Enable L3 module clock\n");
+    //printf("...Entering %s\n", __func__);
+    //printf("...Enable L3 module clock\n");
     enable_module(&per->l3_clkctrl);
-    printf("...Enable L3 instruction clock\n");
+    //printf("...Enable L3 instruction clock\n");
     enable_module(&per->l3_instr_clkctrl);
 
     wkup_module(&per->l3_clkstctrl);
     wkup_module(&per->ocpwp_l3_clkstctrl);
     wkup_module(&per->l3s_clkstctrl);
 
-    printf("...Wait until modules are active\n");
+    //printf("...Wait until modules are active\n");
     wait4bit(&per->l3_clkstctrl, L3_CLKSTCTRL_CLKACTIVITY_L3_GCLK);
     ///†GAC wait4bit (&per->ocpwp_l3_clkstctrl,
     ///OCPWP_L3_CLKSTCTRL_CLKACTIVITY_OCPWP_L3_GCLK);
     wait4bit(&per->l3s_clkstctrl, L3S_CLKSTCTRL_CLKACTIVITY_L3S_GCLK);
 
-    printf("...Wake-up regions\n");
+    //printf("...Wake-up regions\n");
     enable_module(&wkup->wkup_control_clkctrl);
 
     wkup_module(&wkup->wkup_clkstctrl);
     wkup_module(&wkup->l3_aon_clkstctrl);
 
-    printf("...Wait until region are waked-up\n");
+    //printf("...Wait until region are waked-up\n");
     wait4bit(&wkup->l3_aon_clkstctrl, L3_AON_CLKSTCTRL_CLKACTIVITY_L3_AON_GCLK);
     wait4mode(&wkup->wkup_l4wkup_clkctrl);
     wait4bit(&wkup->wkup_clkstctrl, WKUP_CLKSTCTRL_CLKACTIVITY_L4_WKUP_GCLK);
     wait4bit(&wkup->l4_wkup_aon_clkstctrl,
              L4_WKUP_AON_CLKSTCTRL_CLKACTIVITY_L4_WKUP_AON_GCLK);
-    printf("...Exiting %s\n", __func__);
+    //printf("...Exiting %s\n", __func__);
 }
 
 /* -------------------------------------------------------------------------- */
