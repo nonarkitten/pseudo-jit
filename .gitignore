@@ -7,6 +7,5 @@
 ._*
 
 # Actual project stuff
-generated/
-bin/
-obj/
+Debug/
+Release/
