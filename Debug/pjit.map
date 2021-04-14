@@ -1,0 +1,1100 @@
+
+Allocating common symbols
+Common symbol       size              file
+
+f                   0x6000            ./libbbb/src/bbb_fs.o
+
+Memory Configuration
+
+Name             Origin             Length             Attributes
+IRAM_MEM         0x402f0400         0x0001fc00
+M3SHUMEM         0x44d00000         0x00004000
+M3SHDMEM         0x44d80000         0x00002000
+DDR0             0x80000000         0x20000000
+*default*        0x00000000         0xffffffff
+
+Linker script and memory map
+
+                0x0001c000                STACKSIZE = 0x1c000
+                0x00000400                HEAPSIZE = 0x400
+LOAD ./bogo_delay.o
+LOAD ./bogomips_arm.o
+LOAD ./bogomips_pjit.o
+LOAD ./main.o
+LOAD ./startup.o
+LOAD ./libbbb/src/am335x_clock.o
+LOAD ./libbbb/src/am335x_dmtimer1.o
+LOAD ./libbbb/src/am335x_epwm.o
+LOAD ./libbbb/src/am335x_gpio.o
+LOAD ./libbbb/src/am335x_i2c.o
+LOAD ./libbbb/src/am335x_mux.o
+LOAD ./libbbb/src/am335x_spi.o
+LOAD ./libbbb/src/am335x_uart.o
+LOAD ./libbbb/src/bbb_fs.o
+LOAD ./libbbb/src/bbb_syscall.o
+LOAD ./libbbb/src/console.o
+LOAD ./libbbb/src/dirent.o
+LOAD ./libbbb/src/oled.o
+LOAD ./libbbb/src/path.o
+LOAD ./libbbb/src/string2.o
+LOAD ./libbbb/src/vfs.o
+LOAD ./support/cp15.o
+LOAD ./support/cstd.o
+LOAD ./support/init_hw.o
+LOAD ./support/printf.o
+LOAD ./support/sh_printstr.o
+
+.rsthand        0x80000000      0x160
+                0x80000000                . = ALIGN (0x4)
+ *startup.o(.isr_vector)
+ .isr_vector    0x80000000       0x50 ./startup.o
+                0x80000000                __isr_vector
+                0x8000004e                DEF_IRQHandler
+ *startup.o(.text)
+ .text          0x80000050      0x110 ./startup.o
+                0x80000050                Entry
+
+.text           0x80000160     0x4e74
+                0x80000160                . = ALIGN (0x4)
+ *(.text*)
+ .text          0x80000160        0xc ./bogo_delay.o
+                0x80000160                bogo_delay
+ .text          0x8000016c        0x0 ./bogomips_arm.o
+ *fill*         0x8000016c        0x4 
+ .text.measure  0x80000170       0x90 ./bogomips_arm.o
+                0x80000170                measure
+ .text.test_native_bogomips
+                0x80000200       0xfc ./bogomips_arm.o
+                0x80000200                test_native_bogomips
+ .text          0x800002fc        0x0 ./bogomips_pjit.o
+ .text.pjit_bogomips
+                0x800002fc       0x24 ./bogomips_pjit.o
+                0x800002fc                pjit_bogomips
+ .text.dopjit   0x80000320       0x98 ./bogomips_pjit.o
+                0x80000320                dopjit
+ .text.test_pjit_bogomips
+                0x800003b8       0xfc ./bogomips_pjit.o
+                0x800003b8                test_pjit_bogomips
+ .text          0x800004b4        0x0 ./main.o
+ .text.startup.main
+                0x800004b4       0xcc ./main.o
+                0x800004b4                main
+ .text          0x80000580        0x0 ./libbbb/src/am335x_clock.o
+ .text.enable_module
+                0x80000580       0x20 ./libbbb/src/am335x_clock.o
+ .text.wkup_module
+                0x800005a0       0x1c ./libbbb/src/am335x_clock.o
+ .text.wait4bit
+                0x800005bc       0x10 ./libbbb/src/am335x_clock.o
+ .text.setbit.constprop.0
+                0x800005cc       0x1c ./libbbb/src/am335x_clock.o
+ .text.am335x_clock_enable_l3_l4wkup
+                0x800005e8       0xc0 ./libbbb/src/am335x_clock.o
+                0x800005e8                am335x_clock_enable_l3_l4wkup
+ .text.am335x_clock_enable_uart_module
+                0x800006a8       0x70 ./libbbb/src/am335x_clock.o
+                0x800006a8                am335x_clock_enable_uart_module
+ .text.am335x_clock_enable_gpio_module
+                0x80000718       0x88 ./libbbb/src/am335x_clock.o
+                0x80000718                am335x_clock_enable_gpio_module
+ .text.am335x_clock_enable_i2c_module
+                0x800007a0       0x54 ./libbbb/src/am335x_clock.o
+                0x800007a0                am335x_clock_enable_i2c_module
+ .text.am335x_clock_enable_spi_module
+                0x800007f4       0x28 ./libbbb/src/am335x_clock.o
+                0x800007f4                am335x_clock_enable_spi_module
+ .text.am335x_clock_enable_timer_module
+                0x8000081c      0x124 ./libbbb/src/am335x_clock.o
+                0x8000081c                am335x_clock_enable_timer_module
+ .text.am335x_clock_enable_mmc_module
+                0x80000940       0x54 ./libbbb/src/am335x_clock.o
+                0x80000940                am335x_clock_enable_mmc_module
+ .text.am335x_clock_enable_epwm_module
+                0x80000994       0x78 ./libbbb/src/am335x_clock.o
+                0x80000994                am335x_clock_enable_epwm_module
+ .text.am335x_clock_enable_edma_module
+                0x80000a0c       0xf4 ./libbbb/src/am335x_clock.o
+                0x80000a0c                am335x_clock_enable_edma_module
+ .text.am335x_clock_enable_cpsw_module
+                0x80000b00       0x40 ./libbbb/src/am335x_clock.o
+                0x80000b00                am335x_clock_enable_cpsw_module
+ .text          0x80000b40        0x0 ./libbbb/src/am335x_dmtimer1.o
+ .text.am335x_dmtimer1_init
+                0x80000b40       0x64 ./libbbb/src/am335x_dmtimer1.o
+                0x80000b40                am335x_dmtimer1_init
+ .text.am335x_dmtimer1_get_counter
+                0x80000ba4       0x10 ./libbbb/src/am335x_dmtimer1.o
+                0x80000ba4                am335x_dmtimer1_get_counter
+ *fill*         0x80000bb4        0x4 
+ .text.am335x_dmtimer1_get_time
+                0x80000bb8       0x2c ./libbbb/src/am335x_dmtimer1.o
+                0x80000bb8                am335x_dmtimer1_get_time
+ .text.am335x_dmtimer1_get_frequency
+                0x80000be4        0xc ./libbbb/src/am335x_dmtimer1.o
+                0x80000be4                am335x_dmtimer1_get_frequency
+ .text.am335x_dmtimer1_wait_us
+                0x80000bf0       0x30 ./libbbb/src/am335x_dmtimer1.o
+                0x80000bf0                am335x_dmtimer1_wait_us
+ .text.am335x_dmtimer1_wait_ms
+                0x80000c20       0x30 ./libbbb/src/am335x_dmtimer1.o
+                0x80000c20                am335x_dmtimer1_wait_ms
+ .text.am335x_dmtimer1_get_uptime
+                0x80000c50       0x40 ./libbbb/src/am335x_dmtimer1.o
+                0x80000c50                am335x_dmtimer1_get_uptime
+ .text          0x80000c90        0x0 ./libbbb/src/am335x_epwm.o
+ .text.am335x_epwm_init
+                0x80000c90       0x6c ./libbbb/src/am335x_epwm.o
+                0x80000c90                am335x_epwm_init
+ .text.am335x_epwm_set_duty
+                0x80000cfc       0xa0 ./libbbb/src/am335x_epwm.o
+                0x80000cfc                am335x_epwm_set_duty
+ .text.am335x_epwm_set_frequency
+                0x80000d9c      0x100 ./libbbb/src/am335x_epwm.o
+                0x80000d9c                am335x_epwm_set_frequency
+ .text          0x80000e9c        0x0 ./libbbb/src/am335x_gpio.o
+ .text.am335x_gpio_interrupt_handler
+                0x80000e9c       0x7c ./libbbb/src/am335x_gpio.o
+                0x80000e9c                am335x_gpio_interrupt_handler
+ .text.am335x_gpio_init
+                0x80000f18       0xa0 ./libbbb/src/am335x_gpio.o
+                0x80000f18                am335x_gpio_init
+ .text.am335x_gpio_set_pin_dir
+                0x80000fb8       0x7c ./libbbb/src/am335x_gpio.o
+                0x80000fb8                am335x_gpio_set_pin_dir
+ .text.am335x_gpio_setup_pin_in
+                0x80001034       0x8c ./libbbb/src/am335x_gpio.o
+                0x80001034                am335x_gpio_setup_pin_in
+ .text.am335x_gpio_setup_pin
+                0x800010c0       0x34 ./libbbb/src/am335x_gpio.o
+                0x800010c0                am335x_gpio_setup_pin
+ .text.am335x_gpio_change_state
+                0x800010f4       0x24 ./libbbb/src/am335x_gpio.o
+                0x800010f4                am335x_gpio_change_state
+ .text.am335x_gpio_setup_pin_out
+                0x80001118       0x40 ./libbbb/src/am335x_gpio.o
+                0x80001118                am335x_gpio_setup_pin_out
+ .text.am335x_gpio_get_state
+                0x80001158       0x24 ./libbbb/src/am335x_gpio.o
+                0x80001158                am335x_gpio_get_state
+ .text.am335x_gpio_change_states
+                0x8000117c       0x1c ./libbbb/src/am335x_gpio.o
+                0x8000117c                am335x_gpio_change_states
+ .text.am335x_gpio_get_states
+                0x80001198       0x14 ./libbbb/src/am335x_gpio.o
+                0x80001198                am335x_gpio_get_states
+ .text.am335x_gpio_detach
+                0x800011ac       0x84 ./libbbb/src/am335x_gpio.o
+                0x800011ac                am335x_gpio_detach
+ .text.am335x_gpio_enable
+                0x80001230       0x2c ./libbbb/src/am335x_gpio.o
+                0x80001230                am335x_gpio_enable
+ .text.am335x_gpio_disable
+                0x8000125c       0x2c ./libbbb/src/am335x_gpio.o
+                0x8000125c                am335x_gpio_disable
+ .text.am335x_gpio_vector
+                0x80001288       0x44 ./libbbb/src/am335x_gpio.o
+                0x80001288                am335x_gpio_vector
+ .text.am335x_gpio_setup_pin_irq
+                0x800012cc       0xc8 ./libbbb/src/am335x_gpio.o
+                0x800012cc                am335x_gpio_setup_pin_irq
+ .text.am335x_gpio_attach
+                0x80001394       0x88 ./libbbb/src/am335x_gpio.o
+                0x80001394                am335x_gpio_attach
+ .text          0x8000141c        0x0 ./libbbb/src/am335x_i2c.o
+ .text.wait_for_status.constprop.0
+                0x8000141c       0x3c ./libbbb/src/am335x_i2c.o
+ .text.am335x_i2c_init
+                0x80001458       0x98 ./libbbb/src/am335x_i2c.o
+                0x80001458                am335x_i2c_init
+ .text.am335x_i2c_read
+                0x800014f0       0xe4 ./libbbb/src/am335x_i2c.o
+                0x800014f0                am335x_i2c_read
+ .text.am335x_i2c_write
+                0x800015d4       0xc4 ./libbbb/src/am335x_i2c.o
+                0x800015d4                am335x_i2c_write
+ .text.am335x_i2c_probe
+                0x80001698       0x88 ./libbbb/src/am335x_i2c.o
+                0x80001698                am335x_i2c_probe
+ .text          0x80001720        0x0 ./libbbb/src/am335x_mux.o
+ .text.pad_cfg  0x80001720       0x2c ./libbbb/src/am335x_mux.o
+ .text.am335x_mux_setup_uart_pins
+                0x8000174c       0x2c ./libbbb/src/am335x_mux.o
+                0x8000174c                am335x_mux_setup_uart_pins
+ .text.am335x_mux_setup_i2c_pins
+                0x80001778       0x2c ./libbbb/src/am335x_mux.o
+                0x80001778                am335x_mux_setup_i2c_pins
+ .text.am335x_mux_setup_spi_pins
+                0x800017a4       0x50 ./libbbb/src/am335x_mux.o
+                0x800017a4                am335x_mux_setup_spi_pins
+ .text.am335x_mux_setup_gpio_pin
+                0x800017f4       0x44 ./libbbb/src/am335x_mux.o
+                0x800017f4                am335x_mux_setup_gpio_pin
+ .text.am335x_mux_setup_mmc_pins
+                0x80001838       0x6c ./libbbb/src/am335x_mux.o
+                0x80001838                am335x_mux_setup_mmc_pins
+ .text.am335x_mux_setup_epwm_pins
+                0x800018a4       0x14 ./libbbb/src/am335x_mux.o
+                0x800018a4                am335x_mux_setup_epwm_pins
+ .text.am335x_mux_setup_cpsw_pins
+                0x800018b8       0xa0 ./libbbb/src/am335x_mux.o
+                0x800018b8                am335x_mux_setup_cpsw_pins
+ .text          0x80001958        0x0 ./libbbb/src/am335x_spi.o
+ .text.am335x_spi_init
+                0x80001958      0x104 ./libbbb/src/am335x_spi.o
+                0x80001958                am335x_spi_init
+ .text.am335x_spi_read_b
+                0x80001a5c       0xac ./libbbb/src/am335x_spi.o
+                0x80001a5c                am335x_spi_read_b
+ .text.am335x_spi_write_b
+                0x80001b08       0xac ./libbbb/src/am335x_spi.o
+                0x80001b08                am335x_spi_write_b
+ .text.am335x_spi_write_w
+                0x80001bb4       0xac ./libbbb/src/am335x_spi.o
+                0x80001bb4                am335x_spi_write_w
+ .text          0x80001c60        0x0 ./libbbb/src/am335x_uart.o
+ .text.am335x_uart_set_baudrate
+                0x80001c60       0x58 ./libbbb/src/am335x_uart.o
+                0x80001c60                am335x_uart_set_baudrate
+ .text.am335x_uart_init
+                0x80001cb8       0xe4 ./libbbb/src/am335x_uart.o
+                0x80001cb8                am335x_uart_init
+ .text.am335x_uart_tstc
+                0x80001d9c       0x18 ./libbbb/src/am335x_uart.o
+                0x80001d9c                am335x_uart_tstc
+ .text.am335x_uart_read
+                0x80001db4       0x20 ./libbbb/src/am335x_uart.o
+                0x80001db4                am335x_uart_read
+ .text.am335x_uart_write
+                0x80001dd4       0x20 ./libbbb/src/am335x_uart.o
+                0x80001dd4                am335x_uart_write
+ .text          0x80001df4        0x0 ./libbbb/src/bbb_fs.o
+ .text._open    0x80001df4       0xe0 ./libbbb/src/bbb_fs.o
+                0x80001df4                _open
+ .text._read    0x80001ed4       0x2c ./libbbb/src/bbb_fs.o
+                0x80001ed4                _read
+ .text._write   0x80001f00       0x2c ./libbbb/src/bbb_fs.o
+                0x80001f00                _write
+ .text._lseek   0x80001f2c       0x2c ./libbbb/src/bbb_fs.o
+                0x80001f2c                _lseek
+ .text._isatty  0x80001f58       0x20 ./libbbb/src/bbb_fs.o
+                0x80001f58                _isatty
+ .text._close   0x80001f78       0x30 ./libbbb/src/bbb_fs.o
+                0x80001f78                _close
+ .text.fcntl    0x80001fa8       0x44 ./libbbb/src/bbb_fs.o
+                0x80001fa8                fcntl
+ .text._fstat   0x80001fec       0x20 ./libbbb/src/bbb_fs.o
+                0x80001fec                _fstat
+ .text._stat    0x8000200c       0x44 ./libbbb/src/bbb_fs.o
+                0x8000200c                _stat
+ .text.calloc_dir
+                0x80002050       0x54 ./libbbb/src/bbb_fs.o
+                0x80002050                calloc_dir
+ .text._opendir
+                0x800020a4       0x64 ./libbbb/src/bbb_fs.o
+                0x800020a4                _opendir
+ .text._readdir
+                0x80002108       0x10 ./libbbb/src/bbb_fs.o
+                0x80002108                _readdir
+ .text._closedir
+                0x80002118       0x50 ./libbbb/src/bbb_fs.o
+                0x80002118                _closedir
+ .text._mkdir   0x80002168       0x40 ./libbbb/src/bbb_fs.o
+                0x80002168                _mkdir
+ .text._rmdir   0x800021a8       0x38 ./libbbb/src/bbb_fs.o
+                0x800021a8                _rmdir
+ .text.bbb_fs_init
+                0x800021e0       0x34 ./libbbb/src/bbb_fs.o
+                0x800021e0                bbb_fs_init
+ .text          0x80002214        0x0 ./libbbb/src/bbb_syscall.o
+ .text._sbrk    0x80002214        0x8 ./libbbb/src/bbb_syscall.o
+                0x80002214                _sbrk
+ .text._exit    0x8000221c        0x4 ./libbbb/src/bbb_syscall.o
+                0x8000221c                _exit
+ .text._init    0x80002220       0x78 ./libbbb/src/bbb_syscall.o
+                0x80002220                _init
+ .text._fini    0x80002298       0x40 ./libbbb/src/bbb_syscall.o
+                0x80002298                _fini
+ .text._getpid  0x800022d8        0x8 ./libbbb/src/bbb_syscall.o
+                0x800022d8                _getpid
+ .text._kill    0x800022e0        0x4 ./libbbb/src/bbb_syscall.o
+                0x800022e0                _kill
+ .text          0x800022e4        0x0 ./libbbb/src/console.o
+ .text.cons_open
+                0x800022e4       0x10 ./libbbb/src/console.o
+ .text.cons_lseek
+                0x800022f4        0x8 ./libbbb/src/console.o
+ .text.cons_isatty
+                0x800022fc        0x8 ./libbbb/src/console.o
+ .text.cons_close
+                0x80002304        0x8 ./libbbb/src/console.o
+ .text.cons_fcntl
+                0x8000230c       0x18 ./libbbb/src/console.o
+ .text.cons_fstat
+                0x80002324       0x28 ./libbbb/src/console.o
+ .text.cons_write
+                0x8000234c       0x58 ./libbbb/src/console.o
+ .text.cons_read
+                0x800023a4       0x3c ./libbbb/src/console.o
+ .text.console_init
+                0x800023e0        0x8 ./libbbb/src/console.o
+                0x800023e0                console_init
+ .text.console_get_fops
+                0x800023e8        0xc ./libbbb/src/console.o
+                0x800023e8                console_get_fops
+ .text          0x800023f4        0x0 ./libbbb/src/dirent.o
+ .text.opendir  0x800023f4       0x4c ./libbbb/src/dirent.o
+                0x800023f4                opendir
+ .text.readdir  0x80002440        0x4 ./libbbb/src/dirent.o
+                0x80002440                readdir
+ .text.closedir
+                0x80002444        0x4 ./libbbb/src/dirent.o
+                0x80002444                closedir
+ .text.mkdir    0x80002448        0x4 ./libbbb/src/dirent.o
+                0x80002448                mkdir
+ .text.rmdir    0x8000244c        0x4 ./libbbb/src/dirent.o
+                0x8000244c                rmdir
+ .text          0x80002450        0x0 ./libbbb/src/oled.o
+ .text.send_data
+                0x80002450       0x30 ./libbbb/src/oled.o
+ .text.send_cmd
+                0x80002480       0x60 ./libbbb/src/oled.o
+ .text.send_cmd_val
+                0x800024e0       0x20 ./libbbb/src/oled.o
+ .text.spi_init
+                0x80002500       0x30 ./libbbb/src/oled.o
+ .text.seps114a_set_area
+                0x80002530       0xa0 ./libbbb/src/oled.o
+                0x80002530                seps114a_set_area
+ .text.oled_select_cape_1
+                0x800025d0       0x14 ./libbbb/src/oled.o
+                0x800025d0                oled_select_cape_1
+ .text.oled_memory_size
+                0x800025e4       0x88 ./libbbb/src/oled.o
+                0x800025e4                oled_memory_size
+ .text.oled_color
+                0x8000266c       0x20 ./libbbb/src/oled.o
+                0x8000266c                oled_color
+ .text.oled_init2
+                0x8000268c      0x430 ./libbbb/src/oled.o
+                0x8000268c                oled_init2
+ .text.oled_send_image
+                0x80002abc        0x8 ./libbbb/src/oled.o
+                0x80002abc                oled_send_image
+ .text          0x80002ac4        0x0 ./libbbb/src/path.o
+ .text.path_purify
+                0x80002ac4       0xd4 ./libbbb/src/path.o
+                0x80002ac4                path_purify
+ .text.path_set_current_dir
+                0x80002b98       0x78 ./libbbb/src/path.o
+                0x80002b98                path_set_current_dir
+ .text.path_get_current_dir
+                0x80002c10        0xc ./libbbb/src/path.o
+                0x80002c10                path_get_current_dir
+ .text.path_build_full
+                0x80002c1c       0x88 ./libbbb/src/path.o
+                0x80002c1c                path_build_full
+ .text.path_build_full_r
+                0x80002ca4       0x80 ./libbbb/src/path.o
+                0x80002ca4                path_build_full_r
+ .text          0x80002d24       0x58 ./libbbb/src/string2.o
+                0x80002d24                string_copy_long
+                0x80002d3c                string_copy_short
+                0x80002d54                string_set_long
+                0x80002d68                string_set_short
+ .text          0x80002d7c        0x0 ./libbbb/src/vfs.o
+ .text.vfs_get_dir_internal
+                0x80002d7c       0x10 ./libbbb/src/vfs.o
+ .text.vfs_get_file_internal
+                0x80002d8c       0x14 ./libbbb/src/vfs.o
+ .text.vfs_init
+                0x80002da0        0x4 ./libbbb/src/vfs.o
+                0x80002da0                vfs_init
+ .text.vfs_set_method_get_dir
+                0x80002da4       0x10 ./libbbb/src/vfs.o
+                0x80002da4                vfs_set_method_get_dir
+ .text.vfs_set_method_get_file
+                0x80002db4       0x10 ./libbbb/src/vfs.o
+                0x80002db4                vfs_set_method_get_file
+ .text.vfs_get_dir
+                0x80002dc4       0x20 ./libbbb/src/vfs.o
+                0x80002dc4                vfs_get_dir
+ .text.vfs_get_file
+                0x80002de4       0x20 ./libbbb/src/vfs.o
+                0x80002de4                vfs_get_file
+ .text          0x80002e04      0x488 ./support/cp15.o
+                0x80002e04                CP15ICacheDisable
+                0x80002e20                CP15DCacheDisable
+                0x80002e3c                CP15ICacheEnable
+                0x80002e4c                CP15DCacheEnable
+                0x80002e5c                CP15DCacheFlush
+                0x80002ef0                CP15DCacheClean
+                0x80002f84                CP15DCacheCleanFlush
+                0x80003018                CP15ICacheFlush
+                0x80003028                CP15DCacheCleanBuff
+                0x8000307c                CP15DCacheCleanFlushBuff
+                0x800030d0                CP15DCacheFlushBuff
+                0x80003134                CP15ICacheFlushBuff
+                0x80003188                CP15Ttb0Set
+                0x80003194                CP15TlbInvalidate
+                0x800031a0                CP15MMUDisable
+                0x800031b8                CP15MMUEnable
+                0x800031cc                CP15VectorBaseAddrSet
+                0x800031d8                CP15BranchPredictorInvalidate
+                0x800031e4                CP15BranchPredictionEnable
+                0x800031f4                CP15BranchPredictionDisable
+                0x80003204                CP15DomainAccessClientSet
+                0x80003214                CP15ControlFeatureDisable
+                0x80003228                CP15ControlFeatureEnable
+                0x8000323c                CP15TtbCtlTtb0Config
+                0x8000324c                CP15AuxControlFeatureEnable
+                0x80003260                CP15AuxControlFeatureDisable
+                0x80003274                CP15MainIdPrimPartNumGet
+ .text          0x8000328c        0x0 ./support/cstd.o
+ .text.__aeabi_uidiv
+                0x8000328c       0x20 ./support/cstd.o
+                0x8000328c                __aeabi_uidiv
+ .text.__aeabi_uidivmod
+                0x800032ac       0x40 ./support/cstd.o
+                0x800032ac                __aeabi_uidivmod
+ .text.__aeabi_idiv
+                0x800032ec       0x20 ./support/cstd.o
+                0x800032ec                __aeabi_idiv
+ .text.__aeabi_idivmod
+                0x8000330c       0x3c ./support/cstd.o
+                0x8000330c                __aeabi_idivmod
+ .text.div      0x80003348       0x4c ./support/cstd.o
+                0x80003348                div
+ .text.strlen   0x80003394       0x1c ./support/cstd.o
+                0x80003394                strlen
+ .text.strcmp   0x800033b0       0x28 ./support/cstd.o
+                0x800033b0                strcmp
+ .text.memmove  0x800033d8       0x40 ./support/cstd.o
+                0x800033d8                memmove
+ .text.memcpy   0x80003418       0x1c ./support/cstd.o
+                0x80003418                memcpy
+ .text.memset   0x80003434       0x18 ./support/cstd.o
+                0x80003434                memset
+ .text.bzero    0x8000344c       0x20 ./support/cstd.o
+                0x8000344c                bzero
+ .text.strstr   0x8000346c       0x58 ./support/cstd.o
+                0x8000346c                strstr
+ .text.strcpy   0x800034c4       0x20 ./support/cstd.o
+                0x800034c4                strcpy
+ .text.strrchr  0x800034e4       0x24 ./support/cstd.o
+                0x800034e4                strrchr
+ .text.strncpy  0x80003508       0x30 ./support/cstd.o
+                0x80003508                strncpy
+ .text.strncat  0x80003538       0x2c ./support/cstd.o
+                0x80003538                strncat
+ .text          0x80003564        0x0 ./support/init_hw.o
+ .text.InitializeMCUClock
+                0x80003564       0x64 ./support/init_hw.o
+                0x80003564                InitializeMCUClock
+ .text.InitializeMMU
+                0x800035c8       0x38 ./support/init_hw.o
+                0x800035c8                InitializeMMU
+ .text.ConfigureMMU
+                0x80003600       0x38 ./support/init_hw.o
+                0x80003600                ConfigureMMU
+ .text.EnableMMU
+                0x80003638       0x10 ./support/init_hw.o
+                0x80003638                EnableMMU
+ .text.CacheEnable
+                0x80003648       0x34 ./support/init_hw.o
+                0x80003648                CacheEnable
+ .text          0x8000367c        0x0 ./support/printf.o
+ .text.flushUART
+                0x8000367c       0x34 ./support/printf.o
+ .text.printUART
+                0x800036b0       0x40 ./support/printf.o
+ .text.printchar
+                0x800036f0       0x38 ./support/printf.o
+ .text.prints   0x80003728       0xb8 ./support/printf.o
+ .text.printu   0x800037e0       0x68 ./support/printf.o
+ .text.print    0x80003848      0x1d0 ./support/printf.o
+ .text.printf   0x80003a18       0x2c ./support/printf.o
+                0x80003a18                printf
+ .text.sprintf  0x80003a44       0x28 ./support/printf.o
+                0x80003a44                sprintf
+ .text.puts     0x80003a6c       0x30 ./support/printf.o
+                0x80003a6c                puts
+ .text.putchar  0x80003a9c       0x18 ./support/printf.o
+                0x80003a9c                putchar
+ .text          0x80003ab4       0x10 ./support/sh_printstr.o
+                0x80003ab4                sh_printstr
+ *(.rodata*)
+ .rodata.test_native_bogomips.str1.1
+                0x80003ac4       0xa5 ./bogomips_arm.o
+ .rodata.test_pjit_bogomips.str1.1
+                0x80003b69       0xa1 ./bogomips_pjit.o
+ .rodata.main.str1.1
+                0x80003c0a       0xc1 ./main.o
+ *fill*         0x80003ccb        0x1 
+ .rodata.mmu_config
+                0x80003ccc       0x24 ./main.o
+ .rodata.dividers
+                0x80003cf0      0x1b0 ./libbbb/src/am335x_epwm.o
+ .rodata.epwm   0x80003ea0        0x8 ./libbbb/src/am335x_epwm.o
+ .rodata.epwm2clock
+                0x80003ea8        0x2 ./libbbb/src/am335x_epwm.o
+ .rodata.epwm2mux
+                0x80003eaa        0x2 ./libbbb/src/am335x_epwm.o
+ .rodata.gpio2clock
+                0x80003eac        0x4 ./libbbb/src/am335x_gpio.o
+ .rodata.gpio_ctrl
+                0x80003eb0       0x10 ./libbbb/src/am335x_gpio.o
+ .rodata.i2c2clock
+                0x80003ec0        0x2 ./libbbb/src/am335x_i2c.o
+ .rodata.i2c2mux
+                0x80003ec2        0x2 ./libbbb/src/am335x_i2c.o
+ .rodata.i2c_ctrl
+                0x80003ec4        0x8 ./libbbb/src/am335x_i2c.o
+ .rodata.str1.1
+                0x80003ecc      0x63e ./libbbb/src/am335x_mux.o
+ *fill*         0x8000450a        0x2 
+ .rodata.cpsw_pad
+                0x8000450c       0xd8 ./libbbb/src/am335x_mux.o
+ .rodata.epwm_pad
+                0x800045e4       0x24 ./libbbb/src/am335x_mux.o
+ .rodata.gpio   0x80004608      0x600 ./libbbb/src/am335x_mux.o
+ .rodata.i2c_pad
+                0x80004c08       0x48 ./libbbb/src/am335x_mux.o
+ .rodata.mmc_pad
+                0x80004c50      0x198 ./libbbb/src/am335x_mux.o
+ .rodata.spi_pad
+                0x80004de8       0xb4 ./libbbb/src/am335x_mux.o
+ .rodata.uart_pad
+                0x80004e9c       0x90 ./libbbb/src/am335x_mux.o
+ .rodata.spi2clock
+                0x80004f2c        0x2 ./libbbb/src/am335x_spi.o
+ *fill*         0x80004f2e        0x2 
+ .rodata.spi_ctrl
+                0x80004f30        0x8 ./libbbb/src/am335x_spi.o
+ .rodata.uart2clock
+                0x80004f38        0x6 ./libbbb/src/am335x_uart.o
+ *fill*         0x80004f3e        0x2 
+ .rodata.uart_ctrl
+                0x80004f40       0x18 ./libbbb/src/am335x_uart.o
+ .rodata.spi    0x80004f58       0x48 ./libbbb/src/oled.o
+ .rodata.path_purify.str1.1
+                0x80004fa0        0xb ./libbbb/src/path.o
+ .rodata.path_set_current_dir.str1.1
+                0x80004fab        0xb ./libbbb/src/path.o
+                                  0x2 (size before relaxing)
+ .rodata.prints.str1.1
+                0x80004fab        0x7 ./support/printf.o
+ .rodata.print.str1.1
+                0x80004fb2       0x22 ./support/printf.o
+
+.glue_7         0x80004fd4        0x0
+ .glue_7        0x80004fd4        0x0 linker stubs
+
+.glue_7t        0x80004fd4        0x0
+ .glue_7t       0x80004fd4        0x0 linker stubs
+
+.vfp11_veneer   0x80004fd4        0x0
+ .vfp11_veneer  0x80004fd4        0x0 linker stubs
+
+.v4_bx          0x80004fd4        0x0
+ .v4_bx         0x80004fd4        0x0 linker stubs
+
+.iplt           0x80004fd4        0x0
+ .iplt          0x80004fd4        0x0 ./bogo_delay.o
+
+.rel.dyn        0x80004fd4        0x0
+ .rel.iplt      0x80004fd4        0x0 ./bogo_delay.o
+
+.data           0x80004fd4      0x82c
+                0x80004fd4                . = ALIGN (0x4)
+ *(.data*)
+ .data          0x80004fd4        0x0 ./bogo_delay.o
+ .data          0x80004fd4        0x0 ./bogomips_arm.o
+ .data          0x80004fd4        0x0 ./bogomips_pjit.o
+ .data          0x80004fd4        0x0 ./main.o
+ .data          0x80004fd4        0x0 ./startup.o
+ .data          0x80004fd4        0x0 ./libbbb/src/am335x_clock.o
+ .data          0x80004fd4        0x0 ./libbbb/src/am335x_dmtimer1.o
+ .data          0x80004fd4        0x0 ./libbbb/src/am335x_epwm.o
+ .data          0x80004fd4        0x0 ./libbbb/src/am335x_gpio.o
+ .data          0x80004fd4        0x0 ./libbbb/src/am335x_i2c.o
+ .data          0x80004fd4        0x0 ./libbbb/src/am335x_mux.o
+ .data          0x80004fd4        0x0 ./libbbb/src/am335x_spi.o
+ .data          0x80004fd4        0x0 ./libbbb/src/am335x_uart.o
+ .data          0x80004fd4        0x0 ./libbbb/src/bbb_fs.o
+ .data          0x80004fd4        0x0 ./libbbb/src/bbb_syscall.o
+ .data          0x80004fd4        0x0 ./libbbb/src/console.o
+ .data.cons_fops
+                0x80004fd4       0x20 ./libbbb/src/console.o
+ .data          0x80004ff4        0x0 ./libbbb/src/dirent.o
+ .data          0x80004ff4        0x0 ./libbbb/src/oled.o
+ .data.cape     0x80004ff4        0x1 ./libbbb/src/oled.o
+ .data          0x80004ff5        0x0 ./libbbb/src/path.o
+ .data.current_path
+                0x80004ff5      0x800 ./libbbb/src/path.o
+ .data          0x800057f5        0x0 ./libbbb/src/string2.o
+ .data          0x800057f5        0x0 ./libbbb/src/vfs.o
+ *fill*         0x800057f5        0x3 
+ .data.get_dir  0x800057f8        0x4 ./libbbb/src/vfs.o
+ .data.get_file
+                0x800057fc        0x4 ./libbbb/src/vfs.o
+ .data          0x80005800        0x0 ./support/cp15.o
+ .data          0x80005800        0x0 ./support/cstd.o
+ .data          0x80005800        0x0 ./support/init_hw.o
+ .data          0x80005800        0x0 ./support/printf.o
+ .data          0x80005800        0x0 ./support/sh_printstr.o
+                0x80005800                . = ALIGN (0x4)
+                0x80005800                __data_start__ = .
+ *(vtable)
+ *(.data*)
+                0x80005800                . = ALIGN (0x4)
+                0x80005800                PROVIDE (__preinit_array_start = .)
+ *(.preinit_array)
+                0x80005800                PROVIDE (__preinit_array_end = .)
+                0x80005800                . = ALIGN (0x4)
+                0x80005800                PROVIDE (__init_array_start = .)
+ *(SORT_BY_NAME(.init_array.*))
+ *(.init_array)
+                0x80005800                PROVIDE (__init_array_end = .)
+                0x80005800                . = ALIGN (0x4)
+                0x80005800                PROVIDE (__fini_array_start = .)
+ *(SORT_BY_NAME(.fini_array.*))
+ *(.fini_array)
+                [!provide]                PROVIDE (__fini_array_end = .)
+                0x80005800                . = ALIGN (0x4)
+                0x80005800                __data_end__ = .
+
+.igot.plt       0x80005800        0x0
+ .igot.plt      0x80005800        0x0 ./bogo_delay.o
+
+.bss            0x80008000     0xeff0
+                0x80008000                . = ALIGN (0x4)
+                0x80008000                _bss_start = .
+ *(.bss*)
+ .bss           0x80008000        0x0 ./bogo_delay.o
+ .bss           0x80008000        0x0 ./bogomips_arm.o
+ .bss.duration  0x80008000        0x8 ./bogomips_arm.o
+ .bss.loops     0x80008008        0x4 ./bogomips_arm.o
+ .bss.pass.7236
+                0x8000800c        0x4 ./bogomips_arm.o
+ .bss           0x80008010        0x0 ./bogomips_pjit.o
+ .bss._cpu      0x80008010       0x68 ./bogomips_pjit.o
+ .bss.duration  0x80008078        0x8 ./bogomips_pjit.o
+ .bss.loops     0x80008080        0x4 ./bogomips_pjit.o
+ .bss.pass.7302
+                0x80008084        0x4 ./bogomips_pjit.o
+ .bss           0x80008088        0x0 ./main.o
+ *fill*         0x80008088     0x3f78 
+ .bss.pageTable
+                0x8000c000     0x4000 ./main.o
+ .bss           0x80010000        0x0 ./startup.o
+ .bss           0x80010000        0x0 ./libbbb/src/am335x_clock.o
+ .bss           0x80010000        0x0 ./libbbb/src/am335x_dmtimer1.o
+ .bss.is_initialized.5639
+                0x80010000        0x1 ./libbbb/src/am335x_dmtimer1.o
+ *fill*         0x80010001        0x3 
+ .bss.st.5669   0x80010004        0x4 ./libbbb/src/am335x_dmtimer1.o
+ .bss.uptime.5670
+                0x80010008        0x8 ./libbbb/src/am335x_dmtimer1.o
+ .bss           0x80010010        0x0 ./libbbb/src/am335x_epwm.o
+ .bss.cfg       0x80010010       0x10 ./libbbb/src/am335x_epwm.o
+                0x80010010                cfg
+ .bss           0x80010020        0x0 ./libbbb/src/am335x_gpio.o
+ .bss.handlers  0x80010020      0x600 ./libbbb/src/am335x_gpio.o
+ .bss.is_initialized
+                0x80010620        0x4 ./libbbb/src/am335x_gpio.o
+ .bss           0x80010624        0x0 ./libbbb/src/am335x_i2c.o
+ .bss           0x80010624        0x0 ./libbbb/src/am335x_mux.o
+ .bss           0x80010624        0x0 ./libbbb/src/am335x_spi.o
+ .bss.is_initialized.6327
+                0x80010624        0x1 ./libbbb/src/am335x_spi.o
+ .bss           0x80010625        0x0 ./libbbb/src/am335x_uart.o
+ .bss           0x80010625        0x0 ./libbbb/src/bbb_fs.o
+ *fill*         0x80010625        0x3 
+ .bss.dir_bank  0x80010628       0x80 ./libbbb/src/bbb_fs.o
+ .bss.dir_bank_alloc_map
+                0x800106a8        0x1 ./libbbb/src/bbb_fs.o
+ .bss           0x800106a9        0x0 ./libbbb/src/bbb_syscall.o
+ .bss           0x800106a9        0x0 ./libbbb/src/console.o
+ .bss           0x800106a9        0x0 ./libbbb/src/dirent.o
+ .bss           0x800106a9        0x0 ./libbbb/src/oled.o
+ .bss.oled_device
+                0x800106a9        0x1 ./libbbb/src/oled.o
+ .bss           0x800106aa        0x0 ./libbbb/src/path.o
+ .bss.full_path
+                0x800106aa      0x900 ./libbbb/src/path.o
+ .bss           0x80010faa        0x0 ./libbbb/src/string2.o
+ .bss           0x80010faa        0x0 ./libbbb/src/vfs.o
+ .bss           0x80010faa        0x0 ./support/cp15.o
+ .bss           0x80010faa        0x0 ./support/cstd.o
+ .bss           0x80010faa        0x0 ./support/init_hw.o
+ .bss           0x80010faa        0x0 ./support/printf.o
+ .bss.buffer    0x80010faa       0x21 ./support/printf.o
+ .bss.buffer.7035
+                0x80010fcb       0x21 ./support/printf.o
+ .bss.buffer_index
+                0x80010fec        0x4 ./support/printf.o
+ .bss           0x80010ff0        0x0 ./support/sh_printstr.o
+ *(COMMON)
+ COMMON         0x80010ff0     0x6000 ./libbbb/src/bbb_fs.o
+                0x80010ff0                f
+                0x80016ff0                _bss_end = .
+
+.heap           0x80016ff0      0x800
+                0x80016ff0                . = ALIGN (0x4)
+                0x80016ff0                __end__ = .
+                0x80016ff0                end = __end__
+                0x80016ff0                __HeapBase = __end__
+ *(.heap*)
+                0x800177f0                . = (. + 0x800)
+ *fill*         0x80016ff0      0x800 
+                0x800177f0                __HeapLimit = .
+
+.stack          0x800177f0      0x810
+                0x80017800                . = ALIGN (0x100)
+ *fill*         0x800177f0       0x10 
+                0x80017800                __StackLimit = .
+ *(.stack*)
+                0x80018000                . = (. + 0x800)
+ *fill*         0x80017800      0x800 
+                0x80018000                __StackTop = .
+                0x80018000                _stack = __StackTop
+OUTPUT(pjit.out elf32-littlearm)
+
+.ARM.attributes
+                0x00000000       0x2f
+ .ARM.attributes
+                0x00000000       0x21 ./bogo_delay.o
+ .ARM.attributes
+                0x00000021       0x33 ./bogomips_arm.o
+ .ARM.attributes
+                0x00000054       0x33 ./bogomips_pjit.o
+ .ARM.attributes
+                0x00000087       0x33 ./main.o
+ .ARM.attributes
+                0x000000ba       0x21 ./startup.o
+ .ARM.attributes
+                0x000000db       0x33 ./libbbb/src/am335x_clock.o
+ .ARM.attributes
+                0x0000010e       0x33 ./libbbb/src/am335x_dmtimer1.o
+ .ARM.attributes
+                0x00000141       0x33 ./libbbb/src/am335x_epwm.o
+ .ARM.attributes
+                0x00000174       0x33 ./libbbb/src/am335x_gpio.o
+ .ARM.attributes
+                0x000001a7       0x33 ./libbbb/src/am335x_i2c.o
+ .ARM.attributes
+                0x000001da       0x33 ./libbbb/src/am335x_mux.o
+ .ARM.attributes
+                0x0000020d       0x33 ./libbbb/src/am335x_spi.o
+ .ARM.attributes
+                0x00000240       0x33 ./libbbb/src/am335x_uart.o
+ .ARM.attributes
+                0x00000273       0x33 ./libbbb/src/bbb_fs.o
+ .ARM.attributes
+                0x000002a6       0x33 ./libbbb/src/bbb_syscall.o
+ .ARM.attributes
+                0x000002d9       0x33 ./libbbb/src/console.o
+ .ARM.attributes
+                0x0000030c       0x33 ./libbbb/src/dirent.o
+ .ARM.attributes
+                0x0000033f       0x33 ./libbbb/src/oled.o
+ .ARM.attributes
+                0x00000372       0x33 ./libbbb/src/path.o
+ .ARM.attributes
+                0x000003a5       0x21 ./libbbb/src/string2.o
+ .ARM.attributes
+                0x000003c6       0x33 ./libbbb/src/vfs.o
+ .ARM.attributes
+                0x000003f9       0x21 ./support/cp15.o
+ .ARM.attributes
+                0x0000041a       0x33 ./support/cstd.o
+ .ARM.attributes
+                0x0000044d       0x33 ./support/init_hw.o
+ .ARM.attributes
+                0x00000480       0x33 ./support/printf.o
+ .ARM.attributes
+                0x000004b3       0x21 ./support/sh_printstr.o
+
+.comment        0x00000000       0x79
+ .comment       0x00000000       0x79 ./bogomips_arm.o
+                                 0x7a (size before relaxing)
+ .comment       0x00000079       0x7a ./bogomips_pjit.o
+ .comment       0x00000079       0x7a ./main.o
+ .comment       0x00000079       0x7a ./libbbb/src/am335x_clock.o
+ .comment       0x00000079       0x7a ./libbbb/src/am335x_dmtimer1.o
+ .comment       0x00000079       0x7a ./libbbb/src/am335x_epwm.o
+ .comment       0x00000079       0x7a ./libbbb/src/am335x_gpio.o
+ .comment       0x00000079       0x7a ./libbbb/src/am335x_i2c.o
+ .comment       0x00000079       0x7a ./libbbb/src/am335x_mux.o
+ .comment       0x00000079       0x7a ./libbbb/src/am335x_spi.o
+ .comment       0x00000079       0x7a ./libbbb/src/am335x_uart.o
+ .comment       0x00000079       0x7a ./libbbb/src/bbb_fs.o
+ .comment       0x00000079       0x7a ./libbbb/src/bbb_syscall.o
+ .comment       0x00000079       0x7a ./libbbb/src/console.o
+ .comment       0x00000079       0x7a ./libbbb/src/dirent.o
+ .comment       0x00000079       0x7a ./libbbb/src/oled.o
+ .comment       0x00000079       0x7a ./libbbb/src/path.o
+ .comment       0x00000079       0x7a ./libbbb/src/vfs.o
+ .comment       0x00000079       0x7a ./support/cstd.o
+ .comment       0x00000079       0x7a ./support/init_hw.o
+ .comment       0x00000079       0x7a ./support/printf.o
+
+.debug_line     0x00000000     0x5a5b
+ .debug_line    0x00000000       0x3f ./bogo_delay.o
+ .debug_line    0x0000003f      0x289 ./bogomips_arm.o
+ .debug_line    0x000002c8      0x354 ./bogomips_pjit.o
+ .debug_line    0x0000061c      0x265 ./main.o
+ .debug_line    0x00000881       0xab ./startup.o
+ .debug_line    0x0000092c      0x5f2 ./libbbb/src/am335x_clock.o
+ .debug_line    0x00000f1e      0x2d3 ./libbbb/src/am335x_dmtimer1.o
+ .debug_line    0x000011f1      0x39b ./libbbb/src/am335x_epwm.o
+ .debug_line    0x0000158c      0x667 ./libbbb/src/am335x_gpio.o
+ .debug_line    0x00001bf3      0x4c1 ./libbbb/src/am335x_i2c.o
+ .debug_line    0x000020b4      0x3ce ./libbbb/src/am335x_mux.o
+ .debug_line    0x00002482      0x546 ./libbbb/src/am335x_spi.o
+ .debug_line    0x000029c8      0x398 ./libbbb/src/am335x_uart.o
+ .debug_line    0x00002d60      0x6a1 ./libbbb/src/bbb_fs.o
+ .debug_line    0x00003401      0x2c1 ./libbbb/src/bbb_syscall.o
+ .debug_line    0x000036c2      0x46c ./libbbb/src/console.o
+ .debug_line    0x00003b2e      0x2f8 ./libbbb/src/dirent.o
+ .debug_line    0x00003e26      0x4ee ./libbbb/src/oled.o
+ .debug_line    0x00004314      0x2f6 ./libbbb/src/path.o
+ .debug_line    0x0000460a       0x62 ./libbbb/src/string2.o
+ .debug_line    0x0000466c      0x35b ./libbbb/src/vfs.o
+ .debug_line    0x000049c7      0x16c ./support/cp15.o
+ .debug_line    0x00004b33      0x563 ./support/cstd.o
+ .debug_line    0x00005096      0x364 ./support/init_hw.o
+ .debug_line    0x000053fa      0x618 ./support/printf.o
+ .debug_line    0x00005a12       0x49 ./support/sh_printstr.o
+
+.debug_info     0x00000000    0x10dae
+ .debug_info    0x00000000       0x26 ./bogo_delay.o
+ .debug_info    0x00000026      0xa01 ./bogomips_arm.o
+ .debug_info    0x00000a27      0xcdb ./bogomips_pjit.o
+ .debug_info    0x00001702      0xa0e ./main.o
+ .debug_info    0x00002110       0x22 ./startup.o
+ .debug_info    0x00002132     0x1551 ./libbbb/src/am335x_clock.o
+ .debug_info    0x00003683      0x391 ./libbbb/src/am335x_dmtimer1.o
+ .debug_info    0x00003a14      0xebc ./libbbb/src/am335x_epwm.o
+ .debug_info    0x000048d0      0xae2 ./libbbb/src/am335x_gpio.o
+ .debug_info    0x000053b2      0x5e4 ./libbbb/src/am335x_i2c.o
+ .debug_info    0x00005996     0x1065 ./libbbb/src/am335x_mux.o
+ .debug_info    0x000069fb      0xe1e ./libbbb/src/am335x_spi.o
+ .debug_info    0x00007819      0x4f2 ./libbbb/src/am335x_uart.o
+ .debug_info    0x00007d0b     0x147b ./libbbb/src/bbb_fs.o
+ .debug_info    0x00009186      0xaff ./libbbb/src/bbb_syscall.o
+ .debug_info    0x00009c85     0x1091 ./libbbb/src/console.o
+ .debug_info    0x0000ad16      0xb74 ./libbbb/src/dirent.o
+ .debug_info    0x0000b88a     0x10e7 ./libbbb/src/oled.o
+ .debug_info    0x0000c971      0xab3 ./libbbb/src/path.o
+ .debug_info    0x0000d424       0x26 ./libbbb/src/string2.o
+ .debug_info    0x0000d44a     0x10bc ./libbbb/src/vfs.o
+ .debug_info    0x0000e506       0x26 ./support/cp15.o
+ .debug_info    0x0000e52c      0xf8c ./support/cstd.o
+ .debug_info    0x0000f4b8      0xab0 ./support/init_hw.o
+ .debug_info    0x0000ff68      0xe20 ./support/printf.o
+ .debug_info    0x00010d88       0x26 ./support/sh_printstr.o
+
+.debug_abbrev   0x00000000     0x3690
+ .debug_abbrev  0x00000000       0x14 ./bogo_delay.o
+ .debug_abbrev  0x00000014      0x221 ./bogomips_arm.o
+ .debug_abbrev  0x00000235      0x303 ./bogomips_pjit.o
+ .debug_abbrev  0x00000538      0x1ef ./main.o
+ .debug_abbrev  0x00000727       0x12 ./startup.o
+ .debug_abbrev  0x00000739      0x2fe ./libbbb/src/am335x_clock.o
+ .debug_abbrev  0x00000a37      0x14c ./libbbb/src/am335x_dmtimer1.o
+ .debug_abbrev  0x00000b83      0x2a6 ./libbbb/src/am335x_epwm.o
+ .debug_abbrev  0x00000e29      0x275 ./libbbb/src/am335x_gpio.o
+ .debug_abbrev  0x0000109e      0x22c ./libbbb/src/am335x_i2c.o
+ .debug_abbrev  0x000012ca      0x2a6 ./libbbb/src/am335x_mux.o
+ .debug_abbrev  0x00001570      0x2c5 ./libbbb/src/am335x_spi.o
+ .debug_abbrev  0x00001835      0x1b5 ./libbbb/src/am335x_uart.o
+ .debug_abbrev  0x000019ea      0x34a ./libbbb/src/bbb_fs.o
+ .debug_abbrev  0x00001d34      0x298 ./libbbb/src/bbb_syscall.o
+ .debug_abbrev  0x00001fcc      0x323 ./libbbb/src/console.o
+ .debug_abbrev  0x000022ef      0x238 ./libbbb/src/dirent.o
+ .debug_abbrev  0x00002527      0x3de ./libbbb/src/oled.o
+ .debug_abbrev  0x00002905      0x259 ./libbbb/src/path.o
+ .debug_abbrev  0x00002b5e       0x14 ./libbbb/src/string2.o
+ .debug_abbrev  0x00002b72      0x2aa ./libbbb/src/vfs.o
+ .debug_abbrev  0x00002e1c       0x14 ./support/cp15.o
+ .debug_abbrev  0x00002e30      0x2c6 ./support/cstd.o
+ .debug_abbrev  0x000030f6      0x23e ./support/init_hw.o
+ .debug_abbrev  0x00003334      0x348 ./support/printf.o
+ .debug_abbrev  0x0000367c       0x14 ./support/sh_printstr.o
+
+.debug_aranges  0x00000000      0x790
+ .debug_aranges
+                0x00000000       0x20 ./bogo_delay.o
+ .debug_aranges
+                0x00000020       0x28 ./bogomips_arm.o
+ .debug_aranges
+                0x00000048       0x30 ./bogomips_pjit.o
+ .debug_aranges
+                0x00000078       0x20 ./main.o
+ .debug_aranges
+                0x00000098       0x28 ./startup.o
+ .debug_aranges
+                0x000000c0       0x88 ./libbbb/src/am335x_clock.o
+ .debug_aranges
+                0x00000148       0x50 ./libbbb/src/am335x_dmtimer1.o
+ .debug_aranges
+                0x00000198       0x30 ./libbbb/src/am335x_epwm.o
+ .debug_aranges
+                0x000001c8       0x98 ./libbbb/src/am335x_gpio.o
+ .debug_aranges
+                0x00000260       0x40 ./libbbb/src/am335x_i2c.o
+ .debug_aranges
+                0x000002a0       0x58 ./libbbb/src/am335x_mux.o
+ .debug_aranges
+                0x000002f8       0x38 ./libbbb/src/am335x_spi.o
+ .debug_aranges
+                0x00000330       0x40 ./libbbb/src/am335x_uart.o
+ .debug_aranges
+                0x00000370       0x98 ./libbbb/src/bbb_fs.o
+ .debug_aranges
+                0x00000408       0x48 ./libbbb/src/bbb_syscall.o
+ .debug_aranges
+                0x00000450       0x68 ./libbbb/src/console.o
+ .debug_aranges
+                0x000004b8       0x40 ./libbbb/src/dirent.o
+ .debug_aranges
+                0x000004f8       0x68 ./libbbb/src/oled.o
+ .debug_aranges
+                0x00000560       0x40 ./libbbb/src/path.o
+ .debug_aranges
+                0x000005a0       0x20 ./libbbb/src/string2.o
+ .debug_aranges
+                0x000005c0       0x50 ./libbbb/src/vfs.o
+ .debug_aranges
+                0x00000610       0x20 ./support/cp15.o
+ .debug_aranges
+                0x00000630       0x98 ./support/cstd.o
+ .debug_aranges
+                0x000006c8       0x40 ./support/init_hw.o
+ .debug_aranges
+                0x00000708       0x68 ./support/printf.o
+ .debug_aranges
+                0x00000770       0x20 ./support/sh_printstr.o
+
+.debug_str      0x00000000     0x3306
+ .debug_str     0x00000000       0x3d ./bogo_delay.o
+ .debug_str     0x0000003d      0x544 ./bogomips_arm.o
+                                0x601 (size before relaxing)
+ .debug_str     0x00000581       0xb3 ./bogomips_pjit.o
+                                0x6c2 (size before relaxing)
+ .debug_str     0x00000634       0x46 ./main.o
+                                0x605 (size before relaxing)
+ .debug_str     0x0000067a        0xd ./startup.o
+                                 0x3a (size before relaxing)
+ .debug_str     0x00000687      0xdde ./libbbb/src/am335x_clock.o
+                               0x13a1 (size before relaxing)
+ .debug_str     0x00001465      0x176 ./libbbb/src/am335x_dmtimer1.o
+                                0x400 (size before relaxing)
+ .debug_str     0x000015db      0x1e9 ./libbbb/src/am335x_epwm.o
+                                0x815 (size before relaxing)
+ .debug_str     0x000017c4      0x5a8 ./libbbb/src/am335x_gpio.o
+                                0x836 (size before relaxing)
+ .debug_str     0x00001d6c      0x1e7 ./libbbb/src/am335x_i2c.o
+                                0x446 (size before relaxing)
+ .debug_str     0x00001f53      0x329 ./libbbb/src/am335x_mux.o
+                                0xa5d (size before relaxing)
+ .debug_str     0x0000227c      0x176 ./libbbb/src/am335x_spi.o
+                                0x80e (size before relaxing)
+ .debug_str     0x000023f2      0x1b2 ./libbbb/src/am335x_uart.o
+                                0x49a (size before relaxing)
+ .debug_str     0x000025a4      0x276 ./libbbb/src/bbb_fs.o
+                                0x928 (size before relaxing)
+ .debug_str     0x0000281a       0xb3 ./libbbb/src/bbb_syscall.o
+                                0x673 (size before relaxing)
+ .debug_str     0x000028cd      0x105 ./libbbb/src/console.o
+                                0x905 (size before relaxing)
+ .debug_str     0x000029d2       0x1e ./libbbb/src/dirent.o
+                                0x697 (size before relaxing)
+ .debug_str     0x000029f0      0x53d ./libbbb/src/oled.o
+                                0xbf5 (size before relaxing)
+ .debug_str     0x00002f2d       0x84 ./libbbb/src/path.o
+                                0x61e (size before relaxing)
+ .debug_str     0x00002fb1       0x18 ./libbbb/src/string2.o
+                                 0x45 (size before relaxing)
+ .debug_str     0x00002fc9       0xb4 ./libbbb/src/vfs.o
+                                0x913 (size before relaxing)
+ .debug_str     0x0000307d       0x12 ./support/cp15.o
+                                 0x3f (size before relaxing)
+ .debug_str     0x0000308f      0x13f ./support/cstd.o
+                                0x724 (size before relaxing)
+ .debug_str     0x000031ce       0x73 ./support/init_hw.o
+                                0x65f (size before relaxing)
+ .debug_str     0x00003241       0xac ./support/printf.o
+                                0x681 (size before relaxing)
+ .debug_str     0x000032ed       0x19 ./support/sh_printstr.o
+                                 0x46 (size before relaxing)
+
+.debug_loc      0x00000000     0x2320
+ .debug_loc     0x00000000       0x6c ./bogomips_arm.o
+ .debug_loc     0x0000006c       0xb0 ./bogomips_pjit.o
+ .debug_loc     0x0000011c      0x161 ./libbbb/src/am335x_clock.o
+ .debug_loc     0x0000027d       0x78 ./libbbb/src/am335x_dmtimer1.o
+ .debug_loc     0x000002f5      0x11d ./libbbb/src/am335x_epwm.o
+ .debug_loc     0x00000412      0x4aa ./libbbb/src/am335x_gpio.o
+ .debug_loc     0x000008bc      0x185 ./libbbb/src/am335x_i2c.o
+ .debug_loc     0x00000a41       0xf2 ./libbbb/src/am335x_mux.o
+ .debug_loc     0x00000b33      0x27e ./libbbb/src/am335x_spi.o
+ .debug_loc     0x00000db1       0xe9 ./libbbb/src/am335x_uart.o
+ .debug_loc     0x00000e9a      0x31c ./libbbb/src/bbb_fs.o
+ .debug_loc     0x000011b6       0x96 ./libbbb/src/bbb_syscall.o
+ .debug_loc     0x0000124c      0x15e ./libbbb/src/console.o
+ .debug_loc     0x000013aa       0xb7 ./libbbb/src/dirent.o
+ .debug_loc     0x00001461      0x28f ./libbbb/src/oled.o
+ .debug_loc     0x000016f0      0x192 ./libbbb/src/path.o
+ .debug_loc     0x00001882       0x26 ./libbbb/src/vfs.o
+ .debug_loc     0x000018a8      0x4a3 ./support/cstd.o
+ .debug_loc     0x00001d4b       0x80 ./support/init_hw.o
+ .debug_loc     0x00001dcb      0x555 ./support/printf.o
+
+.debug_ranges   0x00000000      0x7f0
+ .debug_ranges  0x00000000       0x18 ./bogomips_arm.o
+ .debug_ranges  0x00000018       0x20 ./bogomips_pjit.o
+ .debug_ranges  0x00000038       0x10 ./main.o
+ .debug_ranges  0x00000048       0x20 ./startup.o
+ .debug_ranges  0x00000068       0x78 ./libbbb/src/am335x_clock.o
+ .debug_ranges  0x000000e0       0x40 ./libbbb/src/am335x_dmtimer1.o
+ .debug_ranges  0x00000120       0x48 ./libbbb/src/am335x_epwm.o
+ .debug_ranges  0x00000168       0xb8 ./libbbb/src/am335x_gpio.o
+ .debug_ranges  0x00000220       0x48 ./libbbb/src/am335x_i2c.o
+ .debug_ranges  0x00000268       0x60 ./libbbb/src/am335x_mux.o
+ .debug_ranges  0x000002c8       0x28 ./libbbb/src/am335x_spi.o
+ .debug_ranges  0x000002f0       0x30 ./libbbb/src/am335x_uart.o
+ .debug_ranges  0x00000320       0xb8 ./libbbb/src/bbb_fs.o
+ .debug_ranges  0x000003d8       0x90 ./libbbb/src/bbb_syscall.o
+ .debug_ranges  0x00000468       0x90 ./libbbb/src/console.o
+ .debug_ranges  0x000004f8       0x30 ./libbbb/src/dirent.o
+ .debug_ranges  0x00000528       0xa8 ./libbbb/src/oled.o
+ .debug_ranges  0x000005d0       0x88 ./libbbb/src/path.o
+ .debug_ranges  0x00000658       0x40 ./libbbb/src/vfs.o
+ .debug_ranges  0x00000698       0x88 ./support/cstd.o
+ .debug_ranges  0x00000720       0x48 ./support/init_hw.o
+ .debug_ranges  0x00000768       0x88 ./support/printf.o
+
+.debug_frame    0x00000000     0x10dc
+ .debug_frame   0x00000000       0x7c ./bogomips_arm.o
+ .debug_frame   0x0000007c       0x78 ./bogomips_pjit.o
+ .debug_frame   0x000000f4       0x28 ./main.o
+ .debug_frame   0x0000011c      0x164 ./libbbb/src/am335x_clock.o
+ .debug_frame   0x00000280       0x90 ./libbbb/src/am335x_dmtimer1.o
+ .debug_frame   0x00000310       0x68 ./libbbb/src/am335x_epwm.o
+ .debug_frame   0x00000378      0x1b4 ./libbbb/src/am335x_gpio.o
+ .debug_frame   0x0000052c       0x8c ./libbbb/src/am335x_i2c.o
+ .debug_frame   0x000005b8       0xf8 ./libbbb/src/am335x_mux.o
+ .debug_frame   0x000006b0       0x8c ./libbbb/src/am335x_spi.o
+ .debug_frame   0x0000073c       0x80 ./libbbb/src/am335x_uart.o
+ .debug_frame   0x000007bc      0x1c0 ./libbbb/src/bbb_fs.o
+ .debug_frame   0x0000097c       0x88 ./libbbb/src/bbb_syscall.o
+ .debug_frame   0x00000a04       0xd4 ./libbbb/src/console.o
+ .debug_frame   0x00000ad8       0x74 ./libbbb/src/dirent.o
+ .debug_frame   0x00000b4c      0x10c ./libbbb/src/oled.o
+ .debug_frame   0x00000c58       0xb8 ./libbbb/src/path.o
+ .debug_frame   0x00000d10       0x90 ./libbbb/src/vfs.o
+ .debug_frame   0x00000da0      0x154 ./support/cstd.o
+ .debug_frame   0x00000ef4       0x80 ./support/init_hw.o
+ .debug_frame   0x00000f74      0x168 ./support/printf.o

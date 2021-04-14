@@ -1,0 +1,3 @@
+[submodule "libbbb"]
+	path = libbbb
+	url = https://github.com/nonarkitten/libbbb.git
