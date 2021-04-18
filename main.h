@@ -47,6 +47,7 @@ extern void set_cpu_clock(int);
 
 extern void test_native_bogomips(void);
 extern void test_pjit_bogomips(void);
+extern void test_flash(void);
 
 #ifndef DEBUG
 #define printf(...)

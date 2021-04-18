@@ -208,22 +208,22 @@ Clear_Bss_Section:
 		.globl  __isr_vector
 __isr_vector:
         LDR   pc, [pc, #24]                                 @@ 0x00 Reset
-        LDR   pc, [pc, #-8]                                 @@ 0x04 Undefined Instruction
+        LDR   pc, [pc, #24]                                 @@ 0x04 Undefined Instruction
         LDR   pc, [pc, #24]                                 @@ 0x08 Supervisor Call
-        LDR   pc, [pc, #-8]                                 @@ 0x0C Prefetch Abort
-        LDR   pc, [pc, #-8]                                 @@ 0x10 Data Abort
+        LDR   pc, [pc, #24]                                 @@ 0x0C Prefetch Abort
+        LDR   pc, [pc, #24]                                 @@ 0x10 Data Abort
         LDR   pc, [pc, #-8]                                 @@ 0x14 Not used
-        LDR   pc, [pc, #-8]                                 @@ 0x18 IRQ interrupt
-        LDR   pc, [pc, #-8]                                 @@ 0x1C FIQ interrupt
+        LDR   pc, [pc, #24]                                 @@ 0x18 IRQ interrupt
+        LDR   pc, [pc, #24]                                 @@ 0x1C FIQ interrupt
 
         .long  Entry
-        .long  0
+        .long  Undefined_Instruction_Handler
         .long  SVC_Handler
+        .long  Prefect_Abort_Handler
+        .long  Data_Abort_Handler
         .long  0
-        .long  0
-        .long  0
-        .long  0
-        .long  0
+        .long  IRQ_Handler
+        .long  FIQ_Handler
 
 @
 @ External interrupts
@@ -252,6 +252,11 @@ __isr_vector:
         def_default_handler  PendSV_Handler
         def_default_handler  SysTick_Handler
         def_default_handler  Default_Handler
+        def_default_handler  Undefined_Instruction_Handler
+        def_default_handler  Prefect_Abort_Handler
+        def_default_handler  Data_Abort_Handler
+        def_default_handler  IRQ_Handler
+        def_default_handler  FIQ_Handler
 
        .weak  DEF_IRQHandler
        .set  DEF_IRQHandler, Default_Handler

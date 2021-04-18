@@ -28,6 +28,10 @@ int main(void) {
 
     printf("[BOOT] PJIT Built on %s at %s\n", __DATE__, __TIME__);
 
+    //printf("[BOOT] Testing SPI Flash ... ");
+    test_flash();
+    //printf("Okay\n");
+
     printf("[BOOT] Initializing clock to %dMHz ... ", STARTUP_CLOCK);
     InitializeMCUClock(STARTUP_CLOCK);
     printf("Set\n");
@@ -43,6 +47,8 @@ int main(void) {
     printf("[BOOT] Initializing caches ... ");
     CacheEnable(CACHE_ALL);
     printf("Cool\n");
+
+
 
     test_native_bogomips();
     test_pjit_bogomips();
