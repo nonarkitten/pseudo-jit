@@ -38,7 +38,8 @@ static inline void tst_d0_l(void) {
     ASM("rors\t%0, %1, %2" : "=r"(t0) : "r"(t0), "n"(0));
 }
 
-static inline void subq_l_1_d0(void) {
+//static inline
+void subq_l_1_d0(void) {
     uint32_t t0 = D0;
     ASM("subs\t%0, %1, %2" : "=r"(t0) : "r"(t0), "n"(0x01));
     D0 = t0;
@@ -47,8 +48,8 @@ static inline void subq_l_1_d0(void) {
 __attribute__((noinline)) void pjit_bogomips(int loops) {
     cpu = &_cpu;
     D0 = loops;
-    tst_d0_l();
-    ASM_GOTO("beq\t%l0" :::: exit);
+//    tst_d0_l();
+//    ASM_GOTO("beq\t%l0" :::: exit);
 loop:
     subq_l_1_d0();
     ASM_GOTO("bne\t%l0" :::: loop);

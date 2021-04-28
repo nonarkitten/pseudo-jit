@@ -23,14 +23,16 @@ static const MMU_Config_t mmu_config[] = {
 };
 
 int main(void) {
+	CP15MMUDisable();
+	CP15DCacheDisable();
+	CP15ICacheDisable();
+
+    test_gpmc();
 
     printf("\n");
 
     printf("[BOOT] PJIT Built on %s at %s\n", __DATE__, __TIME__);
-
-    //printf("[BOOT] Testing SPI Flash ... ");
     test_flash();
-    //printf("Okay\n");
 
     printf("[BOOT] Initializing clock to %dMHz ... ", STARTUP_CLOCK);
     InitializeMCUClock(STARTUP_CLOCK);
@@ -47,6 +49,7 @@ int main(void) {
     printf("[BOOT] Initializing caches ... ");
     CacheEnable(CACHE_ALL);
     printf("Cool\n");
+
 
 
 
