@@ -22,12 +22,12 @@ static const MMU_Config_t mmu_config[] = {
     { 0, 0, 0 }
 };
 
-int main(void) {
-	CP15MMUDisable();
-	CP15DCacheDisable();
-	CP15ICacheDisable();
+extern void init_gpmc(void);
 
-    test_gpmc();
+int main(void) {
+//	CP15MMUDisable();
+//	CP15DCacheDisable();
+//	CP15ICacheDisable();
 
     printf("\n");
 
@@ -46,10 +46,15 @@ int main(void) {
     EnableMMU(pageTable);
     printf("Done\n");
 
+
     printf("[BOOT] Initializing caches ... ");
     CacheEnable(CACHE_ALL);
     printf("Cool\n");
 
+    init_gpmc();
+//    CP15DCacheFlush();
+//    CP15ICacheFlush();
+    test_gpmc();
 
 
 

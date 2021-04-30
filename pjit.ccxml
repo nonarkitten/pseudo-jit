@@ -28,6 +28,7 @@
                             <subpath id="ModenaSS">
                                     <cpu HW_revision="1.0" XML_version="1.2" description="Cortex_A8 CPU" deviceSim="false" id="CortexA8" isa="Cortex_A8">
                                         <property Type="filepathfield" Value="pjit.gel" id="GEL File"/>
+                                    <property Type="stringfield" Value="1000000" id="JTAG Frequency (Hz)"/>
                                     </cpu>
                                 </subpath>
                             </router>
