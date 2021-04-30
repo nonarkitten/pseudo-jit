@@ -229,13 +229,13 @@ void config_mux(struct pin_muxing* pin_mux) {
  *
  */
 
-static const am335x_gpmc_cs_config_t sram_config = {
+static am335x_gpmc_cs_config_t sram_config = {
 		/* CONFIG1 */ ( 1 << 12),
 		/* CONFIG2 */ (26 << 16) | (26 <<  8) | ( 1 <<  0),
 		/* CONFIG3 */ (26 << 16) | (26 <<  8) | ( 7 <<  0),
 		/* CONFIG4 */ (26 << 24) | ( 1 << 20),
-		/* CONFIG5 */ (26 << 16) | (15 <<  8) | (15 <<  0),
-		/* CONFIG6 */ (26 << 24),
+		/* CONFIG5 */ (15 << 16) | (26 <<  8) | (26 <<  0),
+		/* CONFIG6 */ (15 << 24),
 		/* CONFIG7 */ (14 <<  8) | ( 1 <<  6) | ( 1 <<  0)
 };
 
@@ -258,12 +258,12 @@ void init_gpmc(void) {
 
 void test_gpmc(void) {
 	uint32_t* d_base = (uint32_t*)0x01000000;
-	uint32_t* i_base = (uint32_t*)0x02000000;
+	//uint32_t* i_base = (uint32_t*)0x02000000;
 
 	printf("[GPMC] Starting bus test\n");
 	for(uint32_t i=0; i<0x10; i++) {
 		uint32_t mask = i * 0x11111111;
-		printf("Read %08X at %08X\n", d_base[i], (uint32_t)&d_base[i]);
+		//printf("Read %08X at %08X\n", d_base[i], (uint32_t)&d_base[i]);
 		d_base[i] = mask;
 //		i_base[i] = mask;
 	}
