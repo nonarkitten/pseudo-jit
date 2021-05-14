@@ -11,170 +11,82 @@
 
 #include "am335x_clock.h"
 #include "am335x_gpmc.h"
+#include "am335x_gpio.h"
 
-//#define GPMC_BASE 		   ((volatile uint32_t*)0x50000000)
-#define CFG_MOD_BASE       (0x44E10000)      //REVISIT
-
-#define CONF_GPMC_AD0       0x800   // Data bit 0       MODE(0)
-#define CONF_GPMC_AD1       0x804   // Data bit 1       MODE(0)
-#define CONF_GPMC_AD2       0x808   // Data bit 2       MODE(0)
-#define CONF_GPMC_AD3       0x80C   // Data bit 3       MODE(0)
-#define CONF_GPMC_AD4       0x810   // Data bit 4       MODE(0)
-#define CONF_GPMC_AD5       0x814   // Data bit 5       MODE(0)
-#define CONF_GPMC_AD6       0x818   // Data bit 6       MODE(0)
-#define CONF_GPMC_AD7       0x81C   // Data bit 7       MODE(0)
-#define CONF_GPMC_AD8       0x820   // Data bit 8       MODE(0)
-#define CONF_GPMC_AD9       0x824   // Data bit 9       MODE(0)
-#define CONF_GPMC_AD10      0x828   // Data bit 10      MODE(0)
-#define CONF_GPMC_AD11      0x82C   // Data bit 11      MODE(0)
-#define CONF_GPMC_AD12      0x830   // Data bit 12      MODE(0)
-#define CONF_GPMC_AD13      0x834   // Data bit 13      MODE(0)
-#define CONF_GPMC_AD14      0x838   // Data bit 14      MODE(0)
-#define CONF_GPMC_AD15      0x83C   // Data bit 15      MODE(0)
-#define CONF_GPMC_A1        0x844   // Address bit 1    MODE(0)
-#define CONF_GPMC_A2        0x848   // Address bit 2    MODE(0)
-#define CONF_GPMC_A3        0x84C   // Address bit 3    MODE(0)
-#define CONF_GPMC_A4        0x850   // Address bit 4    MODE(0)
-#define CONF_GPMC_A5        0x854   // Address bit 5    MODE(0)
-#define CONF_GPMC_A6        0x858   // Address bit 6    MODE(0)
-#define CONF_GPMC_A7        0x85C   // Address bit 7    MODE(0)
-#define CONF_GPMC_A8        0x860   // Address bit 8    MODE(0)
-#define CONF_GPMC_A9        0x864   // Address bit 9    MODE(0)
-#define CONF_GPMC_A10       0x868   // Address bit 10   MODE(0)
-#define CONF_GPMC_A11       0x86C   // Address bit 11   MODE(0)
-
-#define CONF_LCD_DATA8      0x8C0   // Address bit 12   MODE(1)
-#define CONF_LCD_DATA9      0x8C4   // Address bit 13   MODE(1)
-#define CONF_LCD_DATA10     0x8C8   // Address bit 14   MODE(1)
-#define CONF_LCD_DATA11     0x8CC   // Address bit 15   MODE(1)
-#define CONF_LCD_DATA12     0x8D0   // Address bit 16   MODE(1)
-#define CONF_LCD_DATA13     0x8D4   // Address bit 17   MODE(1)
-#define CONF_LCD_DATA14     0x8D8   // Address bit 18   MODE(1)
-#define CONF_LCD_DATA15     0x8DC   // Address bit 19   MODE(1)
-#define CONF_MMC0_DAT3      0x8F0   // Address bit 20   MODE(1)
-#define CONF_MMC0_DAT2      0x8F4   // Address bit 21   MODE(1)
-#define CONF_MMC0_DAT1      0x8F8   // Address bit 22   MODE(1)
-#define CONF_MMC0_DAT0      0x8FC   // Address bit 23   MODE(1)
-#define CONF_MMC0_CLK       0x900   // Address bit 24   MODE(1)
-#define CONF_MMC0_CMD       0x904   // Address bit 25   MODE(1)
-
-#define CONF_GPMC_WAIT0     0x870   // MODE(0)
-#define CONF_GPMC_NWP		0x874   // MODE(0)
-#define CONF_GPMC_NBE1      0x878   // MODE(0)
-#define CONF_GPMC_NCS0		0x87C   // MODE(0)
-#define CONF_GPMC_NADV_ALE  0x890   // MODE(0)
-#define CONF_GPMC_NOE		0x894   // MODE(0)
-#define CONF_GPMC_NWE		0x898   // MODE(0)
-#define CONF_GPMC_NBE0_CLE	0x89C   // MODE(0)
-
-
-
-
-/*
- * IEN  - Input Enable
- * IDIS - Input Disable
- * PTD  - Pull type Down
- * PTU  - Pull type Up
- * DIS  - Pull type selection is inactive
- * EN   - Pull type selection is active
- * M0   - Mode 0
- * The commented string gives the final mux configuration for that pin
- */
-#define IEN		(1 << 5)
-#define IDIS	(0 << 5)
-#define PTU		(1 << 4)
-#define PTD		(0 << 4)
-#define EN		(1 << 3)
-#define DIS		(0 << 3)
-
-#define M0		(0 << 0)
-#define M1		(1 << 0)
-#define M2		(2 << 0)
-#define M3		(3 << 0)
-#define M4		(4 << 0)
-#define M5		(5 << 0)
-#define M6		(6 << 0)
-#define M7		(7 << 0)
+#include "pinmux.h"
 
 /* Pin mux for m68k bus module */
-static struct pin_muxing {
-	uint32_t offset;
-	uint32_t val;
-} m68k_pin_mux[] = {
-		{ CONF_GPMC_A1,       (IDIS | PTU | EN  | M0) }, /*GPMC_A1        */
-		{ CONF_GPMC_A2,       (IDIS | PTU | EN  | M0) }, /*GPMC_A2        */
-		{ CONF_GPMC_A3,       (IDIS | PTU | EN  | M0) }, /*GPMC_A3        */
-		{ CONF_GPMC_A4,       (IDIS | PTU | EN  | M0) }, /*GPMC_A4        */
-		{ CONF_GPMC_A5,       (IDIS | PTU | EN  | M0) }, /*GPMC_A5        */
-		{ CONF_GPMC_A6,       (IDIS | PTU | EN  | M0) }, /*GPMC_A6        */
-		{ CONF_GPMC_A7,       (IDIS | PTU | EN  | M0) }, /*GPMC_A7        */
-		{ CONF_GPMC_A8,       (IDIS | PTU | EN  | M0) }, /*GPMC_A8        */
-		{ CONF_GPMC_A9,       (IDIS | PTU | EN  | M0) }, /*GPMC_A9        */
-		{ CONF_GPMC_A10,      (IDIS | PTU | EN  | M0) }, /*GPMC_A10       */
-		{ CONF_GPMC_A11,      (IDIS | PTU | EN  | M0) }, /*GPMC_A11       */
+static pin_muxing_t m68k_pin_mux[] = {
+		{ CONF_GPMC_A1,       (IDIS | PTD | DIS | M0) }, /*GPMC_A1        */
+		{ CONF_GPMC_A2,       (IDIS | PTD | DIS | M0) }, /*GPMC_A2        */
+		{ CONF_GPMC_A3,       (IDIS | PTD | DIS | M0) }, /*GPMC_A3        */
+		{ CONF_GPMC_A4,       (IDIS | PTD | DIS | M0) }, /*GPMC_A4        */
+		{ CONF_GPMC_A5,       (IDIS | PTD | DIS | M0) }, /*GPMC_A5        */
+		{ CONF_GPMC_A6,       (IDIS | PTD | DIS | M0) }, /*GPMC_A6        */
+		{ CONF_GPMC_A7,       (IDIS | PTD | DIS | M0) }, /*GPMC_A7        */
+		{ CONF_GPMC_A8,       (IDIS | PTD | DIS | M0) }, /*GPMC_A8        */
+		{ CONF_GPMC_A9,       (IDIS | PTD | DIS | M0) }, /*GPMC_A9        */
+		{ CONF_GPMC_A10,      (IDIS | PTD | DIS | M0) }, /*GPMC_A10       */
+		{ CONF_GPMC_A11,      (IDIS | PTD | DIS | M0) }, /*GPMC_A11       */
 
-		{ CONF_LCD_DATA8,     (IDIS | PTU | EN  | M1) }, /* GPMC_A12      */
-		{ CONF_LCD_DATA9,     (IDIS | PTU | EN  | M1) }, /* GPMC_A13      */
-		{ CONF_LCD_DATA10,    (IDIS | PTU | EN  | M1) }, /* GPMC_A14      */
-		{ CONF_LCD_DATA11,    (IDIS | PTU | EN  | M1) }, /* GPMC_A15      */
-		{ CONF_LCD_DATA12,    (IDIS | PTU | EN  | M1) }, /* GPMC_A16      */
-		{ CONF_LCD_DATA13,    (IDIS | PTU | EN  | M1) }, /* GPMC_A17      */
-		{ CONF_LCD_DATA14,    (IDIS | PTU | EN  | M1) }, /* GPMC_A18      */
-		{ CONF_LCD_DATA15,    (IDIS | PTU | EN  | M1) }, /* GPMC_A19      */
+		{ CONF_LCD_DATA8,     (IDIS | PTD | DIS | M1) }, /* GPMC_A12      */
+		{ CONF_LCD_DATA9,     (IDIS | PTD | DIS | M1) }, /* GPMC_A13      */
+		{ CONF_LCD_DATA10,    (IDIS | PTD | DIS | M1) }, /* GPMC_A14      */
+		{ CONF_LCD_DATA11,    (IDIS | PTD | DIS | M1) }, /* GPMC_A15      */
+		{ CONF_LCD_DATA12,    (IDIS | PTD | DIS | M1) }, /* GPMC_A16      */
+		{ CONF_LCD_DATA13,    (IDIS | PTD | DIS | M1) }, /* GPMC_A17      */
+		{ CONF_LCD_DATA14,    (IDIS | PTD | DIS | M1) }, /* GPMC_A18      */
+		{ CONF_LCD_DATA15,    (IDIS | PTD | DIS | M1) }, /* GPMC_A19      */
 
-		{ CONF_MMC0_DAT3,     (IDIS | PTU | EN  | M1) }, /* GPMC_A20      */
-		{ CONF_MMC0_DAT2,     (IDIS | PTU | EN  | M1) }, /* GPMC_A21      */
-		{ CONF_MMC0_DAT1,     (IDIS | PTU | EN  | M1) }, /* GPMC_A22      */
-		{ CONF_MMC0_DAT0,     (IDIS | PTU | EN  | M1) }, /* GPMC_A23      */
-		{ CONF_MMC0_CLK,      (IDIS | PTU | EN  | M1) }, /* GPMC_A24      */
-		{ CONF_MMC0_CMD,      (IDIS | PTU | EN  | M1) }, /* GPMC_A25/FCx  */
+		{ CONF_MMC0_DAT3,     (IDIS | PTD | DIS | M1) }, /* GPMC_A20      */
+		{ CONF_MMC0_DAT2,     (IDIS | PTD | DIS | M1) }, /* GPMC_A21      */
+		{ CONF_MMC0_DAT1,     (IDIS | PTD | DIS | M1) }, /* GPMC_A22      */
+		{ CONF_MMC0_DAT0,     (IDIS | PTD | DIS | M1) }, /* GPMC_A23      */
+		{ CONF_MMC0_CLK,      (IDIS | PTD | DIS | M1) }, /* GPMC_A24      */
+		{ CONF_MMC0_CMD,      (IDIS | PTD | DIS | M1) }, /* GPMC_A25/FCx  */
 
-		{ CONF_GPMC_AD0,      (IEN  | PTU | EN  | M0) }, /* GPMC_D0       */
-		{ CONF_GPMC_AD1,      (IEN  | PTU | EN  | M0) }, /* GPMC_D1       */
-		{ CONF_GPMC_AD2,      (IEN  | PTU | EN  | M0) }, /* GPMC_D2       */
-		{ CONF_GPMC_AD3,      (IEN  | PTU | EN  | M0) }, /* GPMC_D3       */
-		{ CONF_GPMC_AD4,      (IEN  | PTU | EN  | M0) }, /* GPMC_D4       */
-		{ CONF_GPMC_AD5,      (IEN  | PTU | EN  | M0) }, /* GPMC_D5       */
-		{ CONF_GPMC_AD6,      (IEN  | PTU | EN  | M0) }, /* GPMC_D6       */
-		{ CONF_GPMC_AD7,      (IEN  | PTU | EN  | M0) }, /* GPMC_D7       */
-		{ CONF_GPMC_AD8,      (IEN  | PTU | EN  | M0) }, /* GPMC_D8       */
-		{ CONF_GPMC_AD9,      (IEN  | PTU | EN  | M0) }, /* GPMC_D9       */
-		{ CONF_GPMC_AD10,     (IEN  | PTU | EN  | M0) }, /* GPMC_D10      */
-		{ CONF_GPMC_AD11,     (IEN  | PTU | EN  | M0) }, /* GPMC_D11      */
-		{ CONF_GPMC_AD12,     (IEN  | PTU | EN  | M0) }, /* GPMC_D12      */
-		{ CONF_GPMC_AD13,     (IEN  | PTU | EN  | M0) }, /* GPMC_D13      */
-		{ CONF_GPMC_AD14,     (IEN  | PTU | EN  | M0) }, /* GPMC_D14      */
-		{ CONF_GPMC_AD15,     (IEN  | PTU | EN  | M0) }, /* GPMC_D15      */
+		{ CONF_GPMC_AD0,      (IEN  | PTU | EN | M0) }, /* GPMC_D0       */
+		{ CONF_GPMC_AD1,      (IEN  | PTU | EN | M0) }, /* GPMC_D1       */
+		{ CONF_GPMC_AD2,      (IEN  | PTU | EN | M0) }, /* GPMC_D2       */
+		{ CONF_GPMC_AD3,      (IEN  | PTU | EN | M0) }, /* GPMC_D3       */
+		{ CONF_GPMC_AD4,      (IEN  | PTU | EN | M0) }, /* GPMC_D4       */
+		{ CONF_GPMC_AD5,      (IEN  | PTU | EN | M0) }, /* GPMC_D5       */
+		{ CONF_GPMC_AD6,      (IEN  | PTU | EN | M0) }, /* GPMC_D6       */
+		{ CONF_GPMC_AD7,      (IEN  | PTU | EN | M0) }, /* GPMC_D7       */
+		{ CONF_GPMC_AD8,      (IEN  | PTU | EN | M0) }, /* GPMC_D8       */
+		{ CONF_GPMC_AD9,      (IEN  | PTU | EN | M0) }, /* GPMC_D9       */
+		{ CONF_GPMC_AD10,     (IEN  | PTU | EN | M0) }, /* GPMC_D10      */
+		{ CONF_GPMC_AD11,     (IEN  | PTU | EN | M0) }, /* GPMC_D11      */
+		{ CONF_GPMC_AD12,     (IEN  | PTU | EN | M0) }, /* GPMC_D12      */
+		{ CONF_GPMC_AD13,     (IEN  | PTU | EN | M0) }, /* GPMC_D13      */
+		{ CONF_GPMC_AD14,     (IEN  | PTU | EN | M0) }, /* GPMC_D14      */
+		{ CONF_GPMC_AD15,     (IEN  | PTU | EN | M0) }, /* GPMC_D15      */
 
-		{ CONF_GPMC_NCS0,     (IDIS | PTU | EN  | M0) }, /* GPMC_nCS0     */
-		{ CONF_GPMC_NADV_ALE, (IDIS | PTD | DIS | M0) }, /* GPMC_nADV_ALE */
-		{ CONF_GPMC_NOE,      (IDIS | PTD | DIS | M0) }, /* GPMC_nOE      */
-		{ CONF_GPMC_NWE,      (IDIS | PTD | DIS | M0) }, /* GPMC_nWE      */
-		{ CONF_GPMC_NBE0_CLE, (IDIS | PTU | EN  | M0) }, /* GPMC_nBE0_CLE */
-		{ CONF_GPMC_NBE1,     (IEN  | PTU | EN  | M0) }, /* GPMC_nBE1     */
-		{ CONF_GPMC_NWP,      (IEN  | PTD | DIS | M0) }, /* GPMC_nWP      */
-		{ CONF_GPMC_WAIT0,    (IEN  | PTU | EN  | M0) }, /* GPMC_WAIT0    */
+//		{ CONF_GPMC_CSN0,     (IDIS | PTU | EN  | M0) }, /* GPMC_nCS0     */
+		{ CONF_GPMC_CSN3,     (IDIS | PTU | EN  | M0) }, /* GPMC_nCS0     */
+		{ CONF_GPMC_ADVN_ALE, (IDIS | PTU | EN  | M0) }, /* GPMC_nADV_ALE */
+		{ CONF_GPMC_OEN_REN,  (IDIS | PTU | EN  | M0) }, /* GPMC_nOE      */
+		{ CONF_GPMC_WEN,      (IDIS | PTU | EN  | M0) }, /* GPMC_nWE      */
+		{ CONF_GPMC_BEN0_CLE, (IDIS | PTU | EN  | M0) }, /* GPMC_nBE0_CLE */
+		{ CONF_GPMC_BEN1,     (IDIS | PTU | EN  | M0) }, /* GPMC_nBE1     */
+		{ CONF_GPMC_WPN,      (IEN  | PTU | EN  | M0) }, /* GPMC_nWP      */
+		{ CONF_GPMC_WAIT0,    (IEN  | PTD | DIS | M0) }, /* GPMC_WAIT0    */
 
-	//	{ CONF_GPMC_NCS1,     (IDIS | PTU | EN  | M0) }, /* GPMC_nCS1     */
-	//	{ CONF_GPMC_NCS2,     (IDIS | PTU | EN  | M0) }, /* GPMC_nCS2     */
-	//	{ CONF_GPMC_NCS3,     (IDIS | PTU | EN  | M0) }, /* GPMC_nCS3     */
-	//	{ CONF_GPMC_NCS4,     (IEN  | PTU | EN  | M0) }, /* GPMC_nCS4     */
-	//	{ CONF_GPMC_NCS5,     (IDIS | PTU | EN  | M0) }, /* GPMC_nCS5     */
-	//	{ CONF_GPMC_NCS6,     (IEN  | PTU | EN  | M0) }, /* GPMC_nCS6     */
-	//	{ CONF_GPMC_NCS7,     (IEN  | PTU | EN  | M0) }, /* GPMC_nCS7     */
-	//	{ CONF_GPMC_CLK,      (IDIS | PTU | EN  | M0) }, /* GPMC_CLK      */
-	//	{ CONF_GPMC_WAIT1,    (IEN  | PTU | EN  | M0) }, /* GPMC_WAIT1    */
-	//	{ CONF_GPMC_WAIT2,    (IEN  | PTU | EN  | M4) }, /* GPIO_64       */
-	//	{ CONF_GPMC_WAIT3,    (IEN  | PTU | EN  | M0) }, /* GPMC_WAIT3    */
+	//	{ CONF_GPMC_NCS1,     (IDIS | PTD | DIS | M0) }, /* GPMC_nCS1     */
+	//	{ CONF_GPMC_NCS2,     (IDIS | PTD | DIS | M0) }, /* GPMC_nCS2     */
+	//	{ CONF_GPMC_NCS3,     (IDIS | PTD | DIS | M0) }, /* GPMC_nCS3     */
+	//	{ CONF_GPMC_NCS4,     (IEN  | PTD | DIS | M0) }, /* GPMC_nCS4     */
+	//	{ CONF_GPMC_NCS5,     (IDIS | PTD | DIS | M0) }, /* GPMC_nCS5     */
+	//	{ CONF_GPMC_NCS6,     (IEN  | PTD | DIS | M0) }, /* GPMC_nCS6     */
+	//	{ CONF_GPMC_NCS7,     (IEN  | PTD | DIS | M0) }, /* GPMC_nCS7     */
+	//	{ CONF_GPMC_CLK,      (IDIS | PTD | DIS | M0) }, /* GPMC_CLK      */
+	//	{ CONF_GPMC_WAIT1,    (IEN  | PTD | DIS | M0) }, /* GPMC_WAIT1    */
+	//	{ CONF_GPMC_WAIT2,    (IEN  | PTD | DIS | M4) }, /* GPIO_64       */
+	//	{ CONF_GPMC_WAIT3,    (IEN  | PTD | DIS | M0) }, /* GPMC_WAIT3    */
 		{ 0xFFFFFFFF },
 };
 
-void config_mux(struct pin_muxing* pin_mux) {
-	while(pin_mux->offset != 0xffffffff) {
-		*(volatile uint32_t*)(CFG_MOD_BASE + pin_mux->offset) = pin_mux->val;
-		pin_mux++;
-	}
-}
+
 
 /**
  * Amiga Uses 41256-15
@@ -229,20 +141,82 @@ void config_mux(struct pin_muxing* pin_mux) {
  *
  */
 
+/*
+
+	HSDIVIDER   GPMC  TIMEPARA    WINDOW   68000 BUS
+	CLKOUT1_DIV	FCLK  GRANULARITY MAX (ns) CLOCK (MHz) TARGET SYSTEM
+	=========== ===== =========== ======== =========== ================
+		16       62.5	  0.0       496	      16.13     ATARIx2**
+		18       55.6	  0.0       558	      14.34     AMIGAx2**
+		10      100.0	  1.0       620	      12.90     NEOGEO
+		12       83.3	  1.0       744	      10.75     X68000
+		16       62.5	  1.0       992	       8.06     ATARI/MAC/SEGA*
+		18       55.6	  1.0      1116	       7.17     AMIGA
+		25       40.0	  1.0      1550	       5.16     LISA
+
+	NOTES:
+	  * Use this one as a generic "we don't know" setting
+	 ** When using basic clock doublers like AdSpeed
+
+*/
+
+/* General 68K bus timing:
+ *
+ * AS on 1/8
+ *
+ *
+ */
+
+#define ACCESSTIME		(0x17)		//   AccessTime
+
+#define CSONTIME		(0x00)		// 	 tCAS
+#define ADVONTIME		(0x04)		//   tAAVDS
+#define OEONTIME		(0x0A)		// 	 OeOnTime >= AdvRdOffTime
+#define OEOFFTIME		(0x1C)	// = AccessTime + 1cycle
+
+#define RDCYCLETIME		(0x1F)	// = AccessTime + 1cycle + tOEZ
+#define CSRDOFFTIME		(0x18)	// = AccessTime + 1 cycle
+#define ADVRDOFFTIME	(0x18)		// = tAAVDS + tAVDP
+
+#define WRCYCLETIME		(0x1F)		// = WeOffTime + AccessCompletion
+#define CSWROFFTIME		(0x18)		// = WeOffTime + 1
+#define ADVWROFFTIME	(0x04)		// = tAVSC + tAVDP
+#define WEONTIME		(0x0A)		//   tCS
+#define WEOFFTIME		(0x1C)		//   WeOffTime
+
 static am335x_gpmc_cs_config_t sram_config = {
-		/* CONFIG1 */ ( 1 << 12),
-		/* CONFIG2 */ (26 << 16) | (26 <<  8) | ( 1 <<  0),
-		/* CONFIG3 */ (26 << 16) | (26 <<  8) | ( 7 <<  0),
-		/* CONFIG4 */ (26 << 24) | ( 1 << 20),
-		/* CONFIG5 */ (15 << 16) | (26 <<  8) | (26 <<  0),
-		/* CONFIG6 */ (15 << 24),
+		// ( 1 << 22) | ( 1 << 21) |
+		/* CONFIG1 */ ( 3 << 21) | ( 1 << 12) | (1 << 4),
+		/* CONFIG2 */ (CSWROFFTIME  << 16) | (CSRDOFFTIME  <<  8) | (CSONTIME  <<  0),
+		/* CONFIG3 */ (ADVWROFFTIME << 16) | (ADVRDOFFTIME <<  8) | (ADVONTIME <<  0),
+		/* CONFIG4 */ (WEOFFTIME << 24) | (WEONTIME << 20),
+		/* CONFIG5 */ (ACCESSTIME << 16) | (WRCYCLETIME <<  8) | (RDCYCLETIME <<  0),
+		/* CONFIG6 */ (ACCESSTIME << 24),
 		/* CONFIG7 */ (14 <<  8) | ( 1 <<  6) | ( 1 <<  0)
 };
 
+typedef struct {
+	char* name;
+	uint32_t clk_div;
+
+} gpmc_system_config_t;
+
+//static gpmc_system_config_t configs[] = {
+//
+//};
+
 void init_gpmc(void) {
+
+	// bit bang ALE for test, gpio2_2
+	//am335x_gpio_set_pin_dir(AM335X_GPIO2, 2, AM335X_GPIO_PIN_OUT);
+	//am335x_gpio_change_state(AM335X_GPIO2, 2, 1);
+	//am335x_gpio_change_state(AM335X_GPIO2, 2, 0);
+	//am335x_gpio_change_state(AM335X_GPIO2, 2, 1);
+	//am335x_gpio_change_state(AM335X_GPIO2, 2, 0);
+
 	// Enable and wait for clock
 	//am335x_clock_enable_gpmc();
-	am335x_gpmc_init();
+	am335x_gpmc_init(16);
 
 	// Enable pins
 	config_mux(m68k_pin_mux);
@@ -257,30 +231,49 @@ void init_gpmc(void) {
 }
 
 void test_gpmc(void) {
-	uint32_t* d_base = (uint32_t*)0x01000000;
+	static uint16_t test_colors[] = {
+			0x0fff, 0x0f0f, 0x0555, 0x0505,
+			0x0aaa, 0x0a0a, 0x00a0, 0x0050
+	};
+	static uint16_t should_be[] = {
+			0x1111, 0x4EF9, 0x00FC, 0x00D2,
+			0x0000, 0xFFFF, 0x0022, 0x0005,
+			0x0022, 0x0002, 0xFFFF, 0xFFFF,
+			0x6578, 0x6563, 0x2033, 0x342E
+	};
+	volatile uint16_t* d_base = (uint32_t*)0x01000000;
+	volatile uint8_t* cia_base = (uint8_t*)0x01BFE001;
+	volatile uint16_t* custom = (uint32_t*)0x01DFF000;
 	//uint32_t* i_base = (uint32_t*)0x02000000;
 
+	//uint8_t buffer[128];
+	//strncpy(buffer, &d_base[19], 127);
+	//buffer[127] = 0;
+
+	//printf("[GPMC] ROM Check: %s", buffer);
+
 	printf("[GPMC] Starting bus test\n");
-	for(uint32_t i=0; i<0x10; i++) {
-		uint32_t mask = i * 0x11111111;
-		//printf("Read %08X at %08X\n", d_base[i], (uint32_t)&d_base[i]);
-		d_base[i] = mask;
-//		i_base[i] = mask;
+
+//	for(int x=0; x<16; x++) {
+//		uint8_t read = cia_base[x << 8];
+//		printf("[GPMC] At %08X, read %02X\n", (uint32_t)&cia_base[x << 8], read);
+//	}
+
+	for(int c=0; c<8; c++) custom[0xC0 + c] = test_colors[c];
+
+	for(int c=0; c<8; c++) {
+		uint16_t read_back = custom[0xC0 + c];
+		printf("[GPMC] At dff180, read %04X, expected %04x\n", read_back, test_colors[c]);
 	}
 
-	for(uint32_t i=0; i<0x10; i++) {
-		uint32_t mask = i * 0x11111111;
-		uint32_t read;
-		if((read = d_base[i]) != mask) {
-			printf("[GPMC] Error at %08X, read %08X, expected %08X\n",
-					(uint32_t)&d_base[i], read, mask
-					);
-		}
-//		if((read = i_base[i]) != mask) {
-//			printf("[GPMC] Error at %08X, read %08X, expected %08X\n",
-//					(uint32_t)&i_base[i], read, mask
-//					);
-//		}
+	uint32_t i=0;
+	while(true) { //for(uint32_t i=0; i<0x10; i++) {
+		uint16_t read = d_base[i];
+		//read = d_base[i];
+		//volatile uint16_t read = d_base[i];
+		printf("[GPMC] At %08X, read %04X, expected %04x\n", (uint32_t)&d_base[i], read, should_be[i]);
+		//am335x_dmtimer1_wait_ms(1000);
+		i = (i + 1) & 0xF;
 	}
 }
 

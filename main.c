@@ -1,5 +1,7 @@
 #include "main.h"
 #include "init_hw.h"
+#include "am335x_pru.h"
+#include "pinmux.h"
 
 __attribute__ ((used, aligned (MMU_PAGETABLE_ALIGN_SIZE)))
 static volatile uint32_t pageTable[MMU_PAGETABLE_NUM_ENTRY] = { 0 };
@@ -22,21 +24,34 @@ static const MMU_Config_t mmu_config[] = {
     { 0, 0, 0 }
 };
 
+/* Pin mux for m68k bus module */
+static pin_muxing_t pru_pins[] = {
+		{ CONF_MCASP0_ACLKR,   (IEN  | PTD | DIS | M6) }, /* CLK7  pr1_pru0_pru_r31_4*/
+		{ CONF_MCASP0_AHCLKX,  (IDIS | PTD | DIS | M5) }, /* E-CLK pr1_pru0_pru_r30_7 */
+		{ 0xFFFFFFFF },
+};
+
 extern void init_gpmc(void);
+extern uint8_t rawData[148];
 
 int main(void) {
 //	CP15MMUDisable();
 //	CP15DCacheDisable();
 //	CP15ICacheDisable();
 
-    printf("\n");
-
     printf("[BOOT] PJIT Built on %s at %s\n", __DATE__, __TIME__);
-    test_flash();
 
     printf("[BOOT] Initializing clock to %dMHz ... ", STARTUP_CLOCK);
     InitializeMCUClock(STARTUP_CLOCK);
     printf("Set\n");
+
+    printf("[BOOT] Enabling E-Clock\n");
+    config_mux(pru_pins);
+    am335x_pru_init();
+    am335x_pru_memcpy(PRU_ICSS1, PRU0_IRAM, 0, sizeof(rawData), (uint32_t*)rawData);
+    am335x_pru_enable(PRU_ICSS1, PRU0);
+
+    test_flash();
 
     printf("[BOOT] Initializing MMU ... ");
     InitializeMMU(pageTable);
