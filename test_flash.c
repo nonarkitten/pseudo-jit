@@ -133,9 +133,8 @@ void flash_init(void) {
 }
 
 void test_flash(void) {
-	printf("[FLASH] Initializing SPI flash\n");
 	flash_init();
 	uint16_t devid = flash_read_id();
-	printf("[FLASH] Device ID: %04x (%s)\n", devid, ((devid == 0xEF17) ? "Good" : "Bad"));
+	//printf("[FLASH] Flash Device ID: %04x (%s)\n", devid, ((devid == 0xEF17) ? "Good" : "Bad"));
 }
 

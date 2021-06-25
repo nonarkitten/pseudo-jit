@@ -62,14 +62,14 @@ static pin_muxing_t m68k_pin_mux[] = {
 		{ CONF_GPMC_AD14,     (IEN  | PTU | EN | M0) }, /* GPMC_D14      */
 		{ CONF_GPMC_AD15,     (IEN  | PTU | EN | M0) }, /* GPMC_D15      */
 
-//		{ CONF_GPMC_CSN0,     (IDIS | PTU | EN  | M0) }, /* GPMC_nCS0     */
-		{ CONF_GPMC_CSN3,     (IDIS | PTU | EN  | M0) }, /* GPMC_nCS0     */
-		{ CONF_GPMC_ADVN_ALE, (IDIS | PTU | EN  | M0) }, /* GPMC_nADV_ALE */
-		{ CONF_GPMC_OEN_REN,  (IDIS | PTU | EN  | M0) }, /* GPMC_nOE      */
-		{ CONF_GPMC_WEN,      (IDIS | PTU | EN  | M0) }, /* GPMC_nWE      */
-		{ CONF_GPMC_BEN0_CLE, (IDIS | PTU | EN  | M0) }, /* GPMC_nBE0_CLE */
-		{ CONF_GPMC_BEN1,     (IDIS | PTU | EN  | M0) }, /* GPMC_nBE1     */
-		{ CONF_GPMC_WPN,      (IEN  | PTU | EN  | M0) }, /* GPMC_nWP      */
+		{ CONF_GPMC_CSN2,     (IDIS | PTD | DIS | M0) }, /* GPMC_nCS0     */
+//		{ CONF_GPMC_CSN3,     (IDIS | PTD | DIS | M0) }, /* GPMC_nCS0     */
+//		{ CONF_GPMC_ADVN_ALE, (IDIS | PTD | DIS | M0) }, /* GPMC_nADV_ALE */
+		{ CONF_GPMC_OEN_REN,  (IDIS | PTD | DIS | M0) }, /* GPMC_nOE      */
+		{ CONF_GPMC_WEN,      (IDIS | PTD | DIS | M0) }, /* GPMC_nWE      */
+		{ CONF_GPMC_BEN0_CLE, (IDIS | PTD | DIS | M0) }, /* GPMC_nBE0_CLE */
+		{ CONF_GPMC_BEN1,     (IDIS | PTD | DIS | M0) }, /* GPMC_nBE1     */
+		{ CONF_GPMC_WPN,      (IEN  | PTD | DIS | M0) }, /* GPMC_nWP      */
 		{ CONF_GPMC_WAIT0,    (IEN  | PTD | DIS | M0) }, /* GPMC_WAIT0    */
 
 	//	{ CONF_GPMC_NCS1,     (IDIS | PTD | DIS | M0) }, /* GPMC_nCS1     */
@@ -167,26 +167,26 @@ static pin_muxing_t m68k_pin_mux[] = {
  *
  */
 
-#define ACCESSTIME		(0x17)		//   AccessTime
+#define ACCESSTIME		(0x19)		//   AccessTime
 
-#define CSONTIME		(0x00)		// 	 tCAS
-#define ADVONTIME		(0x04)		//   tAAVDS
-#define OEONTIME		(0x0A)		// 	 OeOnTime >= AdvRdOffTime
+#define CSONTIME		(0x04)		// 	 tCAS
+#define ADVONTIME		(0x00)		//   tAAVDS
+#define OEONTIME		(0x13)		// 	 OeOnTime >= AdvRdOffTime
 #define OEOFFTIME		(0x1C)	// = AccessTime + 1cycle
 
 #define RDCYCLETIME		(0x1F)	// = AccessTime + 1cycle + tOEZ
-#define CSRDOFFTIME		(0x18)	// = AccessTime + 1 cycle
-#define ADVRDOFFTIME	(0x18)		// = tAAVDS + tAVDP
+#define CSRDOFFTIME		(0x1C)	// = AccessTime + 1 cycle
+#define ADVRDOFFTIME	(0x00)		// = tAAVDS + tAVDP
 
 #define WRCYCLETIME		(0x1F)		// = WeOffTime + AccessCompletion
-#define CSWROFFTIME		(0x18)		// = WeOffTime + 1
-#define ADVWROFFTIME	(0x04)		// = tAVSC + tAVDP
+#define CSWROFFTIME		(0x16)		// = WeOffTime + 1
+#define ADVWROFFTIME	(0x00)		// = tAVSC + tAVDP
 #define WEONTIME		(0x0A)		//   tCS
 #define WEOFFTIME		(0x1C)		//   WeOffTime
 
 static am335x_gpmc_cs_config_t sram_config = {
 		// ( 1 << 22) | ( 1 << 21) |
-		/* CONFIG1 */ ( 3 << 21) | ( 1 << 12) | (1 << 4),
+		/* CONFIG1 */ /*( 3 << 21) |*/ ( 2 << 18) | ( 1 << 12) | (1 << 4),
 		/* CONFIG2 */ (CSWROFFTIME  << 16) | (CSRDOFFTIME  <<  8) | (CSONTIME  <<  0),
 		/* CONFIG3 */ (ADVWROFFTIME << 16) | (ADVRDOFFTIME <<  8) | (ADVONTIME <<  0),
 		/* CONFIG4 */ (WEOFFTIME << 24) | (WEONTIME << 20),
@@ -224,7 +224,7 @@ void init_gpmc(void) {
 	// Set CONFIGx pins
 	am335x_gpmc_enable_cs_config(
 			&sram_config,	// config
-			0,				// chip select
+			2,				// chip select
 			0x01000000,		// base
 			0x02000000		// size
 	);
@@ -241,9 +241,10 @@ void test_gpmc(void) {
 			0x0022, 0x0002, 0xFFFF, 0xFFFF,
 			0x6578, 0x6563, 0x2033, 0x342E
 	};
-	volatile uint16_t* d_base = (uint32_t*)0x01000000;
-	volatile uint8_t* cia_base = (uint8_t*)0x01BFE001;
-	volatile uint16_t* custom = (uint32_t*)0x01DFF000;
+	static uint16_t read[16] = {0};
+	volatile uint16_t* d_base = (uint32_t*)0x00000000;
+	volatile uint8_t* cia_base = (uint8_t*)0x00BFE001;
+	volatile uint16_t* custom = (uint32_t*)0x00DFF000;
 	//uint32_t* i_base = (uint32_t*)0x02000000;
 
 	//uint8_t buffer[128];
@@ -254,27 +255,28 @@ void test_gpmc(void) {
 
 	printf("[GPMC] Starting bus test\n");
 
+	for(uint32_t i=0; i<16; i++) read[i] = d_base[i];
+
+	for(uint32_t i=0; i<16; i++)
+		printf("[GPMC] At %08X, read %04X, expected %04x\n", (uint32_t)&d_base[i], read[i], should_be[i]);
+
 //	for(int x=0; x<16; x++) {
 //		uint8_t read = cia_base[x << 8];
 //		printf("[GPMC] At %08X, read %02X\n", (uint32_t)&cia_base[x << 8], read);
 //	}
 
-	for(int c=0; c<8; c++) custom[0xC0 + c] = test_colors[c];
+	//printf("[GPMC] DENISEID %04X", custom[0x7C >> 1]);
+	//printf("[GPMC] DENISEID %04X", custom[0x7C >> 1]);
+	//printf("[GPMC] DENISEID %04X", custom[0x7C >> 1]);
 
-	for(int c=0; c<8; c++) {
-		uint16_t read_back = custom[0xC0 + c];
-		printf("[GPMC] At dff180, read %04X, expected %04x\n", read_back, test_colors[c]);
-	}
+//	for(int c=0; c<8; c++) custom[0xC0 + c] = test_colors[c];
+//
+//	for(int c=0; c<8; c++) {
+//		uint16_t read_back = custom[0xC0 + c];
+//		printf("[GPMC] At dff180, read %04X, expected %04x\n", read_back, test_colors[c]);
+//	}
 
-	uint32_t i=0;
-	while(true) { //for(uint32_t i=0; i<0x10; i++) {
-		uint16_t read = d_base[i];
-		//read = d_base[i];
-		//volatile uint16_t read = d_base[i];
-		printf("[GPMC] At %08X, read %04X, expected %04x\n", (uint32_t)&d_base[i], read, should_be[i]);
-		//am335x_dmtimer1_wait_ms(1000);
-		i = (i + 1) & 0xF;
-	}
+
 }
 
 
