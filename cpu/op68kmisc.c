@@ -1,3 +1,4 @@
+
 /*
  * Castaway
  *  (C) 1994 - 2002 Martin Doering, Joachim Hoenig
@@ -27,7 +28,7 @@
 #ifndef PROTOH
 static char     sccsid[] = "$Id: op68kmisc.c,v 1.13 2002/11/13 01:04:30 jhoenig Exp $";
 #include "68000.h"
-#include "op68k.h"
+#include <pjit_ea_modes.h>
 
 /*
  * Opfuncs.
@@ -72,8 +73,8 @@ void            Code(void)\
 
 #define DoBra(target,source) if (!source) source = GetMPCW (); pc += source;
 #define DoBras(target,source) pc += source;
-#define DoBsr(target,source) areg[7] -= 4; if (!source) { source = GetMPCW (); SetMemL (areg[7], GetPC() + 2);} else {SetMemL (areg[7], GetPC());} pc += source;
-#define DoBsrs(target,source) areg[7] -= 4; SetMemL (areg[7], GetPC()); pc += source;
+#define DoBsr(target,source) A7 -= 4; if (!source) { source = GetMPCW (); SetMemL (A7, GetPC() + 2);} else {SetMemL (A7, GetPC());} pc += source;
+#define DoBsrs(target,source) A7 -= 4; SetMemL (A7, GetPC()); pc += source;
 #define DoBhi(target,source) if (!source) {source = GetMPCW (); if (CChi) {pc += source;} else { pc += 2;}} else {if (CChi) pc += source;};
 #define DoBhis(target,source) if (CChi) pc += source;
 #define DoBls(target,source) if (!source) {source = GetMPCW (); if (CCls) {pc += source;} else { pc += 2;}} else {if (CCls) pc += source;};
@@ -127,7 +128,7 @@ void            Code(void)\
 
 #define DoJmp(target,source) SetPC (source);
 
-#define DoJsr(target,source) areg[7] -= 4; SetMemL (areg[7], GetPC()); SetPC(source);
+#define DoJsr(target,source) A7 -= 4; SetMemL (A7, GetPC()); SetPC(source);
 
 #define DoLea(target,source) target = source;
 
@@ -162,7 +163,7 @@ void            Code(void)\
 
 #define DoNot(target,source) target = ~target; ClrCVSetNZ(target);
 
-#define DoPea(target,source) areg[7] -= 4; SetMemL (areg[7],source);
+#define DoPea(target,source) A7 -= 4; SetMemL (A7,source);
 
 #define DoSt(target,source) target = CCt ? 0xff : 0x00;
 #define DoSf(target,source) target = CCf ? 0xff : 0x00;
@@ -364,8 +365,8 @@ void            Opcf40(void)    /* EXG */
 void            Opcf48(void)    /* EXG */
 {
     register long var;
-    var = areg[7];
-    areg[7] = reg[inst & 15];
+    var = A7;
+    A7 = reg[inst & 15];
     reg[inst & 15] = var;
 }
 
@@ -810,8 +811,8 @@ void            Op4e50(void)    /* LINK */
 {
     long            source;
     source = GetRegL (8 + (inst & 7));
-    areg[7] -= 4;
-    SetMemL (areg[7], source);
+    A7 -= 4;
+    SetMemL (A7, source);
     source = GetRegL (15);
     SetRegL (8 + (inst & 7), source);
     source += GetMPCW ();
@@ -824,8 +825,8 @@ void            Op4e58(void)    /* UNLK */
     long            source;
     source = GetRegL (8 + (inst & 7));
     SetRegL (15, source);
-    source = GetMemL (areg[7]);
-    areg[7] += 4;
+    source = GetMemL (A7);
+    A7 += 4;
     SetRegL (8 + (inst & 7), source);
 }
 
@@ -862,11 +863,11 @@ void            Op4e70(void)    /* RESET, NOP, STOP, RTE, RTD, RTS,
         {
             unsigned short  sr;
 #if CPU_TYPE == 68000
-            sr = GetMemW (areg[7]); areg[7] += 2;
-            SetPC (GetMemL (areg[7])); areg[7] += 4;
+            sr = GetMemW (A7); A7 += 2;
+            SetPC (GetMemL (A7)); A7 += 4;
             SetSRW(sr);
 #else
-            switch (GetMemW(areg[7] + 6) >> 12) {
+            switch (GetMemW(A7 + 6) >> 12) {
             case 0x0:
                 break;
             case 0x8:
@@ -878,10 +879,10 @@ void            Op4e70(void)    /* RESET, NOP, STOP, RTE, RTD, RTS,
                 ExceptionGroup1(FORMATERR);
                 break;
             }
-            sr = GetMemW (areg[7]); areg[7] += 2;
-            SetPC (GetMemL (areg[7])); areg[7] += 4;
+            sr = GetMemW (A7); A7 += 2;
+            SetPC (GetMemL (A7)); A7 += 4;
             SetSRW(sr);
-            areg[7] += 2;
+            A7 += 2;
 #endif
             TraceChanged(); /* trace bit may have changed */
         }
@@ -892,24 +893,24 @@ void            Op4e70(void)    /* RESET, NOP, STOP, RTE, RTD, RTS,
 #else
         {
             short displacement = GetMPCW();
-            SetPC(GetMemL(areg[7]));
-            areg[7] = areg[7] + 4 + displacement;
+            SetPC(GetMemL(A7));
+            A7 = A7 + 4 + displacement;
         }
 #endif
         break;
     case 5:         /* RTS */
-        SetPC (GetMemL (areg[7]));
-        areg[7] += 4;
+        SetPC (GetMemL (A7));
+        A7 += 4;
         break;
     case 6:         /* TRAPV */
         if (GetV ())
             ExceptionGroup1(TRAPV);
         break;
     case 7:         /* RTR */
-        SetSRB ( GetMemW (areg[7]));
-        areg[7] += 2;
-        SetPC (GetMemL (areg[7]));
-        areg[7] += 4;
+        SetSRB ( GetMemW (A7));
+        A7 += 2;
+        SetPC (GetMemL (A7));
+        A7 += 4;
         break;
     }
 }

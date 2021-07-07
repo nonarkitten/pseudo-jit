@@ -1,3 +1,4 @@
+
 /*
  * Castaway
  *  (C) 1994 - 2002 Martin Doering, Joachim Hoenig
@@ -16,7 +17,7 @@
 #ifndef PROTOH
 static char     sccsid[] = "$Id: op68ksub.c,v 1.4 2002/10/30 16:23:06 jhoenig Exp $";
 #include "68000.h"
-#include "op68k.h"
+#include <pjit_ea_modes.h>
 
 /*
  * Opfuncs.

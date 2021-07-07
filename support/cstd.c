@@ -84,6 +84,16 @@ size_t strlen(const char *c) {
     return result;
 }
 
+int memcmp ( const void * ptr1, const void * ptr2, size_t num ) {
+	const unsigned char *s1 = ptr1;
+	const unsigned char *s2 = ptr2;
+	while (num--) {
+		if (*s1 == *s2) s1++, s2++;
+		else return *s1 - *s2;
+	}
+	return 0;
+}
+
 int strcmp(const char *s1, const char *s2) {
     while (*s1 == *s2++)
         if (*s1++ == '\0')

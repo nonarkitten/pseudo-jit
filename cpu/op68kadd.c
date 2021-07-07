@@ -1,3 +1,4 @@
+
 /*
  * Castaway
  *  (C) 1994 - 2002 Martin Doering, Joachim Hoenig
@@ -16,26 +17,28 @@
 #ifndef PROTOH
 static char     sccsid[] = "$Id: op68kadd.c,v 1.4 2002/10/30 16:23:06 jhoenig Exp $";
 #include "68000.h"
-#include "op68k.h"
+#include <pjit_ea_modes.h>
 
 /*
  * Opfuncs.
  */
 
-#define DoAddB(target,source) \
-    {register int32 tgt;\
+#define DoAddB(target,source) {\
+	register int32 tgt;\
     tgt = target + source;\
     SetXC((uint32) source > (uint32) ~target);\
     SetV((tgt < -128) || (tgt > 127));\
     target = tgt;\
     SetNZ(target);};
-#define DoAddW(target,source) \
-    {register int32 tgt;\
+
+#define DoAddW(target,source) {\
+    register int32 tgt;\
     tgt = target + source;\
     SetXC((uint32) source > (uint32) ~target);\
     SetV((tgt < -32768) || (tgt > 32767));\
     target = tgt;\
     SetNZ(target);};
+
 #define DoAddL(target,source) \
     /* Overflow precondition: source has same sign */\
     SetV((target < 0) == (source < 0));\

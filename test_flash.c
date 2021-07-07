@@ -11,6 +11,7 @@
 #include "am335x_dmtimer1.h"
 #include "am335x_gpio.h"
 #include "am335x_spi.h"
+#include "pinmux.h"
 
 #define PRCM_BASE            (0x44e00000)
 #define CM_PER_SPI0_CLKCTRL  (PRCM_BASE + 0x4c)
@@ -59,12 +60,12 @@ struct pin_muxing {
 	{ 0xFFFFFFFF },
 };
 
-static void config_mux(struct pin_muxing* pin_mux) {
-	while(pin_mux->offset != 0xffffffff) {
-		*(volatile uint32_t*)(CFG_MOD_BASE + pin_mux->offset) = pin_mux->val;
-		pin_mux++;
-	}
-}
+//static void config_mux(struct pin_muxing* pin_mux) {
+//	while(pin_mux->offset != 0xffffffff) {
+//		*(volatile uint32_t*)(CFG_MOD_BASE + pin_mux->offset) = pin_mux->val;
+//		pin_mux++;
+//	}
+//}
 
 uint16_t flash_read_id(void) {
 	static uint8_t xfer[6];
@@ -135,6 +136,6 @@ void flash_init(void) {
 void test_flash(void) {
 	flash_init();
 	uint16_t devid = flash_read_id();
-	//printf("[FLASH] Flash Device ID: %04x (%s)\n", devid, ((devid == 0xEF17) ? "Good" : "Bad"));
+	printf("[FLASH] Flash Device ID: %04x (%s)\n", devid, ((devid == 0xEF17) ? "Good" : "Bad"));
 }
 
