@@ -43,3 +43,4 @@ extern uint32_t optab[65536];
 #define isb(option) __asm__ __volatile__ ("isb\t" #option : : : "memory")
 
 #endif
+

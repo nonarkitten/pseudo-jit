@@ -8,6 +8,7 @@
 #include <stdint.h>
 #include <stdarg.h>
 #include <stdio.h>
+#include <string.h>
 
 #include "am335x_clock.h"
 #include "am335x_gpmc.h"
@@ -222,61 +223,54 @@ void init_gpmc(void) {
 	config_mux(m68k_pin_mux);
 
 	// Set CONFIGx pins
+	// Data = 0x02xxxxxx
+	// Inst = 0x03xxxxxx
 	am335x_gpmc_enable_cs_config(
 			&sram_config,	// config
 			2,				// chip select
-			0x01000000,		// base
+			0x02000000,		// base
 			0x02000000		// size
 	);
 }
 
-void test_gpmc(void) {
-	static uint16_t test_colors[] = {
-			0x0fff, 0x0f0f, 0x0555, 0x0505,
-			0x0aaa, 0x0a0a, 0x00a0, 0x0050
-	};
+int test_gpmc(void) {
+//	static uint16_t test_colors[] = {
+//			0x0fff, 0x0f0f, 0x0555, 0x0505,
+//			0x0aaa, 0x0a0a, 0x00a0, 0x0050
+//	};
 	static uint16_t should_be[] = {
 			0x1111, 0x4EF9, 0x00FC, 0x00D2,
 			0x0000, 0xFFFF, 0x0022, 0x0005,
 			0x0022, 0x0002, 0xFFFF, 0xFFFF,
 			0x6578, 0x6563, 0x2033, 0x342E
 	};
-	static uint16_t read[16] = {0};
-	volatile uint16_t* d_base = (uint32_t*)0x00000000;
-	volatile uint8_t* cia_base = (uint8_t*)0x00BFE001;
-	volatile uint16_t* custom = (uint32_t*)0x00DFF000;
-	//uint32_t* i_base = (uint32_t*)0x02000000;
-
-	//uint8_t buffer[128];
-	//strncpy(buffer, &d_base[19], 127);
-	//buffer[127] = 0;
-
-	//printf("[GPMC] ROM Check: %s", buffer);
-
-	printf("[GPMC] Starting bus test\n");
-
-	for(uint32_t i=0; i<16; i++) read[i] = d_base[i];
-
-	for(uint32_t i=0; i<16; i++)
-		printf("[GPMC] At %08X, read %04X, expected %04x\n", (uint32_t)&d_base[i], read[i], should_be[i]);
-
-//	for(int x=0; x<16; x++) {
-//		uint8_t read = cia_base[x << 8];
-//		printf("[GPMC] At %08X, read %02X\n", (uint32_t)&cia_base[x << 8], read);
-//	}
-
-	//printf("[GPMC] DENISEID %04X", custom[0x7C >> 1]);
-	//printf("[GPMC] DENISEID %04X", custom[0x7C >> 1]);
-	//printf("[GPMC] DENISEID %04X", custom[0x7C >> 1]);
-
-//	for(int c=0; c<8; c++) custom[0xC0 + c] = test_colors[c];
+	uint16_t read[16] = { 0 };
+	uint16_t* read_be = (uint16_t*)__builtin_bswap32((uint32_t)read);
 //
-//	for(int c=0; c<8; c++) {
-//		uint16_t read_back = custom[0xC0 + c];
-//		printf("[GPMC] At dff180, read %04X, expected %04x\n", read_back, test_colors[c]);
-//	}
+	volatile uint16_t* d_base = (uint16_t*)0x00000000;
+//	volatile uint8_t* cia_base = (uint8_t*)0x00BFE001;
+//	volatile uint16_t* custom = (uint32_t*)0x00DFF000;
+//	uint32_t* i_base = (uint32_t*)0x02000000;
 
+	uint8_t buffer[128];
+	strncpy(buffer, &d_base[12], 127);
+	uint8_t len = 1 + strlen(buffer);
+	bool byte_swapt = false;
+	buffer[127] = 0;
 
+	if(memcmp(buffer, "exec", 4)) {
+		for(int i=0; i<len; i+=2) {
+			char t = buffer[i];
+			buffer[i] = buffer[i + 1];
+			buffer[i + 1] = t;
+		}
+		byte_swapt = true;
+	}
+
+	printf("[GPMC] ROM Check: %s", buffer);
+	if(byte_swapt) printf("[GPMC] Bytes swapped\n");
+
+	return byte_swapt;
 }
 
 

@@ -28,3 +28,4 @@ extern void cpu_lookup_safe(void);
 extern void cpu_lookup_inline(void);
 
 #endif /* __PJIT_OPS_H_ */
+

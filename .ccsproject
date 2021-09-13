@@ -13,4 +13,5 @@
 	<templateProperties value="id=com.ti.ccstudio.project.templates.helloWorld_gnu_arm"/>
 	<filesToOpen value="hello.c"/>
 	<isTargetManual value="true"/>
+	<connection value="common/targetdb/connections/segger_j-link_connection.xml"/>
 </projectOptions>

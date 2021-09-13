@@ -38,26 +38,33 @@
 #define HWREG(X) \
     *((volatile uint32_t*)(X))
 
+#define HWREG_LE(X) \
+    (*((volatile uint32_t*)(X)))
+
+
 void InitializeMCUClock(int clockMHz) {
     /* Put the PLL in bypass mode and clear multiplier */
     HWREG(MCU_DPLL_BASE + CM_CLKMODE_DPLL_MPU_DPLL_EN) =
-            (HWREG(MCU_DPLL_BASE + CM_CLKMODE_DPLL_MPU_DPLL_EN) & ~3) | DPLL_MN_BYP_MODE;
+		(HWREG(MCU_DPLL_BASE + CM_CLKMODE_DPLL_MPU_DPLL_EN)
+		& (~3))
+		| (DPLL_MN_BYP_MODE);
 
     /* Wait for DPLL to go in to bypass mode */
-    while(!(HWREG(MCU_DPLL_BASE + CM_IDLEST_DPLL_MPU) & ST_MN_BYPASS)) continue;
+    while(!(HWREG(MCU_DPLL_BASE + CM_IDLEST_DPLL_MPU) & (ST_MN_BYPASS)))
+    	continue;
 
     /* Set the multiplier and divider values for the PLL */
-    HWREG(MCU_DPLL_BASE + CM_CLKSEL_DPLL_MPU) |= (clockMHz << 8) | 23;
+    HWREG(MCU_DPLL_BASE + CM_CLKSEL_DPLL_MPU) |= ((clockMHz << 8) | 23);
 
     /* Set the CLKOUT2 divider */
     HWREG(MCU_DPLL_BASE + CM_DIV_M2_DPLL_MPU) =
-            (HWREG(MCU_DPLL_BASE + CM_DIV_M2_DPLL_MPU) & ~31) | 1;
+            (HWREG(MCU_DPLL_BASE + CM_DIV_M2_DPLL_MPU) & (~31)) | (1);
 
     /* Now LOCK the PLL by enabling it */
-    HWREG(MCU_DPLL_BASE + CM_CLKMODE_DPLL_MPU_DPLL_EN) |= DPLL_LOCK_MODE;
+    HWREG(MCU_DPLL_BASE + CM_CLKMODE_DPLL_MPU_DPLL_EN) |= (DPLL_LOCK_MODE);
 
     /* Wait for DPLL lock */
-    while(!(HWREG(MCU_DPLL_BASE + CM_IDLEST_DPLL_MPU) & ST_DPLL_LOCK)) continue;
+    while(!(HWREG(MCU_DPLL_BASE + CM_IDLEST_DPLL_MPU) & (ST_DPLL_LOCK))) continue;
 }
 
 void InitializeMMU(volatile uint32_t mmu_table[4096]) {
@@ -68,10 +75,11 @@ void InitializeMMU(volatile uint32_t mmu_table[4096]) {
      CP15DomainAccessClientSet();
 
      /* Disable TEX remapping, Access Flag usage and alignment check */
-     CP15ControlFeatureDisable( CP15_CONTROL_TEXREMAP
-                              | CP15_CONTROL_ACCESSFLAG
-                              | CP15_CONTROL_ALIGN_CHCK
-                              | CP15_CONTROL_MMU);
+     CP15ControlFeatureDisable((
+    		 CP15_CONTROL_TEXREMAP |
+			 CP15_CONTROL_ACCESSFLAG |
+			 CP15_CONTROL_ALIGN_CHCK |
+			 CP15_CONTROL_MMU));
 
      /* Configure the TTB Control register to use only TTB0 */
      CP15TtbCtlTtb0Config();
@@ -84,8 +92,12 @@ void ConfigureMMU(volatile uint32_t mmu_table[4096], const MMU_Config_t* mmu_con
     /* Walk through the MMU configuration and fix up each region */
     while(mmu_config && mmu_config->last_page) {
         /* Update each 1MB page */
-        for(int i=mmu_config->first_page; i<=mmu_config->last_page; i++)
-            mmu_table[i] = (i << MMU_PAGEBOUND_SHIFT) | (uint32_t)mmu_config->flags;
+        for(int i=mmu_config->first_page; i<=mmu_config->last_page; i++) {
+        	uint16_t physical = 0xFFF & (i + mmu_config->offset_pages);
+
+            mmu_table[i] = (physical << MMU_PAGEBOUND_SHIFT)
+            			 | (uint32_t)mmu_config->flags;
+        }
 
         /* Advance to the next item */
         mmu_config++;
@@ -94,7 +106,7 @@ void ConfigureMMU(volatile uint32_t mmu_table[4096], const MMU_Config_t* mmu_con
 
 void EnableMMU(volatile uint32_t mmu_table[4096]) {
     /* Set TTB0 register */
-    CP15Ttb0Set((uint32_t)mmu_table);
+    CP15Ttb0Set((uint32_t)(mmu_table));
 
     /* Enable MMU */
     CP15MMUEnable();
@@ -109,7 +121,7 @@ void CacheEnable(uint32_t enFlag)
 
     if(enFlag & CACHE_DCACHE) {
         /* For Cortex A8, L2EN has to be enabled for L2 Cache */
-        CP15AuxControlFeatureEnable(CORTEX_A8_L2EN);
+        CP15AuxControlFeatureEnable((CORTEX_A8_L2EN));
         CP15DCacheFlush();
         CP15DCacheEnable();
     }

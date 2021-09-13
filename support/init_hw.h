@@ -6,8 +6,7 @@
  */
 
 #include "main.h"
-#include "am335x_dmtimer1.h"
-#include "am335x_clock.h"
+#include "am335x.h"
 #include "cp15.h"
 
 #ifndef INIT_HW_H_
@@ -20,6 +19,7 @@
 typedef struct {
     uint16_t first_page;
     uint16_t last_page;
+    int16_t  offset_pages;
     uint16_t flags;
 } MMU_Config_t;
 
