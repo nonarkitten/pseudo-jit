@@ -27,5 +27,15 @@ extern void cpu_lookup_safe(void);
 // the branch to it and then execute it
 extern void cpu_lookup_inline(void);
 
+// start may either point to the PJIT cache or the interpreter function
+// if we enter the PJIT cache, we'll only return here through the setjmp
+// when the system hits another interpreter command; that is, this is a
+// loop, even if it doesn't look like one
+void cpu_start(uint32_t m68k_pc);
+
+void cpu_jump(uint32_t m68k_pc);
+
+void cpu_exit(void);
+
 #endif /* __PJIT_OPS_H_ */
 

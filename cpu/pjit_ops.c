@@ -8,6 +8,8 @@
  */
 #include "pjit.h"
 
+extern ICacheFlush(void *start, void *end);
+
 static jmp_buf jump_buffer;
 
 static uint32_t exec_temp[10] = { 0 };
@@ -34,9 +36,9 @@ static void emit_save_cpsr(uint32_t **arm) {
 	// msr	CPSR_fc, r3				0xE129F003
 	*(*arm)++ = 0xE129F003;
 }
-static uint32_t emit_return(void) {
+static void emit_return(uint32_t **arm) {
 	// bx	lr						0xE12FFF1E
-	return 0xE12FFF1E;
+	*(*arm)++ = 0xE12FFF1E;
 }
 
 static uint32_t emit_src_ext(uint32_t current, uint16_t opcode) {
@@ -68,7 +70,7 @@ static uint32_t emit_dst_ext(uint32_t current, uint16_t opcode) {
 
 // given an opcode, write out the necessary steps to execute it, assuming
 // we're writing directly to the PJIT cache
-static uint32_t* copy_opcode(uint32_t* out, uint16_t *pc) {
+static uint16_t* copy_opcode(uint32_t** out, uint16_t *pc) {
 	// TODO fix up for 32-bit memory
 	// TODO fix up for page boundary crossing
 	uint16_t opcode = *pc++;
@@ -77,56 +79,74 @@ static uint32_t* copy_opcode(uint32_t* out, uint16_t *pc) {
 		
 	switch(opea & 0x0F00) {
 	case EXT_WORD_SRC_EXT: 
-		*out++ = emit_src_ext((uint32_t)out, *pc++); 
+		*(*out)++ = emit_src_ext((uint32_t)out, *pc++); 
 		break;
 	case EXT_WORD_SRC_16B: 
-		*out++ = emit_movw(1, *pc++); 
+		*(*out)++ = emit_movw(1, *pc++); 
 		break;
 	case EXT_WORD_SRC_32B: 
-		*out++ = emit_movw(1, *pc++);
-		*out++ = emit_movt(1, *pc++);
+		*(*out)++ = emit_movw(1, *pc++);
+		*(*out)++ = emit_movt(1, *pc++);
 		break;
 	}
 
 	switch(opea & 0xF000) {
 	case EXT_WORD_DST_EXT: 
-		*out++ = emit_dst_ext((uint32_t)out, *pc++); 
+		*(*out)++ = emit_dst_ext((uint32_t)out, *pc++); 
 		break;
 	case EXT_WORD_DST_16B: 
-		*out++ = emit_movw(1, *pc++); 
+		*(*out)++ = emit_movw(1, *pc++); 
 		break;
 	case EXT_WORD_DST_32B: 
-		*out++ = emit_movw(1, *pc++);
-		*out++ = emit_movt(1, *pc++);
+		*(*out)++ = emit_movw(1, *pc++);
+		*(*out)++ = emit_movt(1, *pc++);
 		break;
 	}
 	
 	if((opea & 0xFF) == 1) *out++ = *(uint32_t*)opaddr;
 	else *out++ = emit_branch(opaddr, (uint32_t)out);
 	
-	return out;
-}
-
-// given an opcode, write out the necessary steps to execute it, assuming
-// we're going to run this immediately in interpreter mode which means we
-// have to restore and save the CPSR register (flags) and add an explicit
-// return -- note that we should never branch-and-link to immediate code
-static uint32_t* copy_interp_opcode(uint32_t* out, uint16_t *pc) {
-	// TODO fix up for 32-bit memory
-	emit_restore_cpsr(&out);
-	
-	// emit the opcode proper
-	out = copy_opcode(out, pc);
-	
-	emit_save_cpsr(&out);
-	*out++ = emit_return();
+	return pc;
 }
 
 // look up opcode and execute it, but never replace it
 void cpu_lookup_nojit(void) {
-	copy_interp_opcode(exec_temp, cache_reverse(lr - 4));
+	uint16_t *pc = cache_reverse(lr - 4);
+	uint32_t *out = (uint32_t*)&&killme;
+
+	// given an opcode, write out the necessary steps to execute it, assuming
+	// we're going to run this immediately in interpreter mode which means we
+	// have to restore and save the CPSR register (flags) and add an explicit
+	// return -- note that we should never branch-and-link to immediate code
+
+	// TODO fix up for 32-bit memory
+	emit_restore_cpsr(&out);
+	
+	// emit the opcode proper
+	pc = copy_opcode(&out, pc);
+	
+	emit_save_cpsr(&out);
+	//emit_return(&out);
+
+	ICacheFlush(&&killme, &&killme2);
 	isb(); // flush the pipeline
-	goto *(void*)exec_temp; // never function call!
+killme:
+	asm volatile("nop");
+	asm volatile("nop");
+	asm volatile("nop");
+	asm volatile("nop");
+	asm volatile("nop");
+	asm volatile("nop");
+	asm volatile("nop");
+	asm volatile("nop");
+	asm volatile("nop");
+	asm volatile("nop");
+	asm volatile("nop");
+	asm volatile("nop");
+	asm volatile("nop");
+	asm volatile("nop");
+killme2:
+	longjmp(jump_buffer, (uint32_t)pc);
 }
 
 // look up opcode and replace our call with the opcode
@@ -134,6 +154,7 @@ void cpu_lookup_nojit(void) {
 void cpu_lookup_safe(void) {
 	uint32_t* entry = (uint32_t*)(lr -= 4);
 	uint32_t* end = copy_opcode(entry, cache_reverse(entry));
+	ICacheFlush(entry, end);
 	isb(); // flush the pipeline
 	// automagically execute the PJIT cache on return
 }
@@ -172,15 +193,14 @@ void cpu_lookup_inline(void) {
 		// TODO change this to allow conditional expressions
 		uint32_t o = arm_bcc[(inst & 0x0F00) >> 8];
 		if(o != 0xFF) {
-			*entry++ = (o << 24) | ((((int8_t)inst) << 2) - 4);
+			*entry = (o << 24) | ((((int8_t)inst) << 2) - 4);
+			ICacheFlush(entry, entry + 1);
 		}
-		copy_interp_opcode(exec_temp, pc);
-		isb(); // flush the pipeline
-		goto *(void*)exec_temp; // never function call!
+		goto *optab[inst];
 		
 	} else {
-		lr -= 4; // back up our return point
-		copy_opcode(entry, cache_reverse(entry));
+		uint32_t* end = copy_opcode(entry, cache_reverse(entry));
+		ICacheFlush(entry, end);
 		isb(); // flush the pipeline
 		// automagically execute the PJIT cache on return
 	}
@@ -211,17 +231,40 @@ void cpu_dump_state(void) {
 
 }
 
-// give a 68K address return the exact instruction to enter
-// if the tags don't match, clear the cache first
-// uint32_t* cache_find_entry(uint32_t m68k_addr)
+// This should be odd-aligned to be impossible addresses to jump to
+#define PJIT_EXIT (0xC0DEBABE | 1)
 
-void cpu_start(void* entry) {
-	if(setjmp(jump_buffer)==0) {
-		void* start = (void*)cache_find_entry((uint32_t)entry);
-		goto *start;
-	}
+void cpu_jump(uint32_t m68k_pc) {
+	longjmp(jump_buffer, m68k_pc);
 }
 
+void cpu_exit(void) {
+	longjmp(jump_buffer, PJIT_EXIT);
+}
+
+// start may either point to the PJIT cache or the interpreter function
+// if we enter the PJIT cache, we'll only return here through the setjmp
+// when the system hits another interpreter command; that is, this is a
+// loop, even if it doesn't look like one
+void cpu_start(uint32_t m68k_pc) {
+	static uint32_t m68k_jump_to;
+	// When first called, this is 0
+	m68k_jump_to = setjmp(jump_buffer);
+	// When we need to jump somewhere, we'll come back here with the new
+	// 68K program counter (and should never be 0)
+	if(m68k_jump_to) {
+		// Special condition to exit PJIT when testing
+		if(m68k_jump_to == PJIT_EXIT) return;
+		// Because longjmp cannot pass 0, we need a special case for it
+		else if(m68k_jump_to == 1) m68k_pc = 0;
+		// And for all other cases
+		else m68k_pc = m68k_jump_to;
+	}
+	// And, engage!
+	goto *cache_find_entry(m68k_pc);
+}
+
+#undef EXIT_PJIT
 
 
 

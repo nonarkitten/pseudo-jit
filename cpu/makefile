@@ -1,11 +1,10 @@
 APPNAME  := m68k_test
-SOURCES  := $(wildcard *.c) $(wildcard ops/*.s)
-OBJECTS  := $(patsubst %.c,obj/%.o, $(patsubst ops/%.s,obj/%.o, $(SOURCES)))
+SOURCES  := $(wildcard *.c) $(wildcard ops/*.s) pjit_support.s
+OBJECTS  := $(patsubst %.c,obj/%.o, $(patsubst %.s,obj/%.o, $(patsubst ops/%.s,obj/%.o, $(SOURCES))))
 
 AS = arm-none-eabi-as -mcpu=cortex-a8
 SZ = arm-none-eabi-size
 CC = arm-none-eabi-gcc -I . -I ops -Os -mcpu=cortex-a8 \
-	-Wall -Wextra -Wshadow -Wdouble-promotion -Wformat=2 -Wformat-truncation -Wundef -Wconversion\
 	-ffunction-sections \
 	-fdata-sections \
 	-fomit-frame-pointer \
@@ -30,6 +29,9 @@ obj/%.o: %.c
 	$(CC) -c $< -o $@
 
 obj/%.o: ops/%.s
+	$(AS) $< -o $@
+
+obj/%.o: %.s
 	$(AS) $< -o $@
 
 .PHONY: premake
