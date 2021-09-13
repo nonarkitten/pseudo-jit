@@ -1005,7 +1005,7 @@ unsigned int TPTC0_MMU_MAP=0;
     GEL_TextOut("Test is complete\n");
 }
 
-edmaConfigure(unsigned int srcAddr, unsigned DstAddr, unsigned short dmaSize, unsigned int QUEPRI)
+edmaConfigure(unsigned int srcAddr, unsigned DstAddr, uint16_t dmaSize, unsigned int QUEPRI)
 {
   GEL_TextOut("\EDMA Transfer Start for QUEPRI %x\n",,,,,QUEPRI); 
   WR_MEM_32(TPCC_BASE_ADDR +0x0284, (QUEPRI&0x7));
