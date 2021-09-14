@@ -25,6 +25,8 @@ typedef enum {
 	EXT_WORD_DST_32B = 0x3000,
 } ext_word_t;
 
+#define NO_BX_LR 0x7700
+
 /* Exception vector numbers (trap numbers). */
 typedef enum {
     RESET_SP,       // 0  Initial stack pointer

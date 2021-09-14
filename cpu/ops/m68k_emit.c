@@ -134,12 +134,12 @@ static const struct op_details {
 //     { 0x4180, 0x0E3F, emit_CHK           },
 //     { 0x50C8, 0x0F07, emit_DBCC          },
 //     { 0x50C0, 0x0F3F, emit_SCC           },
-//     { 0x5000, 0x0EFF, emit_ADDQ          },
-//     { 0x5100, 0x0EFF, emit_SUBQ          },
-//     { 0x6000, 0x00FF, emit_BRA           },
+    { 0x5000, 0x0EFF, emit_ADDQ          },
+    { 0x5100, 0x0EFF, emit_SUBQ          },
+    { 0x6000, 0x00FF, emit_BRA           },
 //     { 0x6100, 0x00FF, emit_BSR           },
-//     { 0x6000, 0x0FFF, emit_BCC           },
-//     { 0x7000, 0x0EFF, emit_MOVEQ         },
+    { 0x6000, 0x0FFF, emit_BCC           },
+    { 0x7000, 0x0EFF, emit_MOVEQ         },
 //     { 0x80C0, 0x0E3F, emit_DIVU          },
 //     { 0x81C0, 0x0E3F, emit_DIVS          },
 //     { 0x8100, 0x0E0F, emit_SBCD          },
@@ -235,10 +235,10 @@ int main(void) {
 			if((opcodes[opcode] == 0) && (opcode_len[opcode] == 0)) {
 				int n = optab[i].emit(buffer, opcode);
 
-				if(opcode == 0x2001) {
-					fprintf(stderr, "%04x emitted\n%slines: %d", opcode, buffer, n);
-				
-				}
+// 				if(opcode == 0x2001) {
+// 					fprintf(stderr, "%04x emitted\n%slines: %d", opcode, buffer, n);
+// 				
+// 				}
 
 				if(n != -1) {
 					if(n == 0) {
@@ -284,9 +284,14 @@ int main(void) {
 			// print out all the aliases for this
 			if(opcode_len[opcode] >= 0) {
 				char *op = "\tnop\n";
-				if(opcode_len[opcode] > 0) op = opcodes[opcode];
+				int len = opcode_len[opcode] & 0xFF;
+				if(len > 0) op = opcodes[opcode];
 				fprintf(file, "\t.global opcode_%04x\n", opcode);
-				fprintf(file, "opcode_%04x:\n%s\tbx      lr\n\n", opcode, op);
+				fprintf(file, "opcode_%04x:\n%s", opcode, op);
+				
+				if((opcode_len[opcode] & NO_BX_LR) != NO_BX_LR)
+					fprintf(file, "\tbx      lr\n");
+				fprintf(file, "\n");
 			}
 		}
 		fprintf(file, "\tnop\n\n");		
@@ -362,14 +367,16 @@ int main(void) {
 				b += sprintf(b, "\tmov     r%d, #%d\n\tb       0f\n", r, i);
 			}
 			for(int i=-128; i; i++) {
-				b += sprintf(b, "\tmvn     r%d, #%d\n\tb       0f\n", r, i);
+				b += sprintf(b, "\tmvn     r%d, #%d\n\tb       0f\n", r, ~i);
 			}
 			
+			fprintf(file, "\t.text\n\t.thumb_func\n\t.syntax unified\n");
+
 			for(int s=0; s<2; s++) {
 				for(int d=0; d<16; d++) {
 					char label[256];
 					sprintf(label, "extword_%s_%X%d00", ((r==1) ? "src" : "dst" ), d, (s * 8));
-					fprintf(file, "\t.text\n\t.global %s\n", label);
+					fprintf(file, "\t.global %s\n", label);
 					fprintf(file, "%s:\n", label);
 					fprintf(file, "%s", branches);
 				

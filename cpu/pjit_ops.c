@@ -242,6 +242,10 @@ void cpu_exit(void) {
 	longjmp(jump_buffer, PJIT_EXIT);
 }
 
+void relative_branch(uint32_t _lr, int32_t offset) {
+	cpu_jump(cache_reverse(_lr) + offset);
+}
+
 // start may either point to the PJIT cache or the interpreter function
 // if we enter the PJIT cache, we'll only return here through the setjmp
 // when the system hits another interpreter command; that is, this is a
