@@ -2,9 +2,12 @@ APPNAME  := m68k_test
 SOURCES  := $(wildcard *.c) $(wildcard ops/*.s) pjit_support.s
 OBJECTS  := $(patsubst %.c,obj/%.o, $(patsubst %.s,obj/%.o, $(patsubst ops/%.s,obj/%.o, $(SOURCES))))
 
-AS = arm-none-eabi-as -mcpu=cortex-a8
+AS = arm-none-eabi-as \
+	-mfloat-abi=hard -mcpu=cortex-a8 -march=armv7-a -mfpu=vfpv3
 SZ = arm-none-eabi-size
-CC = arm-none-eabi-gcc -I . -I ops -Os -mcpu=cortex-a8 \
+CC = arm-none-eabi-gcc -I . -I ops -Os \
+	-flto-compression-level=9 \
+	-mfloat-abi=hard -march=armv7-a -marm -mfpu=vfpv3 -mtune=cortex-a8 \
 	-ffunction-sections \
 	-fdata-sections \
 	-fomit-frame-pointer \

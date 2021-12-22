@@ -1,152 +1,258 @@
 #include "m68k_common.h"
 #include "m68k_cpu.h"
+#include "m68k_emit_ea.h"
+#include "m68k_registers.h"
 
-reg_map_t reg_map[REG_MAP_COUNT];
-
-#define SET_EA_MODES() \
-	uint16_t sEA  = (opcode & 0x0038) >> 3; \
-	uint16_t dEA  = (opcode & 0x01C0) >> 6; \
-	/* extend address modes in implicit modes */\
-	if(sEA == 7) sEA += (opcode & 0x0007) >> 0; \
-	if(dEA == 7) dEA += (opcode & 0x0E00) >> 9 \
-
-// see if there's a later opcode that this will be a copy of
-uint16_t alias_mode(uint16_t opcode) {
-	SET_EA_MODES();
-	
-	if(dEA > EA_ABSW) 		opcode &= 0xF1FF; // change to EA_ABSW
-	else if(dEA == EA_ADIS) opcode ^= 0x00C0; // change to EA_AIDX
-
-	if(sEA == EA_IMMD)      return opcode;
-	else if(sEA >  EA_ABSW)	return opcode & 0xFFF8; // change to EA_ABSW
-	else if(sEA == EA_ADIS) return opcode ^ 0x0018; // change to EA_AIDX
-	else					return opcode;
-}
-
-static int illegal_opcode(uint16_t opcode) {
-	uint16_t size = (opcode & 0x3000) >> 12;
-	SET_EA_MODES();
-	
-	// EA out of range; not valid
-	if(sEA > EA_IMMD) return -1; 
-	// MOVE *,PC or MOVE *,#imm not valid
-	if(dEA >= EA_PDIS) return -1; 
-	// MOVEA.B *,An and MOVE.B An,* not valid
-	if(((sEA == 1) || (dEA == 1)) && (size == MOVE_BYTE)) return -1; 
-	
-	return 0;
-}
-
-static int emit_move(uint16_t opcode) {
-	// reject invalid operations
-	assert(opcode >= 0x1000 || opcode < 0x4000);
-	if(illegal_opcode(opcode)) return -1;
-
-	uint16_t alias = alias_mode(opcode);
-	if(illegal_opcode(alias)) return -1;
-	else if(alias != opcode) return -alias;
-	
-	// get our effective addressing modes and operation size
-	uint16_t size = (opcode & 0x3000) >> 12;
-	SET_EA_MODES();
-
-	if(debug) printf("sEA %d dEA %d\n", sEA, dEA);
-
-	// registers are simply 0 thru 15
-	int8_t sR = ((opcode & 0x0007) >> 0) | (sEA ? 0x8 : 0x0);
-	int8_t dR = ((opcode & 0x0E00) >> 9) | (dEA ? 0x8 : 0x0);
-	
-	// move a handles 16-bits differently and doesn't set flags
-	uint16_t movea = (dEA == 1);
-
-	// convert the operand size to the actual number of bytes		
-	if(size == 3) size = 2; else if(size == 2) size = 4; else size = 1;
-
-	// okay, we're committed to this opcode!
-	// are these aliased?
-	//emit("%s", alias_modes(opcode));
-
-	// skip pointless operation
-	if((sR != dR) || (sEA != EA_AREG) || (dEA == EA_AREG)) {
-		// guard r1 or r2 if the EA is indexed mode
-		if(sEA >= EA_ADIS) reg_alloc_arm(1);
-		if(dEA >= EA_ADIS) reg_alloc_arm(2);
-	
-		// determine our source and destination real registers
-		int8_t sRR = emit_get_reg( &sEA, sR, 1, 0 );
-	
-		// if the destination is a register, then skip loading it
-		int8_t dRR = emit_get_reg( &dEA, dR, 2, dEA <= EA_AREG );
-	
-		// Perform the load unless this is an immediate or register already
-		sRR = emit_load(sEA, -1, sRR, 1, 1, size, !movea);
-	
-		// Compute our condition codes
-		if(!movea && (size < 4)) {
-			int8_t treg = reg_alloc_temp();
-			emit("\tlsls    r%d, r%d, #%d \n", treg, sRR, (4-size) * 8);
-			reg_free(treg);
-		}
-			
-		// Move from register-to-register
-		if((dEA <= EA_AREG)) {
-			switch(size + movea) {
-			case 1: emit("\tbfi     r%d, r%d, #0, #8\n", dRR, sRR); break;
-			case 2: emit("\tbfi     r%d, r%d, #0, #16\n", dRR, sRR); break;
-			case 3: emit("\tsxth    r%d, r%d\n", dRR, sRR); break;
-			case 4: emit("\tmovs    r%d, r%d\n", dRR, sRR); break; 
-			case 5: emit("\tmov     r%d, r%d\n", dRR, sRR); break;
-			}
-			if(dRR != sRR) reg_modified(dRR);
-		} 
-	
-		// Or perform a memory store
-		else {
-			emit_store(dEA, dRR, sRR, 2, size);
-		}
-	}		
-	
-	// everything's done, let's return and free all the registers
-	reg_flush();
-	
-	uint16_t r = lines;
-	
-	if((sEA == EA_ADIS) || (sEA == EA_PDIS) || (sEA == EA_ABSW) || ((sEA == EA_IMMD) && (size < 4)))
-		r |= EXT_WORD_SRC_16B;
-	else if((sEA == EA_ABSL) || ((sEA == EA_IMMD) && (size == 4)))
-		r |= EXT_WORD_SRC_32B;
-	else if((sEA == EA_AIDX) || (sEA == EA_PIDX))
-		r |= EXT_WORD_SRC_EXT;
-	
-	if((dEA == EA_ADIS) || (dEA == EA_PDIS) || (dEA == EA_ABSW) || ((dEA == EA_IMMD) && (size < 4)))
-		r |= EXT_WORD_DST_16B;
-	else if((dEA == EA_ABSL) || ((dEA == EA_IMMD) && (size == 4)))
-		r |= EXT_WORD_DST_32B;
-	else if((dEA == EA_AIDX) || (dEA == EA_PIDX))
-		r |= EXT_WORD_DST_EXT;
-	
-	return r;
-}
+extern int emit_alu(char *buffer, uint16_t size, uint16_t sEA, uint16_t dEA, ALU_OP_t alu_op);
 
 int emit_MOVEB(char *buffer, uint16_t opcode) {
-	lines = 0;
-	stream( buffer, 0, STREAM_SET );
-	return emit_move(opcode);
+	uint16_t dEA = ((opcode & 0xE00) >> 9) | ((opcode & 0x1C0) >> 3);
+	uint16_t sEA = (opcode & 0x3F);
+	uint16_t size = 1;
+	return emit_alu(buffer, size, sEA, dEA, ALU_OP_MOVE);
 }
 
 int emit_MOVEW(char *buffer, uint16_t opcode) {
-	lines = 0;
-	stream( buffer, 0, STREAM_SET );
-	return emit_move(opcode);
+	uint16_t dEA = ((opcode & 0xE00) >> 9) | ((opcode & 0x1C0) >> 3);
+	uint16_t sEA = (opcode & 0x3F);
+	uint16_t size = 2;
+	return emit_alu(buffer, size, sEA, dEA, ALU_OP_MOVE);
 }
 
 int emit_MOVEL(char *buffer, uint16_t opcode) {
-	lines = 0;
-	stream( buffer, 0, STREAM_SET );
-	return emit_move(opcode);
+	uint16_t dEA = ((opcode & 0xE00) >> 9) | ((opcode & 0x1C0) >> 3);
+	uint16_t sEA = (opcode & 0x3F);
+	uint16_t size = 4;
+	return emit_alu(buffer, size, sEA, dEA, ALU_OP_MOVE);
 }
 
+int emit_MOVEP(char *buffer, uint16_t opcode) {
+	uint16_t size = (opcode & 0x0040) ? 4 : 2;
 
+	lines = 0;
+	emit_reset( buffer );	
+	
+	reg_alloc_arm(1); // displacement
+	
+	uint16_t sEA = (opcode & 0x0080) ? EA_DREG : EA_AIDX;
+	uint8_t sR = ((opcode & 0x0007) >> 0) | (sEA ? 0x8 : 0x0);
+	uint8_t sRR;
+	emit_get_reg( &sRR, sR, size );
+
+	uint16_t dEA = (opcode & 0x0080) ? EA_AIDX : EA_DREG; 	
+	uint8_t dR = ((opcode & 0x0E00) > 9) | (dEA ? 0x8 : 0x0);
+	uint8_t dRR;
+	emit_get_reg( &dRR, dR, size );
+	
+	if(opcode & 0x0080) {
+		// register to memory
+		emit("\tstrb    r%d, [r%d, #0]\n", sRR, dRR);
+		emit("\tror     r%d, r%d, #8\n", sRR, sRR);
+		emit("\tstrb    r%d, [r%d, #2]\n", sRR, dRR);
+		emit("\tror     r%d, r%d, #8\n", sRR, sRR);
+		if(size == 4) {
+			emit("\tstrb    r%d, [r%d, #4]\n", sRR, dRR);
+			emit("\tror     r%d, r%d, #8\n", sRR, sRR);
+			emit("\tstrb    r%d, [r%d, #6]\n", sRR, dRR);
+			if(sRR > 3)
+			emit("\tror     r%d, r%d, #8\n", sRR, sRR);
+		} else {
+			if(sRR > 3)
+			emit("\tror     r%d, r%d, #16\n", sRR, sRR);
+		}
+				
+	} else {
+		uint8_t tRR;
+		reg_alloc_temp( &tRR );
+		
+		// memory to register
+		emit("\tldrb    r%d, [r%d, #0]\n", tRR, sRR);
+		emit("\tbfi     r%d, r%d, #0, #8\n", dRR, tRR);
+		emit("\tldrb    r%d, [r%d, #2]\n", tRR, sRR);
+		emit("\tbfi     r%d, r%d, #8, #8\n", dRR, tRR);
+		emit("\tldrb    r%d, [r%d, #4]\n", tRR, sRR);
+		emit("\tbfi     r%d, r%d, #16, #8\n", dRR, tRR);
+		emit("\tldrb    r%d, [r%d, #6]\n", tRR, sRR);
+		emit("\tbfi     r%d, r%d, #24, #8\n", dRR, tRR);
+		
+		reg_modified(dRR);
+	}
+	reg_flush();
+	return lines | EXT_WORD_SRC_16B;
+}
+
+int emit_MOVEM(char *buffer, uint16_t opcode) {
+	char *ldx = (opcode & 0x0040) ? "ldrne " : "ldrhne";
+	char *stx = (opcode & 0x0040) ? "strne " : "strhne";
+	uint16_t size = (opcode & 0x0040) ? 4 : 2;
+	uint16_t sEA = (opcode & 0x38) >> 3;
+	if(sEA == 7) sEA += (opcode & 0x0007) >> 0;
+	
+	if(sEA <= EA_AREG) return -1;
+	if(opcode & 0x0400) { // M->R
+		if(sEA == EA_ADEC || sEA == EA_IMMD) return -1;
+	} else {
+		if(sEA == EA_AINC || sEA > EA_ABSL) return -1;
+	}	
+
+	if(sEA >  EA_ABSW)	return -(opcode & 0xFFF8); // change to EA_ABSW
+	else if(sEA == EA_ADIS) return -(opcode ^ 0x0018); // change to EA_AIDX
+
+	lines = 0;
+	emit_reset( buffer );	
+	
+	reg_alloc_arm(0);
+	reg_alloc_arm(1); // register list
+	reg_alloc_arm(2);
+	
+	uint8_t sR = ((opcode & 0x0007) >> 0) | (sEA ? 0x8 : 0x0);
+	uint8_t sRR;
+	emit_get_reg( &sRR, sR, size );
+	
+	switch(sEA) {
+	case EA_ADDR:
+		emit("\tmov     r2, r%d\n", sRR);
+		break;
+	case EA_AIDX: case EA_ADIS:
+		emit("\tadd     r2, r%d, r1\n", sRR);
+		break;
+	case EA_ABSW: case EA_ABSL: case EA_PDIS: case EA_PIDX:
+		emit("\tmov     r2, r1\n");
+		break;
+	}
+	reg_free(1);
+	
+	if (sEA == EA_AINC) {
+		// memory to register-list, normal reg list D0-D7, A0-A7
+		// address register should point to the next long address
+	
+		emit("\ttst     r1, #0x8000\n"); emit("\t%s  r4, [r%d], #4\n", ldx, sRR );
+		emit("\ttst     r1, #0x4000\n"); emit("\t%s  r5, [r%d], #4\n", ldx, sRR );
+		emit("\ttst     r1, #0x2000\n"); emit("\t%s  r6, [r%d], #4\n", ldx, sRR );
+		emit("\ttst     r1, #0x1000\n"); emit("\t%s  r7, [r%d], #4\n", ldx, sRR );
+
+		emit("\ttst     r1, #0x0800\n"); emit("\t%s  r0, [r%d], #4\n", ldx, sRR); emit("\t%s  r0, [r12, #16]\n", stx );
+		emit("\ttst     r1, #0x0400\n"); emit("\t%s  r0, [r%d], #4\n", ldx, sRR); emit("\t%s  r0, [r12, #20]\n", stx );
+		emit("\ttst     r1, #0x0200\n"); emit("\t%s  r0, [r%d], #4\n", ldx, sRR); emit("\t%s  r0, [r12, #24]\n", stx );
+		emit("\ttst     r1, #0x0100\n"); emit("\t%s  r0, [r%d], #4\n", ldx, sRR); emit("\t%s  r0, [r12, #28]\n", stx );
+
+		emit("\ttst     r1, #0x0080\n"); emit("\t%s  r7, [r%d], #4\n", ldx, sRR );
+		emit("\ttst     r1, #0x0040\n"); emit("\t%s  r8, [r%d], #4\n", ldx, sRR );
+		emit("\ttst     r1, #0x0020\n"); emit("\t%s  r9, [r%d], #4\n", ldx, sRR );
+	
+		emit("\ttst     r1, #0x0010\n"); emit("\t%s  r0, [r%d], #4\n", ldx, sRR); emit("\t%s  r0, [r12, #44]\n", stx );
+		emit("\ttst     r1, #0x0008\n"); emit("\t%s  r0, [r%d], #4\n", ldx, sRR); emit("\t%s  r0, [r12, #48]\n", stx );
+		emit("\ttst     r1, #0x0004\n"); emit("\t%s  r0, [r%d], #4\n", ldx, sRR); emit("\t%s  r0, [r12, #52]\n", stx );
+		emit("\ttst     r1, #0x0002\n"); emit("\t%s  r0, [r%d], #4\n", ldx, sRR); emit("\t%s  r0, [r12, #56]\n", stx );
+	
+		emit("\ttst     r1, #0x0001\n"); emit("\t%s  r10, [r%d], #4\n", ldx, sRR );
+		reg_modified(sRR);
+			
+	} else if (sEA == EA_ADEC) {
+		// register-list to memory, reverse reg list A7-A0, D7-D0
+		// address register should point to the last long address written
+		
+		emit("\ttst     r1, #0x8000\n"); emit("\t%s  r4, [r%d, #-4]!\n", stx, sRR );
+		emit("\ttst     r1, #0x4000\n"); emit("\t%s  r5, [r%d, #-4]!\n", stx, sRR );
+		emit("\ttst     r1, #0x2000\n"); emit("\t%s  r6, [r%d, #-4]!\n", stx, sRR );
+		emit("\ttst     r1, #0x1000\n"); emit("\t%s  r7, [r%d, #-4]!\n", stx, sRR );
+
+		emit("\ttst     r1, #0x0800\n"); emit("\t%s  r0, [r12, #16]\n\t%s  r0, [r%d, #-4]!\n", ldx, stx, sRR );
+		emit("\ttst     r1, #0x0400\n"); emit("\t%s  r0, [r12, #20]\n\t%s  r0, [r%d, #-4]!\n", ldx, stx, sRR );
+		emit("\ttst     r1, #0x0200\n"); emit("\t%s  r0, [r12, #24]\n\t%s  r0, [r%d, #-4]!\n", ldx, stx, sRR );
+		emit("\ttst     r1, #0x0100\n"); emit("\t%s  r0, [r12, #28]\n\t%s  r0, [r%d, #-4]!\n", ldx, stx, sRR );
+
+		emit("\ttst     r1, #0x0080\n"); emit("\t%s  r7, [r%d, #-4]!\n", stx, sRR );
+		emit("\ttst     r1, #0x0040\n"); emit("\t%s  r8, [r%d, #-4]!\n", stx, sRR );
+		emit("\ttst     r1, #0x0020\n"); emit("\t%s  r9, [r%d, #-4]!\n", stx, sRR );
+	
+		emit("\ttst     r1, #0x0010\n"); emit("\t%s  r0, [r12, #44]\n\t%s  r0, [r%d, #-4]!\n", ldx, stx, sRR );
+		emit("\ttst     r1, #0x0008\n"); emit("\t%s  r0, [r12, #48]\n\t%s  r0, [r%d, #-4]!\n", ldx, stx, sRR );
+		emit("\ttst     r1, #0x0004\n"); emit("\t%s  r0, [r12, #52]\n\t%s  r0, [r%d, #-4]!\n", ldx, stx, sRR );
+		emit("\ttst     r1, #0x0002\n"); emit("\t%s  r0, [r12, #56]\n\t%s  r0, [r%d, #-4]!\n", ldx, stx, sRR );
+	
+		emit("\ttst     r1, #0x0001\n"); emit("\t%s  r10, [r%d, #-4]!\n", stx, sRR );
+		
+	} else if(opcode & 0x0400) {
+		// memory to register-list, normal reg list D0-D7, A0-A7
+		// address register remains unchanged
+		static bool wrote_movem_m2r_word = false;
+		static bool wrote_movem_m2r_long = false;
+
+		if((wrote_movem_m2r_word && size == 2) || (wrote_movem_m2r_long && size == 4)) {
+			emit("\tb       movem_m2r_%s\n", (size == 2) ? "word" : "long");
+			
+		} else {
+			emit("movem_m2r_%s:\n", (size == 2) ? "word" : "long");
+			emit("\ttst     r1, #0x8000\n"); emit("\t%s  r4, [r2], #4\n", ldx );
+			emit("\ttst     r1, #0x4000\n"); emit("\t%s  r5, [r2], #4\n", ldx );
+			emit("\ttst     r1, #0x2000\n"); emit("\t%s  r6, [r2], #4\n", ldx );
+			emit("\ttst     r1, #0x1000\n"); emit("\t%s  r7, [r2], #4\n", ldx );
+
+			emit("\ttst     r1, #0x0800\n"); emit("\t%s  r0, [r2], #4\n\t%s  r0, [r12, #16]\n", ldx, stx );
+			emit("\ttst     r1, #0x0400\n"); emit("\t%s  r0, [r2], #4\n\t%s  r0, [r12, #20]\n", ldx, stx );
+			emit("\ttst     r1, #0x0200\n"); emit("\t%s  r0, [r2], #4\n\t%s  r0, [r12, #24]\n", ldx, stx );
+			emit("\ttst     r1, #0x0100\n"); emit("\t%s  r0, [r2], #4\n\t%s  r0, [r12, #28]\n", ldx, stx );
+
+			emit("\ttst     r1, #0x0080\n"); emit("\t%s  r7, [r2], #4\n", ldx );
+			emit("\ttst     r1, #0x0040\n"); emit("\t%s  r8, [r2], #4\n", ldx );
+			emit("\ttst     r1, #0x0020\n"); emit("\t%s  r9, [r2], #4\n", ldx );
+		
+			emit("\ttst     r1, #0x0010\n"); emit("\t%s  r0, [r2], #4\n\t%s  r0, [r12, #44]\n", ldx, stx );
+			emit("\ttst     r1, #0x0008\n"); emit("\t%s  r0, [r2], #4\n\t%s  r0, [r12, #48]\n", ldx, stx );
+			emit("\ttst     r1, #0x0004\n"); emit("\t%s  r0, [r2], #4\n\t%s  r0, [r12, #52]\n", ldx, stx );
+			emit("\ttst     r1, #0x0002\n"); emit("\t%s  r0, [r2], #4\n\t%s  r0, [r12, #56]\n", ldx, stx );
+		
+			emit("\ttst     r1, #0x0001\n"); emit("\t%s  r10, [r2], #4\n", ldx );
+			
+			if(size == 2) wrote_movem_m2r_word = true;
+			if(size == 4) wrote_movem_m2r_long = true;
+		}
+
+	} else {
+		// register-list to memory, normal reg list D0-D7, A0-A7
+		// address register remains unchanged
+		static bool wrote_movem_r2m_word = false;
+		static bool wrote_movem_r2m_long = false;
+
+		if((wrote_movem_r2m_word && size == 2) || (wrote_movem_r2m_long && size == 4)) {
+			emit("\tb       movem_r2m_%s\n", (size == 2) ? "word" : "long");
+			
+		} else {
+			emit("movem_r2m_%s:\n", (size == 2) ? "word" : "long");
+
+			emit("\ttst     r1, #0x8000\n"); emit("\t%s  r4, [r2], #4\n", stx );
+			emit("\ttst     r1, #0x4000\n"); emit("\t%s  r5, [r2], #4\n", stx );
+			emit("\ttst     r1, #0x2000\n"); emit("\t%s  r6, [r2], #4\n", stx );
+			emit("\ttst     r1, #0x1000\n"); emit("\t%s  r7, [r2], #4\n", stx );
+
+			emit("\ttst     r1, #0x0800\n"); emit("\t%s  r0, [r12, #16]\n\t%s  r0, [r2], #4\n", ldx, stx );
+			emit("\ttst     r1, #0x0400\n"); emit("\t%s  r0, [r12, #20]\n\t%s  r0, [r2], #4\n", ldx, stx );
+			emit("\ttst     r1, #0x0200\n"); emit("\t%s  r0, [r12, #24]\n\t%s  r0, [r2], #4\n", ldx, stx );
+			emit("\ttst     r1, #0x0100\n"); emit("\t%s  r0, [r12, #28]\n\t%s  r0, [r2], #4\n", ldx, stx );
+
+			emit("\ttst     r1, #0x0080\n"); emit("\t%s  r7, [r2], #4\n", stx );
+			emit("\ttst     r1, #0x0040\n"); emit("\t%s  r8, [r2], #4\n", stx );
+			emit("\ttst     r1, #0x0020\n"); emit("\t%s  r9, [r2], #4\n", stx );
+		
+			emit("\ttst     r1, #0x0010\n"); emit("\t%s  r0, [r12, #44]\n\t%s  r0, [r2], #4\n", ldx, stx );
+			emit("\ttst     r1, #0x0008\n"); emit("\t%s  r0, [r12, #48]\n\t%s  r0, [r2], #4\n", ldx, stx );
+			emit("\ttst     r1, #0x0004\n"); emit("\t%s  r0, [r12, #52]\n\t%s  r0, [r2], #4\n", ldx, stx );
+			emit("\ttst     r1, #0x0002\n"); emit("\t%s  r0, [r12, #56]\n\t%s  r0, [r2], #4\n", ldx, stx );
+		
+			emit("\ttst     r1, #0x0001\n"); emit("\t%s  r10, [r2], #4\n", stx );
+			
+			if(size == 2) wrote_movem_r2m_word = true;
+			if(size == 4) wrote_movem_r2m_long = true;
+		}
+	}
+
+	reg_flush();
+	return lines | EXT_WORD_SRC_16B;
+/*
+*/
+
+}
 
 
 

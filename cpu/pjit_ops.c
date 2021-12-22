@@ -95,16 +95,16 @@ static uint16_t* copy_opcode(uint32_t** out, uint16_t *pc) {
 		*(*out)++ = emit_dst_ext((uint32_t)out, *pc++); 
 		break;
 	case EXT_WORD_DST_16B: 
-		*(*out)++ = emit_movw(1, *pc++); 
+		*(*out)++ = emit_movw(2, *pc++); 
 		break;
 	case EXT_WORD_DST_32B: 
-		*(*out)++ = emit_movw(1, *pc++);
-		*(*out)++ = emit_movt(1, *pc++);
+		*(*out)++ = emit_movw(2, *pc++);
+		*(*out)++ = emit_movt(2, *pc++);
 		break;
 	}
 	
-	if((opea & 0xFF) == 1) *out++ = *(uint32_t*)opaddr;
-	else *out++ = emit_branch(opaddr, (uint32_t)out);
+	if((opea & 0xFF) == 1) *(*out)++ = *(uint32_t*)opaddr;
+	else *(*out)++ = emit_branch(opaddr, (uint32_t)out);
 	
 	return pc;
 }
@@ -112,7 +112,7 @@ static uint16_t* copy_opcode(uint32_t** out, uint16_t *pc) {
 // look up opcode and execute it, but never replace it
 void cpu_lookup_nojit(void) {
 	uint16_t *pc = cache_reverse(lr - 4);
-	uint32_t *out = (uint32_t*)&&killme;
+	uint32_t *out = (uint32_t*)exec_temp;
 
 	// given an opcode, write out the necessary steps to execute it, assuming
 	// we're going to run this immediately in interpreter mode which means we
@@ -128,24 +128,11 @@ void cpu_lookup_nojit(void) {
 	emit_save_cpsr(&out);
 	//emit_return(&out);
 
-	ICacheFlush(&&killme, &&killme2);
+	ICacheFlush(exec_temp, out);
 	isb(); // flush the pipeline
-killme:
-	asm volatile("nop");
-	asm volatile("nop");
-	asm volatile("nop");
-	asm volatile("nop");
-	asm volatile("nop");
-	asm volatile("nop");
-	asm volatile("nop");
-	asm volatile("nop");
-	asm volatile("nop");
-	asm volatile("nop");
-	asm volatile("nop");
-	asm volatile("nop");
-	asm volatile("nop");
-	asm volatile("nop");
-killme2:
+	
+	goto *(void*)exec_temp;
+
 	longjmp(jump_buffer, (uint32_t)pc);
 }
 
@@ -164,23 +151,23 @@ void cpu_lookup_safe(void) {
 // the branch to it and then execute it
 void cpu_lookup_inline(void) {
 	static const uint8_t arm_bcc[16] = {
-			//       M68K OP Description    ARMcc
-			0xEB, // 0000 T  True           1110
-			0xFB, // 0001 F  False          1111
-			0xFF, // 0010 HI Higher         emulate
-			0xFF, // 0011 LS Lower/Same     emulate
-			0x3B, // 0100 CC Carry Clear    0011
-			0x2B, // 0101 CS Carry Set      0010
-			0x1B, // 0110 NE Not Equal      0001
-			0x0B, // 0111 EQ Equal          0000
-			0x7B, // 1000 VC Overflow Clear 0111
-			0x6B, // 1001 VS Overflow Set   0110
-			0x5B, // 1010 PL Plus           0101
-			0x4B, // 1011 MI Minus          0100
-			0xAB, // 1100 GE Greater/Equal  1010
-			0xBB, // 1101 LT Lesser         1011
-			0xCB, // 1110 GT Greater        1100
-			0xDB, // 1111 LE Lesser/Equal   1101
+		//       M68K OP Description    ARMcc
+		0xEB, // 0000 T  True           1110
+		0xFB, // 0001 F  False          1111
+		0xFF, // 0010 HI Higher         emulate
+		0xFF, // 0011 LS Lower/Same     emulate
+		0x3B, // 0100 CC Carry Clear    0011
+		0x2B, // 0101 CS Carry Set      0010
+		0x1B, // 0110 NE Not Equal      0001
+		0x0B, // 0111 EQ Equal          0000
+		0x7B, // 1000 VC Overflow Clear 0111
+		0x6B, // 1001 VS Overflow Set   0110
+		0x5B, // 1010 PL Plus           0101
+		0x4B, // 1011 MI Minus          0100
+		0xAB, // 1100 GE Greater/Equal  1010
+		0xBB, // 1101 LT Lesser         1011
+		0xCB, // 1110 GT Greater        1100
+		0xDB, // 1111 LE Lesser/Equal   1101
 	};
 
 	uint32_t* entry = (uint32_t*)(lr - 4);
@@ -193,7 +180,7 @@ void cpu_lookup_inline(void) {
 		// TODO change this to allow conditional expressions
 		uint32_t o = arm_bcc[(inst & 0x0F00) >> 8];
 		if(o != 0xFF) {
-			*entry = (o << 24) | ((((int8_t)inst) << 2) - 4);
+			*entry = (o << 24) | ((((uint8_t)inst) << 2) - 4);
 			ICacheFlush(entry, entry + 1);
 		}
 		goto *optab[inst];
@@ -234,16 +221,23 @@ void cpu_dump_state(void) {
 // This should be odd-aligned to be impossible addresses to jump to
 #define PJIT_EXIT (0xC0DEBABE | 1)
 
-void cpu_jump(uint32_t m68k_pc) {
-	longjmp(jump_buffer, m68k_pc);
-}
-
 void cpu_exit(void) {
 	longjmp(jump_buffer, PJIT_EXIT);
 }
 
+void cpu_jump(uint32_t m68k_pc) {
+	longjmp(jump_buffer, m68k_pc);
+}
+
 void relative_branch(uint32_t _lr, int32_t offset) {
 	cpu_jump(cache_reverse(_lr) + offset);
+}
+
+void branch_subroutine(uint32_t _lr, int32_t offset) {
+	// TODO implement me
+}
+
+void cpu_subroutine(uint32_t m68k_pc) {
 }
 
 // start may either point to the PJIT cache or the interpreter function

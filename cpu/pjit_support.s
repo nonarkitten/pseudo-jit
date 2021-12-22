@@ -31,3 +31,70 @@ iflushloop:
  
     DSB
     BX      lr
+
+	.global SDiv32x16	
+SDiv32x16:
+	MOV     r2, #0
+	CMP		r0, #0
+	RSBLT   r0, r0, #0
+	EORLT   r2, r2, #1
+	CMP		r1, #0
+	RSBLT   r1, r1, #0
+	EORLT   r2, r2, #1
+
+	RSB		r1, r1, #0
+	
+	MOVS	r1, r1, lsl #15
+	ADDS	r0, r1, r0
+	RSBCC	r0, r1, r0
+
+	.rept	15
+	ADCS	r0, r1, r0, lsl #1
+	RSBCC	r0, r1, r0
+	.endr
+
+	ADC		r0, r0, r0
+	CMP     r2, #1
+	RSBEQ   r0, r0, #0
+
+	BX		lr
+	
+	.global UDiv32x16	
+UDiv32x16:
+	RSB		r1, r1, #0
+	MOVS	r1, r1, lsl #15
+	ADDS	r0, r1, r0
+	RSBCC	r0, r1, r0
+
+	.rept	15
+	ADCS	r0, r1, r0, lsl #1
+	RSBCC	r0, r1, r0
+	.endr
+
+	ADCS	r0, r0, r0
+
+	BX		lr
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

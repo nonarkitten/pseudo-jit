@@ -16,6 +16,9 @@
 
 // TODO add this to the emitter (currently, it's just emitting size)
 // TODO extend this for 68020 addressing modes
+
+#ifndef EXT_WORD_DEFINED
+#define EXT_WORD_DEFINED
 typedef enum {
 	EXT_WORD_SRC_EXT = 0x0100,
 	EXT_WORD_SRC_16B = 0x0200,
@@ -24,6 +27,17 @@ typedef enum {
 	EXT_WORD_DST_16B = 0x2000,
 	EXT_WORD_DST_32B = 0x3000,
 } ext_word_t;
+#endif
+
+typedef enum {
+	ALU_OP_OR,
+	ALU_OP_AND,
+	ALU_OP_SUB,
+	ALU_OP_ADD,
+	ALU_OP_EOR,
+	ALU_OP_CMP,
+	ALU_OP_MOVE,
+} ALU_OP_t;
 
 #define NO_BX_LR 0x7700
 
@@ -155,21 +169,21 @@ typedef struct {
 	union {
 		uint16_t sr;
 		struct {
-			uint8_t system_byte;
 			uint8_t user_byte;
+			uint8_t system_byte;
 		};
 		struct {
-			uint16_t T : 1;
-			uint16_t   : 1;
-			uint16_t S : 1;
-			uint16_t   : 2;
-			uint16_t I : 3;
-			uint16_t   : 3;
-			uint16_t X : 1;
-			uint16_t N : 1;
-			uint16_t Z : 1;
-			uint16_t V : 1;
 			uint16_t C : 1;
+			uint16_t V : 1;
+			uint16_t Z : 1;
+			uint16_t N : 1;
+			uint16_t X : 1;
+			uint16_t   : 3;
+			uint16_t I : 3;			
+			uint16_t   : 2;
+			uint16_t S : 1;
+			uint16_t   : 1;
+			uint16_t T : 1;
 		};
 	};
 	// Padding for 32-bit alignment
@@ -180,6 +194,13 @@ typedef struct {
 
 	// Program counter
 	uint32_t pc;
+
+	// Program counter
+	uint32_t x;
+
+	// Conversion tables for 68K to ARM condition codes
+	uint32_t cc2arm[16];
+	uint8_t arm2cc[16];
 
 	// Base address cache
 	void        *base_ptr;
@@ -200,5 +221,26 @@ typedef struct {
 	uint16_t    padding;
 #endif
 } cpu_t;
+
+typedef union {
+    uint32_t 	word;     //  Type used for word access. 
+    struct {
+        uint32_t   M:5;   // bit: 0.. 4 Mode field  
+        uint32_t   T:1;   // bit: 5 Thumb execution state bit  
+        uint32_t   F:1;   // bit: 6 FIQ mask bit  
+        uint32_t   I:1;   // bit: 7 IRQ mask bit 
+        uint32_t   A:1;   // bit: 8 Asynchronous abort mask bit 
+        uint32_t   E:1;   // bit: 9 Endianness execution state bit 
+        uint32_t   IT1:6; // bit: 10..15 If-Then execution state bits 2-7  
+        uint32_t   GE:4;  // bit: 16..19 Greater than or Equal flags 
+        uint32_t   J:1;   // bit: 24 Jazelle bit  
+        uint32_t   IT0:2; // bit: 25..26 If-Then execution state bits 0-1 
+        uint32_t   Q:1;   // bit: 27 Saturation condition flag  
+        uint32_t   V:1;   // bit: 28 Overflow condition code flag 
+        uint32_t   C:1;   // bit: 29 Carry condition code flag 
+        uint32_t   Z:1;   // bit: 30 Zero condition code flag 
+        uint32_t   N:1;   // bit: 31 Negative condition code flag 
+    };
+} cpsr_t;
 
 #endif

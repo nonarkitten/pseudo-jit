@@ -180,7 +180,7 @@ static inline uint32_t alu_eor(uint32_t a, uint32_t b) {
 /* EXTBW */
 static inline uint32_t alu_extbw(uint32_t a) {
 	uint32_t junk;
-	a = (a & 0xFFFF0000u) | ((int16_t)(int8_t)a);
+	a = (a & 0xFFFF0000u) | ((int16_t)(uint8_t)a);
 	ASM("rors %0, %1, #16" : "+r"(junk) : "r"(a));
 	return a;
 }
@@ -194,7 +194,7 @@ static inline uint32_t alu_extwl(uint32_t a) {
 
 /* EXTBL */
 static inline uint32_t alu_extbl(uint32_t a) {
-	a = (uint32_t)(int32_t)(int8_t)a;
+	a = (uint32_t)(int32_t)(uint8_t)a;
 	ASM("tst %0, #0" :: "r"(a));
 	return a;
 }
@@ -571,7 +571,7 @@ static inline uint32_t alu_eor(uint32_t a, uint32_t b) {
 /* EXTBW */
 static inline uint32_t alu_extbw(uint32_t a) {
 	// TODO: add flag check
-	return (uint32_t)(int16_t)(int8_t)a;
+	return (uint32_t)(int16_t)(uint8_t)a;
 }
 
 /* EXTWL */
@@ -583,7 +583,7 @@ static inline uint32_t alu_extwl(uint32_t a) {
 /* EXTBL */
 static inline uint32_t alu_extbl(uint32_t a) {
 	// TODO: add flag check
-	return (uint32_t)(int32_t)(int8_t)a;
+	return (uint32_t)(int32_t)(uint8_t)a;
 }
 
 /* LSL */

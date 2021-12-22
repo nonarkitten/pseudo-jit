@@ -1,6 +1,12 @@
 #include "m68k_common.h"
 #include "m68k_emitters.h"
 #include "m68k_cpu.h"
+#include "m68k_emit_ea.h"
+#include "m68k_registers.h"
+
+extern const char* m68k_disasm(uint16_t op);
+
+int avoid_register_saving = 0;
 
 int lines;
 int debug;
@@ -74,99 +80,138 @@ static const char* header =
 
 // In all cases, this is a common and generic inlined operation
 
+// static const struct op_synonyms {
+// 
+// } opsyn[] = {
+	// PJIT ADDITIONS
+	//
+	// alu.bwl	Dx,Dy (ea)	alu.bwl		Dx,Dy (reg)	
+	// any abs.w			abs.l						Immediate is precalc
+	// any d8(Xn,An)		d!6(An)						Index is precalc
+	//
+	// STANDARD LIST
+	//
+	// USE OF IMMEDIATE FORMS (DONE)
+	// add.bwl	#imm,Dn		addi.bwl	#imm.Dn
+	// and.bwl	#imm,Dn		andi.bwl 	#imm,An
+	// cmp.bwl	#imm,Dn		cmpi.bwl 	#imm.Dn
+	// or.bwl	#imm,Dn		ori.bwl		#imm,Dn
+	// sub.bwl	#imm,Dn		subi.bwl	#imm,Dn
+	//
+	// QUICK EQUIVALENT (DONE)
+	// addq.w	#imm,An		addq.l 		#imm,An
+	// subq.w	#imm,Dn		subq.l 		#imm,Dn
+	//
+	// NOT DONE
+	// adda.w	#imm,An	 	lea.l 		imm(An),An
+	// asl.bwl	#1,Dn		add.bwl 	Dn,Dn
+	// bra.s	*+4			dbt.w 		Dx,xxxx (32 bit NOP)
+	// bra.w	d16			jmp 		d16(PC)
+	// bsr.w	d16			jsr 		d16(PC)
+	// clr.l	Dn			moveq.l 	#0,Dn
+	// lea.l	(As),Ad		movea.l 	As,Ad
+	// lea.l	abs.w,An	movea.w 	#imm16,An
+	// lea.l	abs.l,An	movea.l 	#imm32,An
+	// movea.l	(A7),A7		unlk 		a7
+	//
+	
+//}
+
+
+
 static const struct op_details {
     uint16_t base, bits;
     int (*emit)(char*,uint16_t);
 } optab[] = {
-//     { 0x003C, 0x0000, emit_ORI_TO_CCR    },
-//     { 0x007C, 0x0000, emit_ORI_TO_SR     },
-//     { 0x0000, 0x00FF, emit_ORI           },
-//     { 0x023C, 0x0000, emit_ANDI_TO_CCR   },
-//     { 0x027C, 0x0000, emit_ANDI_TO_SR    },
-//     { 0x0200, 0x00FF, emit_ANDI          },
-//     { 0x0400, 0x00FF, emit_SUBI          },
-//     { 0x0600, 0x00FF, emit_ADDI          },
-//     { 0x0A3C, 0x0000, emit_EORI_TO_CCR   },
-//     { 0x0A7C, 0x0000, emit_EORI_TO_SR    },
-//     { 0x0A00, 0x00FF, emit_EORI          },
-//     { 0x0C00, 0x00FF, emit_CMPI          },
-//     { 0x0800, 0x003F, emit_BTSTI         },
-//     { 0x0840, 0x003F, emit_BCHGI         },
-//     { 0x0880, 0x003F, emit_BCLRI         },
-//     { 0x08C0, 0x003F, emit_BSETI         },
-//     { 0x0100, 0x0E3F, emit_BTST          },
-//     { 0x0140, 0x0E3F, emit_BCHG          },
-//     { 0x0180, 0x0E3F, emit_BCLR          },
-//     { 0x01C0, 0x0E3F, emit_BSET          },
-//     { 0x0108, 0x0EC7, emit_MOVEP         },
+    { 0x003C, 0x0000, emit_ORI_TO_CCR    },
+    { 0x007C, 0x0000, emit_ORI_TO_SR     },
+    { 0x0000, 0x00FF, emit_ORI           },
+    { 0x023C, 0x0000, emit_ANDI_TO_CCR   },
+    { 0x027C, 0x0000, emit_ANDI_TO_SR    },
+    { 0x0200, 0x00FF, emit_ANDI          },
+    { 0x0400, 0x00FF, emit_SUBI          },
+    { 0x0600, 0x00FF, emit_ADDI          },
+    { 0x0A3C, 0x0000, emit_EORI_TO_CCR   },
+    { 0x0A7C, 0x0000, emit_EORI_TO_SR    },
+    { 0x0A00, 0x00FF, emit_EORI          },
+    { 0x0C00, 0x00FF, emit_CMPI          },
+    { 0x0800, 0x003F, emit_BTSTI         },
+    { 0x0840, 0x003F, emit_BCHGI         },
+    { 0x0880, 0x003F, emit_BCLRI         },
+    { 0x08C0, 0x003F, emit_BSETI         },
+    { 0x0100, 0x0E3F, emit_BTST          },
+    { 0x0140, 0x0E3F, emit_BCHG          },
+    { 0x0180, 0x0E3F, emit_BCLR          },
+    { 0x01C0, 0x0E3F, emit_BSET          },
+    { 0x0108, 0x0EC7, emit_MOVEP         },
     { 0x1000, 0x0FFF, emit_MOVEB         },
     { 0x2000, 0x0FFF, emit_MOVEL         },
     { 0x3000, 0x0FFF, emit_MOVEW         },
-//     { 0x40C0, 0x003F, emit_MOVE_FROM_SR  },
-//     { 0x44C0, 0x003F, emit_MOVE_TO_CCR   },
-//     { 0x46C0, 0x003F, emit_MOVE_TO_SR    },
-//     { 0x4000, 0x00FF, emit_NEGX          },
-//     { 0x4200, 0x00FF, emit_CLR           },
-//     { 0x4400, 0x00FF, emit_NEG           },
-//     { 0x4600, 0x00FF, emit_NOT           },
-//     { 0x4880, 0x0047, emit_EXT           },
-//     { 0x4800, 0x003F, emit_NBCD          },
-//     { 0x4840, 0x0007, emit_SWAP          },
-//     { 0x4840, 0x003F, emit_PEA           },
+    { 0x40C0, 0x003F, emit_MOVE_FROM_SR  },
+    { 0x44C0, 0x003F, emit_MOVE_TO_CCR   },
+    { 0x46C0, 0x003F, emit_MOVE_TO_SR    },
+    { 0x4000, 0x00FF, emit_NEGX          },
+    { 0x4200, 0x00FF, emit_CLR           },
+    { 0x4400, 0x00FF, emit_NEG           },
+    { 0x4600, 0x00FF, emit_NOT           },
+    { 0x4880, 0x0047, emit_EXT           },
+    { 0x4800, 0x003F, emit_NBCD          },
+    { 0x4840, 0x0007, emit_SWAP          },
+    { 0x4840, 0x003F, emit_PEA           },
     { 0x4AFC, 0x0000, emit_ILLEGAL       },
-//     { 0x4AC0, 0x003F, emit_TAS           },
-//     { 0x4A00, 0x00FF, emit_TST           },
+    { 0x4AC0, 0x003F, emit_TAS           },
+    { 0x4A00, 0x00FF, emit_TST           },
     { 0x4E40, 0x000F, emit_TRAP          },
-//     { 0x4E50, 0x0007, emit_LINK          },
-//     { 0x4E58, 0x0007, emit_UNLK          },
-//     { 0x4E60, 0x000F, emit_MOVE_USP      },
+    { 0x4E50, 0x0007, emit_LINK          },
+    { 0x4E58, 0x0007, emit_UNLK          },
+    { 0x4E60, 0x000F, emit_MOVE_USP      },
     { 0x4E70, 0x0000, emit_RESET         },
     { 0x4E71, 0x0000, emit_NOP           },
-//     { 0x4E72, 0x0000, emit_STOP          },
-//     { 0x4E73, 0x0000, emit_RTE           },
-//     { 0x4E75, 0x0000, emit_RTS           },
-//     { 0x4E76, 0x0000, emit_TRAPV         },
-//     { 0x4E77, 0x0000, emit_RTR           },
-//     { 0x4E80, 0x003F, emit_JSR           },
-//     { 0x4EC0, 0x003F, emit_JMP           },
-//     { 0x4880, 0x047F, emit_MOVEM         },
-//     { 0x41C0, 0x0E3F, emit_LEA           },
-//     { 0x4180, 0x0E3F, emit_CHK           },
-//     { 0x50C8, 0x0F07, emit_DBCC          },
-//     { 0x50C0, 0x0F3F, emit_SCC           },
+    { 0x4E72, 0x0000, emit_STOP          },
+    { 0x4E73, 0x0000, emit_RTE           },
+    { 0x4E75, 0x0000, emit_RTS           },
+    { 0x4E76, 0x0000, emit_TRAPV         },
+    { 0x4E77, 0x0000, emit_RTR           },
+    { 0x4E80, 0x003F, emit_JSR           },
+    { 0x4EC0, 0x003F, emit_JMP           },
+    { 0x4880, 0x047F, emit_MOVEM         },
+    { 0x41C0, 0x0E3F, emit_LEA           },
+    { 0x4180, 0x0E3F, emit_CHK           },
+    { 0x50C8, 0x0F07, emit_DBCC          },
+    { 0x50C0, 0x0F3F, emit_SCC           },
     { 0x5000, 0x0EFF, emit_ADDQ          },
     { 0x5100, 0x0EFF, emit_SUBQ          },
     { 0x6000, 0x00FF, emit_BRA           },
-//     { 0x6100, 0x00FF, emit_BSR           },
+    { 0x6100, 0x00FF, emit_BSR           },
     { 0x6000, 0x0FFF, emit_BCC           },
     { 0x7000, 0x0EFF, emit_MOVEQ         },
-//     { 0x80C0, 0x0E3F, emit_DIVU          },
-//     { 0x81C0, 0x0E3F, emit_DIVS          },
-//     { 0x8100, 0x0E0F, emit_SBCD          },
-//     { 0x8000, 0x0FFF, emit_OR            },
-//     { 0x90C0, 0x0F3F, emit_SUBA          },
-//     { 0x9100, 0x0ECF, emit_SUBX          },
-//     { 0x9000, 0x0FFF, emit_SUB           },
-//     { 0xB0C0, 0x0F3F, emit_CMPA          },
-//     { 0xB108, 0x0EC7, emit_CMPM          },
-//     { 0xB100, 0x0EFF, emit_EOR           },
-//     { 0xB000, 0x0EFF, emit_CMP           },
-//     { 0xC0C0, 0x0E3F, emit_MULU          },
-//     { 0xC1C0, 0x0E3F, emit_MULS          },
-//     { 0xC100, 0x0E0F, emit_ABCD          },
-//     { 0xC100, 0x0ECF, emit_EXG           },
-//     { 0xC000, 0x0FFF, emit_AND           },
-//     { 0xD0C0, 0x0F3F, emit_ADDA          },
-//     { 0xD100, 0x0ECF, emit_ADDX          },
-//     { 0xD000, 0x0FFF, emit_ADD           },
-//     { 0xE0C0, 0x013F, emit_ASD_EA        },
-//     { 0xE2C0, 0x013F, emit_LSD_EA        },
-//     { 0xE4C0, 0x013F, emit_ROXD_EA       },
-//     { 0xE6C0, 0x013F, emit_ROD_EA        },
-//     { 0xE000, 0x0FE7, emit_ASD           },
-//     { 0xE008, 0x0FE7, emit_LSD           },
-//     { 0xE010, 0x0FE7, emit_ROXD          },
-//     { 0xE018, 0x0FE7, emit_ROD           },
+    { 0x80C0, 0x0E3F, emit_DIVU          },
+    { 0x81C0, 0x0E3F, emit_DIVS          },
+    { 0x8100, 0x0E0F, emit_SBCD          },
+    { 0x8000, 0x0FFF, emit_OR            },
+    { 0x90C0, 0x0F3F, emit_SUBA          },
+    { 0x9100, 0x0ECF, emit_SUBX          },
+    { 0x9000, 0x0FFF, emit_SUB           },
+    { 0xB0C0, 0x0F3F, emit_CMPA          },
+    { 0xB108, 0x0EC7, emit_CMPM          },
+    { 0xB100, 0x0EFF, emit_EOR           },
+    { 0xB000, 0x0EFF, emit_CMP           },
+    { 0xC0C0, 0x0E3F, emit_MULU          },
+    { 0xC1C0, 0x0E3F, emit_MULS          },
+    { 0xC100, 0x0E0F, emit_ABCD          },
+    { 0xC100, 0x0ECF, emit_EXG           },
+    { 0xC000, 0x0FFF, emit_AND           },
+    { 0xD0C0, 0x0F3F, emit_ADDA          },
+    { 0xD100, 0x0ECF, emit_ADDX          },
+    { 0xD000, 0x0FFF, emit_ADD           },
+    { 0xE0C0, 0x013F, emit_ASD_EA        },
+    { 0xE2C0, 0x013F, emit_LSD_EA        },
+    { 0xE4C0, 0x013F, emit_ROXD_EA       },
+    { 0xE6C0, 0x013F, emit_ROD_EA        },
+    { 0xE000, 0x0FE7, emit_ASD           },
+    { 0xE008, 0x0FE7, emit_LSD           },
+    { 0xE010, 0x0FE7, emit_ROXD          },
+    { 0xE018, 0x0FE7, emit_ROD           },
     { 0xA000, 0x0FFF, emit_A_LINE        },
     { 0xF000, 0x0FFF, emit_F_LINE        },
     
@@ -175,17 +220,16 @@ static const struct op_details {
 };
 static const uint32_t optab_size = sizeof(optab) / sizeof(struct op_details);
 
+static int invalid = 0;
+
 // Opcode emitters should return the number of lines they emit
 
 // Opcode emitters should not include either the label or return
 
 // Opcode emitters should return the negative of the root opcode if they're
 // an alias of another opcode
-
-static int invalid = 0;
-
 static int emit_SVC(char *buffer, int exception) {
-	stream( buffer, 0, STREAM_SET );
+	emit_reset( buffer );
 	emit("\tsvc     #%d\n", exception);
 	return 1;
 }
@@ -194,7 +238,7 @@ int emit_ILLEGAL(char *buffer, uint16_t opcode) {
 	return emit_SVC(buffer, ILLINSTR);
 }
 int emit_INVALID(char *buffer, uint16_t opcode) {
-	invalid++;
+//	invalid++;
 	return -0x4AFC;
 }
 int emit_A_LINE(char *buffer, uint16_t opcode) {
@@ -211,60 +255,127 @@ int emit_RESET(char *buffer, uint16_t opcode) {
 int emit_TRAP(char *buffer, uint16_t opcode) {
 	return emit_SVC(buffer, TRAP0 + (opcode & 0xF));
 }
+int emit_TRAPV(char *buffer, uint16_t opcode) {
+	emit_reset( buffer );
+	emit("\tsvcvs   #%d\n", TRAPV);
+	return 1;
+}
 int emit_NOP(char *buffer, uint16_t opcode) {
-	stream( buffer, 0, STREAM_SET );
+	emit_reset( buffer );
 	emit("\tnop\n");
 	return 1;
 }
 
-int main(void) {
-	const char *omitted = "// omitted\n";
-	char buffer[4096];
+int main(int argc, char ** argv) {
+//	const char *omitted = "// omitted\n";
+	char buffer[16384];
 	int line_counts[20] = { 0 };
 	int total_arm = 0;
 	int total_68k = 0;
-	int total_alias = 0;	
+	int total_alias = 0;
+	int total_nops = 0;
+	int total_written = 0;
 	
+	if(argc == 2) {
+		uint16_t opcode = strtoul(argv[1], 0, 0);
+		debug = 1;
+		printf("@ %s", m68k_disasm(opcode));
+try_again:
+		for(int i=0; i<optab_size; i++) {
+			if((opcode & ~optab[i].bits) == optab[i].base) {
+				int n = optab[i].emit(buffer, opcode);
+				if(n == -1) continue;
+				else if(n == -0x4AFC) break;
+				else if(n == 0) {
+					printf("Opcode is NOP\n");
+				} else if(n < 0) {
+					printf("Opcode %04X is alias of %04X\n", opcode, -n);
+					opcode = -n;
+					//n = optab[i].emit(buffer, -n);
+					goto try_again;
+				}
+				
+				printf("%s\nLines: %d\n", buffer, n);
+				return 0;
+			}
+		}
+		printf("Opcode %04X appears invalid.\n", opcode);
+		return -1;
+	}
+
+	for(int i=0; i<0x10000; i++)
+		opcode_len[i] = 0;
+		
+	// 0 nothing
+	// <0 alias for -n
+	// >0 actual length + flags
+		
 	// Generate all the opcodes first
 	for(int i=0; i<optab_size; i++) {
 		uint16_t base = optab[i].base, bits = 0, opcode;
 
 		do {
-			opcode = bits | base;			
-
-			if((opcodes[opcode] == 0) && (opcode_len[opcode] == 0)) {
+			opcode = bits | base;
+			//printf(" %04X", opcode);
+			if(opcode_len[opcode] == 0) {
+				// return -1 when invalid
 				int n = optab[i].emit(buffer, opcode);
-
-// 				if(opcode == 0x2001) {
-// 					fprintf(stderr, "%04x emitted\n%slines: %d", opcode, buffer, n);
-// 				
-// 				}
+				if(opcode == 0x0CF8) printf("emit returned %d (%04X) lines:\n%s", n, -n, buffer);
 
 				if(n != -1) {
-					if(n == 0) {
-						opcodes[opcode] = (char*)omitted;
+					if(n == 0) { // no length, NOP
 						opcode_len[opcode] = -0x4E71;
-						line_counts[1]++;
+						total_nops++;
 						total_68k++;
 						total_alias++;
 					}
-					else if(n > 0) {
+					else if(n > 0) { // actual opcode
 						opcodes[opcode] = strdup(buffer);
+						opcode_len[opcode] = n;
 						line_counts[n & 0xFF]++;
 						total_arm += n & 0xFF;
+						total_written++;
 						total_68k++;
 					}
-					else {
-						//fprintf(stderr, "%04x is alias for %04x\n", opcode, -n);
+					else { // alias
+						opcode_len[opcode] = n;
 						total_68k++;
 						total_alias++;
 					}
-					opcode_len[opcode] = n;
-				}				
+				}
 			}
 			bits = (bits - optab[i].bits) & optab[i].bits;
 		} while(bits);
 	}
+	
+	printf("! %04X\n", -opcode_len[0x0CF8]);
+	
+	int count = 0;
+	for(int i=0; i<0x10000; i++) {
+		int len = opcode_len[i];
+		count += len != 0;
+	}
+
+	int dirty = true;
+	while(dirty) {
+		dirty = false;
+		for(int i=0; i<0x10000; i++) {
+			int len = opcode_len[i];
+			if(len < 0) {
+				uint16_t l2 = -opcode_len[-len];
+				if(l2 == 0x4AFC) {
+					opcode_len[i] = -0x4AFC;
+					//printf("Invalid ");
+					// && (opcode_len[(-len) & 0xFFFF] == 0x4AFC)) {
+					printf("Invalid alias found at %04X to %04X (%04x)\n", i, -len, l2);
+					dirty = true;
+				}
+			}
+		}
+	}
+	
+	int total_real_valid = 0;
+	int total_errors = 0;
 	
 	// Emit the opcode functions in sixteen files
 	for(int i=0; i<0x10000; i+=0x1000) {
@@ -274,29 +385,45 @@ int main(void) {
 		FILE * file = fopen( filename, "w" );
 				
 		fprintf(file, "%s", header);
-		
+	
 		fprintf(file, "\t.text\n\n");
 		fprintf(file, "\t.code 32\n\n");
 				
 		for(int j=0; j<0x1000; j++) {
 			uint16_t opcode = i + j;
+			const char *m68k_op = m68k_disasm(opcode);
+			bool valid = (opcode == 0x4AFC) || memcmp(m68k_op, "ILLEGAL", 7);
+			if(valid) total_real_valid++;
 			
 			// print out all the aliases for this
-			if(opcode_len[opcode] >= 0) {
+			if(opcode_len[opcode] > 0) {
 				char *op = "\tnop\n";
 				int len = opcode_len[opcode] & 0xFF;
 				if(len > 0) op = opcodes[opcode];
 				fprintf(file, "\t.global opcode_%04x\n", opcode);
+				fprintf(file, "\t.syntax unified\n");
+				fprintf(file, "\t@ %s", m68k_op);
 				fprintf(file, "opcode_%04x:\n%s", opcode, op);
 				
 				if((opcode_len[opcode] & NO_BX_LR) != NO_BX_LR)
 					fprintf(file, "\tbx      lr\n");
 				fprintf(file, "\n");
+				if(!valid) {
+					printf("ERR: opcode emitted for invalid pattern %04X\n", opcode);
+					total_errors++;
+				}
+			} else if(opcode_len[opcode] == 0) {
+				if(valid) {
+				printf("ERR: opcode skipped for valid pattern %04X: %s", opcode, m68k_op);
+					total_errors++;
+				}
 			}
 		}
 		fprintf(file, "\tnop\n\n");		
 		fclose(file);
 	}
+	
+	printf("Total errors: %d\n", total_errors);
 
 	// Emit the op lengths
 	{
@@ -325,6 +452,8 @@ int main(void) {
 		fclose(file);
 	}
 
+	printf("! %04X\n", -opcode_len[0x0CF8]);
+
 	// Emit the op pointers
 	{
 		char filename[16];
@@ -338,7 +467,7 @@ int main(void) {
 		
 		for(int i=0; i<0x10000; i++) {
 			if((i & 4095) == 0) fprintf(file, "\n// %04X\n\t.long ", i);
-			else if((i & 3) == 0) fprintf(file, "\n\t.long ");
+			else if((i & 3) == 0) fprintf(file, "\t// %04X\n\t.long ", i - 4);
 			
 			char sepr = (i & 3) ? ',' : ' ';
 
@@ -381,9 +510,10 @@ int main(void) {
 					fprintf(file, "%s", branches);
 				
 					buffer[0] = 0;
-					stream( buffer, 0, STREAM_SET );
+					emit_reset( buffer );
 					reg_alloc_arm(r);
-					int rD = reg_alloc_68k(d, 0); 
+					uint8_t rD;
+					reg_alloc_68k(&rD, d); // todo bail?
 				
 					fprintf(file, "0:\n%s", buffer);
 					if(s==0) {
@@ -422,16 +552,33 @@ int main(void) {
 	// add all the return statements and bonus NOPs
 	total_arm += (total_68k - total_alias) + 16;
 	
-	printf("total 68k instructions: %d\n", total_68k );
-	printf("invalid 68k instructions: %d\n", invalid );
-	printf("aliased 68k instructions: %d\n", total_alias );
-	printf("unique 68k instructions: %d\n", (total_68k - total_alias));
+	printf("\n");
+	printf("\n");
+	printf("total 68k instructions: %d (should be 65536)\n", total_68k );
+	printf("total real valid 68k instructions: %d\n", total_real_valid );
+	printf("total generated, valid opcodes: %d\n", count);
+	printf("total missing opcodes: %d\n", total_real_valid - count);
+	printf("\n");
+	printf("total 68k instructions with code: %d\n", total_written );
+	printf("\n");
+	printf("total aliased 68k instructions: %d\n", total_alias );
+	printf("  invalid aliased 68k instructions: %d\n", invalid );
+	printf("  aliased nop 68k instructions: %d\n", total_nops );
+
+//	print_old_optab();
+// 	int total_nops = 0;
+// 	int total_written = 0;
+		
+//	printf("missing 68k instructions: %d\n", bad_opcodes);//total_68k - (total_written + total_alias) );
+	
+	//printf("unique 68k instructions: %d\n", (total_68k - total_alias));
 	printf("total arm instructions: %d (%d bytes)\n", total_arm, total_arm * 4);
+	
 	float average = 0.0f;
 	for(int i=1; i<20; i++) {
 		printf("functions with %d lines: %d\n", i, line_counts[i]);
 		average += i * line_counts[i];
-		if(line_counts[i] == 0) break;
+		if(i > 8 && line_counts[i] == 0) break;
 	}
 	average /= (float)(total_68k - total_alias);
 	printf("line average: %f\n", average);
