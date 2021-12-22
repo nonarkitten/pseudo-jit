@@ -9,5 +9,10 @@
 ._*
 
 # Actual project stuff
-Debug/
-Release/
+
+# GNU cruft
+.cscode
+*.o
+*~
+.#*
+*#
