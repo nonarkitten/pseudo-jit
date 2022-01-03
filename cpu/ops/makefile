@@ -1,18 +1,23 @@
 OUTPUT  := make_m68k
 SOURCES := $(wildcard *.c)
-OBJECTS := $(patsubst %.c,%.o, $(SOURCES))
+OBJECTS := $(patsubst %.c,obj/%.o, $(SOURCES))
 
 CFLAGS  := -g -Wall -Werror 
 
 .PHONY: all
-all: $(OBJECTS)
+all: premake $(OBJECTS)
 	$(CXX) $(CFLAGS) $(CXXFLAGS) $(INCLUDE) $(OBJECTS) -o $(OUTPUT)
+	./$(OUTPUT)
 	
-%: %.c
-	$(CC) $(CFLAGS) $(CCFLAGS) $(INCLUDE) $< -o $@
-	$(OUTPUT)
+.PHONY: premake
+premake:
+	mkdir -p obj
+
+obj/%.o: %.c
+	$(CC) $(CFLAGS) $(CCFLAGS) $(INCLUDE) -c $< -o $@
 
 clean:
 	rm -rf *.s
-	rm -rf *.o
+	rm -rf obj/*.o
 	rm -f $(OUTPUT)
+	rmdir obj
