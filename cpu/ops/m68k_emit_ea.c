@@ -2,6 +2,8 @@
 #include "m68k_emit_ea.h"
 #include "m68k_registers.h"
 
+//----------------------------------------------------------------------------
+
 // EFFECTIVE ADDRESS GENERATION
 
 // REMEMBER
@@ -41,176 +43,121 @@ int emit_get_reg(uint8_t* reg_arm, uint8_t reg_68k, uint8_t size) {
 	return 1;
 }
 
-// perform source effective address load, return 1 on success
-int get_source_data( uint8_t* sRR, uint16_t sEA, uint8_t sR, uint16_t size ) {
+// \brief Perform effective address load
+// \param sRR The register number which contains the read DATA
+// \param dRR The register number which contains the real ARM address this came from; if sEA is a register mode, then this is not used
+// \param sEA The source effective address
+// \param sR The 68K source register
+// \param size The size of the operation in bytes (1, 2 ro 4)
+// \param is_src Set to true when this is a source EA mode and data will not be rewritten
+// \return If successful, returns 1
+static int emit_fetch_ea_data( uint8_t* dRR, uint8_t* sRR, uint16_t sEA, uint8_t sR, uint16_t size, uint8_t is_src ) {
 	uint8_t tRR;
-	
-	if(sRR == NULL) return 0;
-	
-	switch(sEA) {
-	default:
-		printf("@ source ea error\n");
+	uint8_t omit_bic = 0;
+
+	if(dRR == NULL) {
+		if(debug) printf("@ NULL passed for dRR\n");
 		return 0;
-	case EA_DREG:
-	case EA_AREG:
-		return emit_get_reg(sRR, sR, size);
+	}
+	if(sEA == EA_DREG || sEA == EA_AREG) {
+		if(sEA == EA_AREG && size == 1) {
+			if(debug) printf("@ AREG invalid for destination mode\n");
+			return 0;
+		}
+		return sRR ? emit_get_reg(sRR, sR, size) : 1;
 
-	case EA_ADDR:
-		if(emit_get_reg( &tRR, sR, 4 ) == ALLOC_FAILED) return 0;
-		if(reg_alloc_temp( sRR ) == ALLOC_FAILED) return 0;
-		emit("\t%s   r%d, [r%d]\n", ldx(size), *sRR, tRR);
-		if(size == 4) emit("\tror     r%d, #16\n", *sRR);
-		return (reg_free(tRR) == ALLOC_OKAY);
-
-	case EA_AINC:
-		if(emit_get_reg( &tRR, sR, 4 ) == ALLOC_FAILED) return 0;
-		if(reg_alloc_temp( sRR ) == ALLOC_FAILED) return 0;
-		emit("\t%s   r%d, [r%d], #%d\n", ldx(size), *sRR, *sRR, size);
-		if(size == 4) emit("\tror     r%d, #16\n", *sRR);
-		if(reg_modified(tRR) == ALLOC_FAILED) return 0;
-		return (reg_free(tRR) == ALLOC_OKAY);
-
-	case EA_ADEC:
-		if(emit_get_reg( &tRR, sR, 4 ) == ALLOC_FAILED) return 0;
-		if(reg_alloc_temp( sRR ) == ALLOC_FAILED) return 0;
-		emit("\t%s   r%d, [r%d, #-%d]!\n", ldx(size), *sRR, *sRR, size);
-		if(size == 4) emit("\tror     r%d, #16\n", *sRR);
-		if(reg_modified(tRR) == ALLOC_FAILED) return 0;
-		return (reg_free(tRR) == ALLOC_OKAY);
-
-	case EA_AIDX:
-	case EA_ADIS:
-		if(reg_alloc_arm(1) == ALLOC_FAILED) return 0;
-		if(emit_get_reg( &tRR, sR, 4 ) == ALLOC_FAILED) return 0;
-		if(reg_alloc_temp( sRR ) == ALLOC_FAILED) return 0;
-		emit("\t%s   r%d, [r1, r%d]\n", ldx(size), *sRR, tRR);
-		if(size == 4) emit("\tror     r%d, #16\n", *sRR);
-		return (reg_free(1) == ALLOC_OKAY) && (reg_free(tRR) == ALLOC_OKAY);
-
-	case EA_ABSW:
-	case EA_ABSL:
-	case EA_PIDX:
-	case EA_PDIS:
-		if(reg_alloc_arm(1) == ALLOC_FAILED) return 0;
-		if(reg_alloc_temp( sRR ) == ALLOC_FAILED) return 0;
-		emit("\t%s   r%d, [r%d]\n", ldx(size), *sRR, 1);
-		if(size == 4) emit("\tror     r%d, #16\n", *sRR);
-		return (reg_free(1) == ALLOC_OKAY);
-		
-	case EA_IMMD:
-		*sRR = 1;
+	} else if(sEA == EA_IMMD) {
+		if(!is_src) {
+			if(debug) printf("@ IMMD invalid for destination mode\n");
+			return 0;
+		}
+		if(sRR) *sRR = is_src ? 1 : 2;
 		return 1;
-	} // end switch
+
+	} else {
+		if(sEA ==  EA_PIDX || sEA == EA_PDIS) {
+			if(!is_src) {
+				if(debug) printf("@ PC EA invalid for destination mode\n");
+			}
+			*dRR = is_src ? 1 : 2;
+		} else if(sEA == EA_ABSW || sEA ==  EA_ABSL) {
+			// assumpe PJIT clips to 24-bits when scanning
+			if(sEA == EA_ABSL) omit_bic = true;
+			*dRR = is_src ? 1 : 2;
+		} else if(emit_get_reg( dRR, sR, 4 ) == ALLOC_FAILED) {
+			return 0;
+		}
+		if(sRR && reg_alloc_temp( sRR ) == ALLOC_FAILED) return 0;
+		if(sEA == EA_AINC) {
+			if(reg_alloc_temp(&tRR ) == ALLOC_FAILED) return 0;
+			emit("\tmov     r%d, r%d\n", tRR, *dRR);
+			emit("\tadd     r%d, r%d, #%d\n", *dRR, tRR, size);
+			reg_modified(*dRR); reg_free(*dRR);
+			*dRR = tRR;
+		} else if(sEA == EA_ADEC) {
+			if(reg_alloc_temp(&tRR ) == ALLOC_FAILED) return 0;
+			emit("\tsub     r%d, r%d, #%d\n", *dRR, *dRR, size);
+			emit("\tmov     r%d, r%d\n", tRR, *dRR);
+//			reg_modified(*dRR); reg_free(*dRR); reg_alloc_arm(*dRR);
+			reg_modified(*dRR); reg_free(*dRR);
+			*dRR = tRR;
+		} else if(sEA == EA_ADIS || sEA == EA_AIDX) {
+			emit("\tadd     r%d, r%d, r%d\n", (is_src ? 1 : 2), *dRR, size);
+			reg_modified(*dRR); reg_free(*dRR);
+			*dRR = is_src ? 1 : 2;
+		}
+
+		// swap upper/lower bytes
+		if(size == 1) emit("\teor     r%d, r%d, #1\n", *dRR, *dRR);
+		// clear out high 24-bits		
+		if(!omit_bic) emit("\tbic     r%d, r%d, #0xFF000000\n", *dRR, *dRR);
+		// load the data
+		if(sRR) emit("\t%s   r%d, [r%d]\n", ldx(size), *sRR, *dRR);
+		if(is_src) reg_free(*dRR);
+		// if we're long, swap words
+		if(sRR && (size == 4)) emit("\tror     r%d, #16\n", *sRR);
+	}
+	return 1;
 }
 
-static char _ea[32];
+int get_source_data( uint8_t* sRR, uint16_t sEA, uint8_t sR, uint16_t size ) {
+	uint8_t dRR; // scratch, don't care
+	int err;
 
-// perform destination effective address calculation and load
-// data into temporary register; pass NULL to tRR if no load is needed
-int get_destination_data( uint8_t* dRR, uint8_t* tRR, uint16_t dEA, uint8_t dR, uint16_t size ) {
-	sprintf( _ea, "%s", "[r%d]" );
-	switch(dEA) {
-	default:
-		printf("@ destination ea error\n");
-		return 0;
-	case EA_DREG:
-	case EA_AREG:
-		*dRR = reg_raw(dR);
-		if(tRR) {
-			//return emit_get_reg(tRR, dR, size);
-			uint8_t arm;
-			if(reg_alloc_68k(&arm, dR) == ALLOC_FAILED) return 0;
-			if(arm < 4) emit("\t%s   r%d, [r12, #%d]\n", ldx(size), arm, dR * 4);
-			*tRR = arm;
-		}
-		return 1;
-		
-	case EA_ADDR:
-	case EA_AINC:
-		if(emit_get_reg( dRR, dR, 4 ) == ALLOC_FAILED) return 0;
-		if(tRR) {
-			if(reg_alloc_temp( tRR ) == ALLOC_FAILED) return 0;
-			emit("\t%s   r%d, [r%d]\n", ldx(size), *tRR, *dRR);
-			if(size == 4) emit("\tror     r%d, #16\n", *tRR);
-		}
-		return 1;
-		
-	case EA_ADEC:
-		if(emit_get_reg( dRR, dR, 4 ) == ALLOC_FAILED) return 0;
-		if(tRR) {
-			if(reg_alloc_temp( tRR ) == ALLOC_FAILED) return 0;
-			emit("\t%s   r%d, [r%d, #-%d]!\n", ldx(size), *tRR, *dRR, size);
-			if(size == 4) emit("\tror     r%d, #16\n", *tRR);
-		} else {
-			sprintf( _ea, "[r%%d, #-%d]", size );
-		}
-		return (reg_modified(*dRR) == ALLOC_OKAY);
-
-	case EA_AIDX:
-	case EA_ADIS:
-		if(reg_alloc_arm(2) == ALLOC_FAILED) return 0;
-		if(emit_get_reg( dRR, dR, 4 ) == ALLOC_FAILED) return 0;
-		if(tRR) {
-			if(reg_alloc_temp( tRR ) == ALLOC_FAILED) return 0;
-			emit("\t%s   r%d, [r2, r%d]\n", ldx(size), *tRR, *dRR);
-			if(size == 4) emit("\tror     r%d, #16\n", *tRR);
-		} else {
-			sprintf( _ea, "%s", "[r%d, r2]" );
-		}
-		return (reg_free(2) == ALLOC_OKAY);
-		
-	case EA_ABSW:
-	case EA_ABSL:
-		if(reg_alloc_arm(2) == ALLOC_FAILED) return 0;
-		*dRR = 2;
-		if(tRR) {
-			if(reg_alloc_temp( tRR ) == ALLOC_FAILED) return 0;
-			emit("\t%s   r%d, [r%d]\n", ldx(size), *tRR, 2);
-			if(size == 4) emit("\tror     r%d, #16\n", *tRR);
-		}
-		return (reg_free(2) == ALLOC_OKAY);
-		
-	case EA_IMMD:
-//		*tRR = 2;
-		return 1;
-	} // end switch
-}
-
-// write data to destination effective address
-int set_destination_data( uint8_t* dRR, uint8_t* tRR, uint16_t dEA, uint16_t size ) {
-	static char buffer[32];
-	ALLOC_ERR_t err = ALLOC_OKAY;
-	
-	switch(dEA) {
-	default:
-		err = ALLOC_FAILED;
-		break;
-		
-	case EA_DREG:
-	case EA_AREG:
-		if(*dRR == 0xFF) err = reg_modified(*tRR);
-		else if(size == 4) emit("\tmov     r%d, r%d\n", *dRR, *tRR);
-		else emit("\tbfi     r%d, r%d, #0, #%d\n", *dRR, *tRR, (size * 8));
-		break;
-
-	case EA_AINC:
-		if(size == 4) emit("\tror     r%d, #16\n", *tRR);
-		emit("\t%s    r%d, [r%d], #%d\n", stx(size), *tRR, *dRR, size);
-		err = reg_modified(*dRR);
-		break;
-
-	case EA_ADDR:
-	case EA_ADEC:
-	case EA_AIDX:
-	case EA_ADIS:
-	case EA_ABSW:
-	case EA_ABSL:
-		if(size == 4) emit("\tror     r%d, #16\n", *tRR);
-		sprintf( buffer, _ea, *dRR );
-		emit("\t%s    r%d, %s\n", stx(size), *tRR, buffer);
-		break;
-	} // end switch
-
- 	reg_flush();
+	if(debug) printf("@ in get_source_data\n");
+	err = emit_fetch_ea_data( &dRR, sRR, sEA, sR, size, 1 );
+	if(err == 0 && debug) printf("@ error\n");
 	return err;
 }
+
+int get_destination_data( uint8_t* dRR, uint8_t* tRR, uint16_t dEA, uint8_t dR, uint16_t size ) {
+	int err;
+
+	if(debug) printf("@ in get_destination_data\n");
+	err = emit_fetch_ea_data( dRR, tRR, dEA, dR, size, 0 );
+	if(err == 0 && debug) printf("@ error\n");
+	return err;
+}
+
+int set_destination_data( uint8_t* dRR, uint8_t* tRR, uint16_t dEA, uint16_t size ) {
+	ALLOC_ERR_t err = ALLOC_OKAY;
+	if(debug) printf("@ in set_destination_data\n");
+	if(dEA == EA_AREG || dEA == EA_DREG) {
+		if(*dRR == 0xFF) err = reg_modified(*tRR);
+		else if(*tRR == *dRR) ;
+		else if(size == 4) emit("\tmov     r%d, r%d\n", *dRR, *tRR);
+		else emit("\tbfi     r%d, r%d, #0, #%d\n", *dRR, *tRR, (size * 8));
+
+	} else if(dEA == EA_PDIS || dEA == EA_PIDX || dEA == EA_IMMD) {
+		err = ALLOC_FAILED;
+
+	} else {
+		if(size == 4) emit("\tror     r%d, #16\n", *tRR);
+		emit("\t%s    r%d, [r%d]\n", stx(size), *tRR, *dRR);
+
+	}
+	reg_flush();
+	return err;
+}
+
+

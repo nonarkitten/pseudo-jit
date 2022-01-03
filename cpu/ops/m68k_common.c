@@ -24,6 +24,10 @@ void emit(char * format, ...) {
 	va_start (args, format);
 	len = vsprintf(_stream, format, args);
 	if(debug) printf("@ %s", _stream);
+	// if(_stream[len] != '\n') {
+	// 	printf("@ warning, missing carriage return.\n");
+	// 	if(!debug) printf("@ %s", _stream);
+	// }
 	_stream = stream( NULL, len, STREAM_INC );
 	va_end (args);
 	lines += 1;

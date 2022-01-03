@@ -53,9 +53,9 @@ int emit_alu(char *buffer, uint16_t size, uint16_t sEA, uint16_t dEA, ALU_OP_t a
 		get_destination_data( &dRR, NULL, dEA, dR, size );		
 	} else {
 		get_destination_data( &dRR, &tRR, dEA, dR, size );	
+		if(sRR < 4) { uint8_t _t = sRR; sRR = tRR; tRR = _t; }
 	}
 	
-	if(sRR < 4) { uint8_t _t = sRR; sRR = tRR; tRR = _t; }
 		
 	switch(alu_op) {
 	case ALU_OP_OR:  	emit("\torr%c    r%d, r%d, r%d\n", flags, tRR, tRR, sRR); break;

@@ -316,7 +316,7 @@ try_again:
 
 		do {
 			opcode = bits | base;
-			//printf(" %04X", opcode);
+			printf(" %04X", opcode);
 			if(opcode_len[opcode] == 0) {
 				// return -1 when invalid
 				int n = optab[i].emit(buffer, opcode);
