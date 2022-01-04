@@ -64,6 +64,7 @@ static int emit_fetch_ea_data( uint8_t* dRR, uint8_t* sRR, uint16_t sEA, uint8_t
 			if(debug) printf("@ AREG invalid for destination mode\n");
 			return 0;
 		}
+		if(dRR) *dRR = reg_raw(sR);
 		return sRR ? emit_get_reg(sRR, sR, size) : 1;
 
 	} else if(sEA == EA_IMMD) {
@@ -143,10 +144,12 @@ int set_destination_data( uint8_t* dRR, uint8_t* tRR, uint16_t dEA, uint16_t siz
 	ALLOC_ERR_t err = ALLOC_OKAY;
 	if(debug) printf("@ in set_destination_data\n");
 	if(dEA == EA_AREG || dEA == EA_DREG) {
-		if(*dRR == 0xFF) err = reg_modified(*tRR);
-		else if(*tRR == *dRR) ;
-		else if(size == 4) emit("\tmov     r%d, r%d\n", *dRR, *tRR);
-		else emit("\tbfi     r%d, r%d, #0, #%d\n", *dRR, *tRR, (size * 8));
+		if((*dRR == 0xFF) || (*tRR == *dRR))
+			err = reg_modified(*tRR);
+		else if(size == 4)
+			emit("\tmov     r%d, r%d\n", *dRR, *tRR);
+		else
+			emit("\tbfi     r%d, r%d, #0, #%d\n", *dRR, *tRR, (size * 8));
 
 	} else if(dEA == EA_PDIS || dEA == EA_PIDX || dEA == EA_IMMD) {
 		err = ALLOC_FAILED;

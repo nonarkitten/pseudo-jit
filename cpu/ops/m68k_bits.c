@@ -23,33 +23,31 @@ int emit_bits(char* buffer, uint16_t opcode) {
 	lines = 0;
 	emit_reset( buffer );
 
-	get_destination_data( &dRR, &tRR, dEA, dR, size );
-
-	// get the bit position
+	// get source data
 	if(opcode & 0x0100) {
 		uint8_t sR = ((opcode & 0x0E00) >> 9);
 		emit_get_reg( &sRR, sR, 4 );
+		reg_alloc_temp(&tRR);
+
 	} else {
 		reg_alloc_arm(1);
 		sRR = 1;
 	}
-	
-	// create bit mask
-	{
-		uint8_t tR2;
-		reg_alloc_temp(&tR2);
-		emit("\tmov     r%d, #1\n", tR2);
-		emit("\tlsl     r%d, r%d, r%d\n", sRR, tR2, sRR);
-		reg_free(tR2);
-	}
+	// convert to bit position
+	reg_alloc_temp(&tRR);
+	emit("\tmov     r%d, #1\n", tRR);
+	emit("\tlsl     r%d, r%d, r%d\n", tRR, tRR, sRR);
+	reg_free(sRR); sRR = tRR;
 		
+	get_destination_data( &dRR, &tRR, dEA, dR, size );
+
 	// test the bit
 	emit("\ttst     r%d, r%d\n", tRR, sRR);
 	
 	if(opcode & 0x00C0) {
 		switch(opcode & 0x00C0) {
 		case 0x0040: // BCHG
-			emit("\teors    r%d, r%d, r%d\n", tRR, tRR, sRR);
+			emit("\teor     r%d, r%d, r%d\n", tRR, tRR, sRR);
 			break;
 		case 0x0080: // BCLR
 			emit("\tbic     r%d, r%d, r%d\n", tRR, tRR, sRR);
@@ -58,7 +56,6 @@ int emit_bits(char* buffer, uint16_t opcode) {
 			emit("\torr     r%d, r%d, r%d\n", tRR, tRR, sRR);
 			break;
 		}
-		//reg_modified(tRR);
 		set_destination_data( &dRR, &tRR, dEA, size );
 	} else {
 		reg_flush();

@@ -1,4 +1,4 @@
-
+#if 0
 // All memory above 24bit is cacheable; memory below this is split into
 // 64KB chunks where we can define if it's cacheable
 static struct pjit_page_ctrl_t {
@@ -22,9 +22,7 @@ void pjit_run(void) {
     cpu->pc = *(uint32_t*)4;
     
 }
-
-
-
+#endif
 
 
 
