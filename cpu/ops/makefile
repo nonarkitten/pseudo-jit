@@ -2,12 +2,14 @@ OUTPUT  := make_m68k
 SOURCES := $(wildcard *.c)
 OBJECTS := $(patsubst %.c,obj/%.o, $(SOURCES))
 
-CFLAGS  := -g -Wall -Werror 
+CFLAGS  := -g -Wall -Werror -Wno-misleading-indentation
+CC      := gcc
+CXX     := g++
 
 .PHONY: all
 all: premake $(OBJECTS)
 	$(CXX) $(CFLAGS) $(CXXFLAGS) $(INCLUDE) $(OBJECTS) -o $(OUTPUT)
-	./$(OUTPUT)
+#	./$(OUTPUT)
 	
 .PHONY: premake
 premake:

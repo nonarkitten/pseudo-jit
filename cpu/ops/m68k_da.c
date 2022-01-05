@@ -661,7 +661,8 @@ const char* opcodes[] = {
 
 };
 
-const int opcode_count = sizeof(opcodes) / sizeof(char*);
+//const int OPCODE_COUNT = sizeof(opcodes) / sizeof(char*);
+#define OPCODE_COUNT (sizeof(opcodes) / sizeof(char*))
 
 typedef struct {
 	uint16_t match;
@@ -694,13 +695,13 @@ char *ea(uint16_t ea) {
 
 const char* m68k_disasm(uint16_t op) {
 	static bool inited = false;
-	static opcode_t ops[opcode_count] = { 0 };
+	static opcode_t ops[OPCODE_COUNT] = { 0 };
 	static char buffer[64];
 	
 	if(!inited) {
 		int total_ops = 0;
 		inited = true;
-		for(int i=0; i<opcode_count; i++) {
+		for(int i=0; i<OPCODE_COUNT; i++) {
 			uint16_t match = 0, equal = 0, count = 0;
 // 			fprintf( stderr, "Parsing %s ", opcodes[i]);
 			for(int b=0; b<16; b++) {
@@ -724,14 +725,14 @@ const char* m68k_disasm(uint16_t op) {
 		}
 		for(int i=0; i<0x10000; i++) {
 			int count = 0;
-			for(int j=0; j<opcode_count; j++) {
+			for(int j=0; j<OPCODE_COUNT; j++) {
 				if((i & ops[j].match) == ops[j].equal) {
 					count++;
 				}
 			}
 			if(count > 1) {
 				printf("Verify error with opcode 0x%04X, %d matches:\n", i, count);
-				for(int j=0; j<opcode_count; j++) {
+				for(int j=0; j<OPCODE_COUNT; j++) {
 					if(((i & ops[j].match) == ops[j].equal) && (ops[j].op)) {
 						printf(" %d %s", j, opcodes[j]);
 					}
@@ -743,7 +744,7 @@ const char* m68k_disasm(uint16_t op) {
 	}
 
 	//char buffer[64];
-	for(int i=0; i<opcode_count; i++) {
+	for(int i=0; i<OPCODE_COUNT; i++) {
 		if((op & ops[i].match) == ops[i].equal) {
 			int x = strlen(ops[i].op) - 5; // back up over \n
 			if(memcmp(&ops[i].op[x], "<ea>", 4)) {
