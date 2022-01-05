@@ -66,6 +66,7 @@ static inline uint32_t cache_get_page_index(uint32_t m68k_addr) {
 
 static inline uint32_t cache_get_tag(uint32_t m68k_addr) {
 	return (m68k_addr >> (1 + PAGE_SIZE));
+	//return m68k_addr & ~((1 << PAGE_SIZE) - 1);
 }
 
 static inline uint16_t cache_get_page_select(uint32_t m68k_addr) {

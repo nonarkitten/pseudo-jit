@@ -60,11 +60,11 @@ void cache_init(void* base) {
 // give a 68K address return the exact instruction to enter
 // if the tags don't match, clear the cache first
 uint32_t* cache_find_entry(uint32_t m68k_addr) {
-	uint16_t i = cache_get_page_index(m68k_addr);
+	uint16_t index = cache_get_page_index(m68k_addr);
 	uint16_t page = cache_get_page_select(m68k_addr);
 	uint32_t tag = cache_get_tag(m68k_addr);
 	
-	debug("In cache_find_entry; m68k_addr=%04x, i=%d, page=%d, tag=%d\n", m68k_addr, i, page, tag);
+	debug("In cache_find_entry; m68k_addr=0x%04x, index=%d, page=%d, tag=0x%04x\n", m68k_addr, index, page, tag);
 	
 #ifdef SET_ASSOCIATIVE
 	uint32_t set;
@@ -76,13 +76,14 @@ uint32_t* cache_find_entry(uint32_t m68k_addr) {
 		debug("Miss, using set %d and clearing page\n", set);
 		cache_clear(set, page);
 	}
-	return &(*pjit_cache)[set][page][i];
+	return &(*pjit_cache)[set][page][index];
 #else
 	if((*pjit_tag_cache)[page] != tag) {
 		debug("Miss, clearing page\n");
+		(*pjit_tag_cache)[page] = tag;
 		cache_clear(page);
 	}
-	uint32_t *addr = &(*pjit_cache)[page][i];
+	uint32_t *addr = &(*pjit_cache)[page][index];
 	debug("Entering cache at %p", addr);
 	debug(" (ARM op %08X)\n", *addr);
 	return addr;
@@ -93,13 +94,23 @@ uint32_t* cache_find_entry(uint32_t m68k_addr) {
 // WARNING: this assumes that the cache_tag is valid and makes 
 // no attempt to verify that it is not
 uint32_t cache_reverse(uint32_t arm_addr) {
-	uint16_t i = (arm_addr >> 2) & ((1 << PAGE_SIZE) - 1);
+	debug("In cache_reverse, arm_addr=0x%08X\n", arm_addr);
+	
+	arm_addr -= (uint32_t)pjit_cache;
+	uint16_t index = (arm_addr >> 2) & ((1 << PAGE_SIZE) - 1);
+	debug("  index=%d\n", index);
 	uint16_t page = (arm_addr >> (2 + PAGE_SIZE)) & ((1 << PAGE_COUNT) - 1);
+	debug("  page=%d\n", page);
+	
 #ifdef SET_ASSOCIATIVE
 	uint32_t set = (arm_addr >> (2 + PAGE_SIZE + PAGE_COUNT)) & 1;
-	return (*pjit_tag_cache)[set][page] | (i << 1);
+	return (*pjit_tag_cache)[set][page] | (index << 1);
 #else
-	return (*pjit_tag_cache)[page] | (i << 1);
+	uint32_t tag = (*pjit_tag_cache)[page];
+	debug("  tag=%04x\n", tag);
+	void *addr = (tag << (1 + PAGE_SIZE)) | (index << 1);
+	debug("  addr=%p\n", addr);
+	return addr;
 #endif
 }
 
