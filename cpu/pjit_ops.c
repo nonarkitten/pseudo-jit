@@ -7,6 +7,7 @@
  *
  */
 #include <stdarg.h>
+#include <stddef.h>
 
 #include "pjit.h"
 
