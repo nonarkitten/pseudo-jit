@@ -71,7 +71,11 @@ int emit_alu(char *buffer, uint16_t size, uint16_t sEA, uint16_t dEA, ALU_OP_t a
 	case ALU_OP_MOVE:
 		if(dEA != EA_AREG) {
 			if(size < 4) emit("\tcmp     r%d, #0\n", sRR);
-			else emit_fixup("ror ", "rors");
+			else {
+				// emit_fixup("ror ", "rors");
+				char* ror = strstr( buffer, "ror ");
+				if(ror) memcpy(ror, "rors", 4);
+			}
 		}
 		{ uint8_t _t = tRR; tRR = sRR; sRR = _t; } // SWAP
 		break;
