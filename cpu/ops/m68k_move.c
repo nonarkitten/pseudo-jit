@@ -37,12 +37,12 @@ int emit_MOVEP(char *buffer, uint16_t opcode) {
 	uint16_t sEA = (opcode & 0x0080) ? EA_DREG : EA_AIDX;
 	uint8_t sR = ((opcode & 0x0007) >> 0) | (sEA ? 0x8 : 0x0);
 	uint8_t sRR;
-	emit_get_reg( &sRR, sR, size );
+	if(!emit_get_reg( &sRR, sR, size )) return -1;
 
 	uint16_t dEA = (opcode & 0x0080) ? EA_AIDX : EA_DREG; 	
 	uint8_t dR = ((opcode & 0x0E00) > 9) | (dEA ? 0x8 : 0x0);
 	uint8_t dRR;
-	emit_get_reg( &dRR, dR, size );
+	if(!emit_get_reg( &dRR, dR, size )) return -1;
 	
 	if(opcode & 0x0080) {
 		// register to memory
@@ -107,7 +107,7 @@ int emit_MOVEM(char *buffer, uint16_t opcode) {
 	
 	uint8_t sR = ((opcode & 0x0007) >> 0) | (sEA ? 0x8 : 0x0);
 	uint8_t sRR;
-	emit_get_reg( &sRR, sR, size );
+	if(!emit_get_reg( &sRR, sR, size )) return -1;
 	
 	switch(sEA) {
 	case EA_ADDR:

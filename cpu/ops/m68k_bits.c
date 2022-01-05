@@ -26,7 +26,7 @@ int emit_bits(char* buffer, uint16_t opcode) {
 	// get source data
 	if(opcode & 0x0100) {
 		uint8_t sR = ((opcode & 0x0E00) >> 9);
-		emit_get_reg( &sRR, sR, 4 );
+		if(!emit_get_reg( &sRR, sR, 4 )) return -1;
 
 	} else {
 		reg_alloc_arm(1);

@@ -20,7 +20,7 @@
 //    however, the destination EA can never be PC relative
 
 
-// find and optionally load reg
+// find and optionally load reg, return 1 if success
 int emit_get_reg(uint8_t* reg_arm, uint8_t reg_68k, uint8_t size) {
 	uint8_t arm, t;
 	if(reg_alloc_68k(&arm, reg_68k) == ALLOC_FAILED) return 0;

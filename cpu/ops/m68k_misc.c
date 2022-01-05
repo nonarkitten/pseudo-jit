@@ -20,7 +20,7 @@ int emit_store_EA(char *buffer, uint16_t opcode, int is_pea) {
 
 	reg_alloc_arm(1);
 	uint8_t dRR, sRR, sR = (opcode & 0x0007) | 8;
-	emit_get_reg( &sRR, sR, 4 );
+	if(!emit_get_reg( &sRR, sR, 4 )) return -1;
 
 	if(!is_pea) {
 		uint8_t dR = ((opcode & 0x0E00) > 9) | 0x8;
@@ -57,7 +57,7 @@ int emit_LINK(char *buffer, uint16_t opcode) {
 	emit_reset( buffer );	
 	uint8_t dRR, dR = ((opcode & 0x0007) >> 0) |  0x8;
 	reg_alloc_arm(1);
-	emit_get_reg( &dRR, dR, 4 );
+	if(!emit_get_reg( &dRR, dR, 4 )) return -1;
 	emit("\tstr     r%d, [r12, #-4]!\n", dRR );
 	emit("\tmov     r%d, r11\n", dRR);
 	emit("\tadd     r11, r1\n");
@@ -73,7 +73,7 @@ int emit_UNLK(char *buffer, uint16_t opcode) {
 	emit_reset( buffer );	
 
 	uint8_t dRR, dR = ((opcode & 0x0007) >> 0) |  0x8;
-	emit_get_reg( &dRR, dR, 4 );
+	if(!emit_get_reg( &dRR, dR, 4 )) return -1;
 	emit("\tmov     r11, r%d\n", dRR);
 	emit("\tstr     r%d, [r12], #4\n", dRR ); 
 	reg_flush();		
@@ -85,7 +85,7 @@ int emit_SWAP(char *buffer, uint16_t opcode) {
 	emit_reset( buffer );	
 
 	uint8_t dRR, dR = (opcode & 0x0007) >> 0;
-	emit_get_reg( &dRR, dR, 4 );
+	if(!emit_get_reg( &dRR, dR, 4 )) return -1;
 	emit("\trors    r%d, r%d, #16\n", dRR, dRR);
 	reg_modified(dRR);
 	reg_flush();
@@ -97,7 +97,7 @@ int emit_EXT(char *buffer, uint16_t opcode) {
 	
 	uint8_t dRR, dR = (opcode & 0x0007) >> 0;
 	//uint8_t dRR = emit_get_reg( &dEA, dR, 1, 0 );
-	emit_get_reg( &dRR, dR, 4 );
+	if(!emit_get_reg( &dRR, dR, 4 )) return -1;
 	
 	if(opcode & 0x0040) {
 		// EXT.L extend word to long
@@ -240,7 +240,7 @@ int emit_CHK(char *buffer, uint16_t opcode) {
 	emit_reset( buffer );	
 
 	get_source_data( &sRR, sEA, sR, 2 );
-	emit_get_reg( &dRR, dR, 2 );
+	if(!emit_get_reg( &dRR, dR, 2 )) return -1;
 		
 	emit("\tcmp     r%d, #0\n", dRR);
 	emit("\tblt     0f\n");

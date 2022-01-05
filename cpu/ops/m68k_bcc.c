@@ -73,7 +73,7 @@ int emit_DBCC(char *buffer, uint16_t opcode) {
 	if(cc) {
 		// determine our destination real register
 		uint8_t dRR;
-		emit_get_reg( &dRR, dR, 2 );
+		if(!emit_get_reg( &dRR, dR, 2 )) return -1;
 
 		if(cc > 1) emit("\tb%s     0f\n", arm_cc[cc]);
 		emit("\tsubs    r%d, #1\n", dRR);

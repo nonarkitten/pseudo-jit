@@ -211,7 +211,7 @@ int emit_MOVE_USP(char *buffer, uint16_t opcode) {
 	emit("\tsvcne   #%d\n", PRIV);
 
 	uint8_t dRR, dR = (opcode & 0x0007) | 0x8;
-	emit_get_reg( &dRR, dR, 4 );
+	if(!emit_get_reg( &dRR, dR, 4 )) return -1;
 
 	if(opcode & 0x0008) {
 		// [Ax] -> USP

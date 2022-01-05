@@ -18,7 +18,7 @@
 //     { 0xE4C0, 0x013F, emit_ROXD_EA       },
 //     { 0xE6C0, 0x013F, emit_ROD_EA        },
 
-static int emit_ea(char *buffer, uint16_t opcode, void(*callback)(uint8_t)) {
+static int emit_ea(char *buffer, uint16_t opcode, int(*callback)(uint8_t)) {
 	uint16_t dEA = (opcode & 0x0038) >> 3; 	
 	if(dEA == 7) dEA += opcode & 7;
 	
@@ -32,50 +32,58 @@ static int emit_ea(char *buffer, uint16_t opcode, void(*callback)(uint8_t)) {
 	uint8_t dRR, tRR, dR = (opcode & 7) | 0x8;
 	get_destination_data(&dRR, &tRR, dEA, dR, 2);	
 	
-	callback(tRR);
+	if(callback(tRR) == -1) return -1;
 		
 	set_destination_data(&dRR, &tRR, dEA, 2);	
 	return lines_ext(lines, 0, dEA, 2);
 }
 
-static void emit_asl_ea(uint8_t tR2) {
+static int emit_asl_ea(uint8_t tR2) {
 	emit("\tadds    r%d, r%d, r%d\n", tR2, tR2, tR2); 
+	return 0;
 }
-static void emit_asr_ea(uint8_t tR2) { 
+static int emit_asr_ea(uint8_t tR2) { 
 	emit("\tasrs    r%d, #1\n", tR2);	
+	return 0;
 }
-static void emit_lsl_ea(uint8_t tR2) {
+static int emit_lsl_ea(uint8_t tR2) {
 	emit("\tlsls    r%d, #1\n", tR2);	
+	return 0;
 }
-static void emit_lsr_ea(uint8_t tR2) {
+static int emit_lsr_ea(uint8_t tR2) {
 	emit("\tlsrs    r%d, #1\n", tR2);	
+	return 0;
 }
-static void emit_rol_ea(uint8_t tR2) {
+static int emit_rol_ea(uint8_t tR2) {
 	emit("\tadds    r%d, r%d, r%d\n", tR2, tR2, tR2); 
 	emit("\tadc     r%d, r%d, #0\n", tR2, tR2);
+	return 0;
 }
-static void emit_ror_ea(uint8_t tR2) {
+static int emit_ror_ea(uint8_t tR2) {
 	emit("\trors    r%d, #1\n", tR2);	
+	return 0;
 }
-static void emit_roxl_ea(uint8_t tR2) {
+static int emit_roxl_ea(uint8_t tR2) {
 	uint8_t tRR;
-	reg_alloc_temp(&tRR);
+	if(reg_alloc_temp(&tRR) == ALLOC_FAILED) return -1;
 	emit("\tldr     r%d, [r12, #%d]\n", tRR, offsetof(cpu_t, x));
 	emit("\tadds    r%d, r%d, r%d\n", tR2, tR2, tR2);
 	emit("\tadd     r%d, r%d, r%d\n", tR2, tR2, tRR);
 	emit("\tmovcs   r%d, #1\n", tRR);
 	emit("\tmovcc   r%d, #0\n", tRR);
 	emit("\tstr     r%d, [r12, #%d]\n", tRR, offsetof(cpu_t, x));
+	return 0;
 }
-static void emit_roxr_ea(uint8_t tR2) {
+static int emit_roxr_ea(uint8_t tR2) {
 	uint8_t tRR;
-	reg_alloc_temp(&tRR);
+	if(reg_alloc_temp(&tRR) == ALLOC_FAILED) return -1;
 	emit("\tldr     r%d, [r12, #%d]\n", tRR, offsetof(cpu_t, x));
 	emit("\tlsrs    r%d, #1\n", tR2);
 	emit("\tadd     r%d, r%d, r%d, lsl #%d\n", tR2, tR2, tRR, 16);
 	emit("\tmovcs   r%d, #1\n", tRR);
 	emit("\tmovcc   r%d, #0\n", tRR);
 	emit("\tstr     r%d, [r12, #%d]\n", tRR, offsetof(cpu_t, x));
+	return 0;
 }
 
 int emit_ASD_EA(char *buffer, uint16_t opcode) { 
@@ -94,7 +102,7 @@ int emit_ROD_EA(char *buffer, uint16_t opcode) {
 	return emit_ea(buffer, opcode, (opcode & 0x0100) ? emit_rol_ea : emit_ror_ea); 
 }
 
-static int emit_immd(char *buffer, uint16_t opcode, void(*callback)(uint8_t,uint16_t,uint16_t)) {	
+static int emit_immd(char *buffer, uint16_t opcode, int(*callback)(uint8_t,uint16_t,uint16_t)) {	
 	uint16_t size = 1 << ((opcode & 0x00C0) >> 6);
 	if(size > 4) return -1;
 	
@@ -107,50 +115,58 @@ static int emit_immd(char *buffer, uint16_t opcode, void(*callback)(uint8_t,uint
 	uint8_t amt = (opcode >> 9) & 7;
 	if(amt == 0) amt = 8;
 	
-	callback(tRR, amt, size);
+	if(callback(tRR, amt, size) == -1) return -1;
 	
 	set_destination_data(&dRR, &tRR, 0, size);
 	return lines;
 }
 
-static void emit_asl_immd(uint8_t tR2, uint16_t amt, uint16_t size) {
+static int emit_asl_immd(uint8_t tR2, uint16_t amt, uint16_t size) {
 	if(amt > 1) emit("\tlsl     r%d, #%d\n", tR2, (amt - 1)); 
 	emit("\tadds    r%d, r%d, r%d\n", tR2, tR2, tR2); 
+	return 0;
 }
-static void emit_asr_immd(uint8_t tR2, uint16_t amt, uint16_t size) { 
+static int emit_asr_immd(uint8_t tR2, uint16_t amt, uint16_t size) { 
 	emit("\tasrs    r%d, #%d\n", tR2, amt);	
+	return 0;
 }
-static void emit_lsl_immd(uint8_t tR2, uint16_t amt, uint16_t size) {
+static int emit_lsl_immd(uint8_t tR2, uint16_t amt, uint16_t size) {
 	emit("\tlsls    r%d, #%d\n", tR2, amt);	
+	return 0;
 }
-static void emit_lsr_immd(uint8_t tR2, uint16_t amt, uint16_t size) {
+static int emit_lsr_immd(uint8_t tR2, uint16_t amt, uint16_t size) {
 	emit("\tlsrs    r%d, #%d\n", tR2, amt);	
+	return 0;
 }
-static void emit_asl_reg(uint8_t tR2, uint16_t sR, uint16_t size) {
+static int emit_asl_reg(uint8_t tR2, uint16_t sR, uint16_t size) {
 	uint8_t sRR;
-	emit_get_reg(&sRR, sR, 1);
+	if(!emit_get_reg(&sRR, sR, 1)) return -1;
 	emit("\tsubs    r%d, r%d, #1\n", sRR, sRR);
 	emit("\tlslgts  r%d, r%d, r%d\n", tR2, tR2, sRR);
 	emit("\taddges  r%d, r%d, r%d\n", tR2, tR2, tR2);
 	reg_free(sRR);
+	return 0;
 }
-static void emit_asr_reg(uint8_t tR2, uint16_t sR, uint16_t size) { 
+static int emit_asr_reg(uint8_t tR2, uint16_t sR, uint16_t size) { 
 	uint8_t sRR;
-	emit_get_reg(&sRR, sR, 1);
+	if(!emit_get_reg(&sRR, sR, 1)) return -1;
 	emit("\tasrs    r%d, r%d\n", tR2, sRR);	
 	reg_free(sRR);
+	return 0;
 }
-static void emit_lsl_reg(uint8_t tR2, uint16_t sR, uint16_t size) {
+static int emit_lsl_reg(uint8_t tR2, uint16_t sR, uint16_t size) {
 	uint8_t sRR;
-	emit_get_reg(&sRR, sR, 1);
+	if(!emit_get_reg(&sRR, sR, 1)) return -1;
 	emit("\tlsls    r%d, r%d\n", tR2, sRR);	
 	reg_free(sRR);
+	return 0;
 }
-static void emit_lsr_reg(uint8_t tR2, uint16_t sR, uint16_t size) {
+static int emit_lsr_reg(uint8_t tR2, uint16_t sR, uint16_t size) {
 	uint8_t sRR;
-	emit_get_reg(&sRR, sR, 1);
+	if(!emit_get_reg(&sRR, sR, 1)) return -1;
 	emit("\tlsrs    r%d, r%d\n", tR2, sRR);	
 	reg_free(sRR);
+	return 0;
 }
 
 int emit_ASD(char *buffer, uint16_t opcode) {
@@ -169,17 +185,21 @@ int emit_LSD(char *buffer, uint16_t opcode) {
 	}
 }
 
-static void emit_roxl_immd(uint8_t tR2, uint16_t amt, uint16_t size) {
+static int emit_roxl_immd(uint8_t tR2, uint16_t amt, uint16_t size) {
 	emit("\tb       handle_roxl_immd\n");
+	return 0;
 }
-static void emit_roxr_immd(uint8_t tR2, uint16_t amt, uint16_t size) {
+static int emit_roxr_immd(uint8_t tR2, uint16_t amt, uint16_t size) {
 	emit("\tb       handle_roxr_immd\n");
+	return 0;
 }
-static void emit_roxl_reg(uint8_t tR2, uint16_t sR, uint16_t size) {
+static int emit_roxl_reg(uint8_t tR2, uint16_t sR, uint16_t size) {
 	emit("\tb       handle_roxl_reg\n");
+	return 0;
 }
-static void emit_roxr_reg(uint8_t tR2, uint16_t sR, uint16_t size) {
+static int emit_roxr_reg(uint8_t tR2, uint16_t sR, uint16_t size) {
 	emit("\tb       handle_roxr_reg\n");
+	return 0;
 }
 
 int emit_ROXD(char *buffer, uint16_t opcode) {
@@ -190,17 +210,19 @@ int emit_ROXD(char *buffer, uint16_t opcode) {
 	}
 }
 
-static void emit_rol_immd(uint8_t tR2, uint16_t amt, uint16_t size) {
+static int emit_rol_immd(uint8_t tR2, uint16_t amt, uint16_t size) {
 	if(amt > 1) emit("\tror     r%d, #%d\n", tR2, (33 - amt) & 0x31);
 	emit("\tadds    r%d, r%d, r%d\n", tR2, tR2, tR2); 
 	emit("\tadc     r%d, r%d, #0\n", tR2, tR2);
+	return 0;
 }
-static void emit_ror_immd(uint8_t tR2, uint16_t amt, uint16_t size) {
+static int emit_ror_immd(uint8_t tR2, uint16_t amt, uint16_t size) {
 	emit("\trors    r%d, #%d\n", tR2, amt);	
+	return 0;
 }
-static void emit_rol_reg(uint8_t tR2, uint16_t sR, uint16_t size) {
+static int emit_rol_reg(uint8_t tR2, uint16_t sR, uint16_t size) {
 	uint8_t sRR;
-	emit_get_reg(&sRR, sR, 1);
+	if(!emit_get_reg(&sRR, sR, 1)) return -1;
 	emit("\tcmp     r%d, #0\n", tR2);
 	emit("\tbgt     0f\n");
 	
@@ -210,12 +232,14 @@ static void emit_rol_reg(uint8_t tR2, uint16_t sR, uint16_t size) {
 	emit("\tadc     r%d, r%d, #0\n", tR2, tR2);
 	emit("0:\n");
 	reg_free(sRR);
+	return 0;
 }
-static void emit_ror_reg(uint8_t tR2, uint16_t sR, uint16_t size) {
+static int emit_ror_reg(uint8_t tR2, uint16_t sR, uint16_t size) {
 	uint8_t sRR;
-	emit_get_reg(&sRR, sR, 1);
+	if(!emit_get_reg(&sRR, sR, 1)) return -1;
 	emit("\trors    r%d, r%d\n", tR2, sRR);	
 	reg_free(sRR);
+	return 0;
 }
 
 int emit_ROD(char *buffer, uint16_t opcode) { 

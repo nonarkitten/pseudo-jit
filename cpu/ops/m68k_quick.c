@@ -72,7 +72,7 @@ int emit_MOVEQ(char *buffer, uint16_t opcode) {
 	uint8_t dVal = (uint8_t)(uint8_t)(opcode & 0xFF);
 	uint8_t dRR;
 
-	emit_get_reg( &dRR, dR, 4 );
+	if(!emit_get_reg( &dRR, dR, 4 )) return -1;
 
 	if(dVal >= 0)
 		emit("\tmov     r%d, #0x%02x\n", dRR, dVal);
