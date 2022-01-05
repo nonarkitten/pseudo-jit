@@ -6,6 +6,8 @@
  * with them like stuff them back in the cache, run them, etc
  *
  */
+#include <stdarg.h>
+
 #include "pjit.h"
 
 extern ICacheFlush(void *start, void *end);
@@ -14,30 +16,49 @@ static jmp_buf jump_buffer;
 
 static uint32_t exec_temp[10] = { 0 };
 
+static debug(const char* format,...) {
+	va_list args;
+	va_start(args, format);
+	vfprintf( stderr, format, args );
+	va_end(args);
+}
+
 // return the ARM32 opcode for an unconditional branch to the target
 static uint32_t emit_branch(uint32_t target, uint32_t current) {
-	return 0xEB000000 | (0x00FFFFFF & (((target & ~3) - (current & ~3) + 8) >> 2));
+	int32_t offset = (target & ~3) - (current & ~3) + 8;
+	uint32_t op = 0xEB000000 | (0x00FFFFFF & (offset >> 2));
+	debug("EMIT ARM %08X (B %d)\n", op, offset);
+	return op;
 }
 static uint32_t emit_movw(uint32_t reg, uint16_t value) {
-	return 0xE3000000 | ((value & 0xF000) << 4) | ((reg & 0xF) << 12) | (value & 0xFFF);
+	uint32_t op = 0xE3000000 | ((value & 0xF000) << 4) | ((reg & 0xF) << 12) | (value & 0xFFF);
+	debug("EMIT ARM %08X (MOVW R%d, #%04X)\n", op, reg, value);
+	return op;
 }
 static uint32_t emit_movt(uint32_t reg, uint16_t value) {
-	return 0xE3400000 | ((value & 0xF000) << 4) | ((reg & 0xF) << 12) | (value & 0xFFF);
+	uint32_t op = 0xE3400000 | ((value & 0xF000) << 4) | ((reg & 0xF) << 12) | (value & 0xFFF);
+	debug("EMIT ARM %08x (MOVT R%d, #%04X)\n", op, reg, value);
+	return op;
 }
 static void emit_restore_cpsr(uint32_t **arm) {
 	// mrs	r3, CPSR				0xE10F3000
+	debug("EMIT ARM E10F3000 (MRS R3, CPSR)\n");
 	*(*arm)++ = 0xE10F3000;
 	// str	r3, [ip, #0x84]			0xE58C3084
+	debug("EMIT ARM E58C3084 (STR R3, [IP, #0x84])\n");
 	*(*arm)++ = 0xE58C3000 | offsetof(cpu_t, cpsr);
 }
 static void emit_save_cpsr(uint32_t **arm) {
 	// ldr	r3, [ip, #0x84]			0xE59C3084
+	debug("EMIT ARM E59C3000 (LDR R3, [IP, #0x84])\n");
 	*(*arm)++ = 0xE59C3000 | offsetof(cpu_t, cpsr);
 	// msr	CPSR_fc, r3				0xE129F003
+	debug("EMIT ARM E10F3000 (MRS CPSR, R3)\n");
 	*(*arm)++ = 0xE129F003;
 }
 static void emit_return(uint32_t **arm) {
 	// bx	lr						0xE12FFF1E
+	debug("EMIT ARM E12FFF1E (BX LR)\n");
 	*(*arm)++ = 0xE12FFF1E;
 }
 
@@ -77,6 +98,8 @@ static uint16_t* copy_opcode(uint32_t** out, uint16_t *pc) {
 	uint32_t opaddr = optab[opcode];
 	uint16_t opea = oplen[opcode];
 		
+	debug("In copy_opcode, opcode = %04x\n", opcode);
+	
 	switch(opea & 0x0F00) {
 	case EXT_WORD_SRC_EXT: 
 		*(*out)++ = emit_src_ext((uint32_t)out, *pc++); 
@@ -103,8 +126,14 @@ static uint16_t* copy_opcode(uint32_t** out, uint16_t *pc) {
 		break;
 	}
 	
-	if((opea & 0xFF) == 1) *(*out)++ = *(uint32_t*)opaddr;
-	else *(*out)++ = emit_branch(opaddr, (uint32_t)out);
+	// single-word instructions can be inlined
+	if((opea & 0xFF) == 1) {
+		uint32_t emit = *(uint32_t*)opaddr;
+		debug("EMIT ARM %08X (Inlined)\n", emit);
+		*(*out)++ = emit;
+	} else {
+		*(*out)++ = emit_branch(opaddr, (uint32_t)out);
+	}
 	
 	return pc;
 }
@@ -118,6 +147,7 @@ void cpu_lookup_nojit(void) {
 	// we're going to run this immediately in interpreter mode which means we
 	// have to restore and save the CPSR register (flags) and add an explicit
 	// return -- note that we should never branch-and-link to immediate code
+	debug("In cpu_lookup_nojit\n");
 
 	// TODO fix up for 32-bit memory
 	emit_restore_cpsr(&out);
@@ -131,6 +161,7 @@ void cpu_lookup_nojit(void) {
 	ICacheFlush(exec_temp, out);
 	isb(); // flush the pipeline
 	
+	debug("Executing single op\n");
 	goto *(void*)exec_temp;
 
 	longjmp(jump_buffer, (uint32_t)pc);
@@ -141,6 +172,9 @@ void cpu_lookup_nojit(void) {
 void cpu_lookup_safe(void) {
 	uint32_t* entry = (uint32_t*)(lr -= 4);
 	uint32_t* end = copy_opcode(entry, cache_reverse(entry));
+
+	debug("In cpu_lookup_safe\n");
+
 	ICacheFlush(entry, end);
 	isb(); // flush the pipeline
 	// automagically execute the PJIT cache on return
@@ -174,13 +208,17 @@ void cpu_lookup_inline(void) {
 	uint16_t* pc = cache_reverse(lr);
 	uint16_t inst = *pc;
 
+	debug("In cpu_lookup_inline\n");
+
 	// Handle in-line Bcc
 	if((inst & 0xF001 == 0x6000) && (inst & 0xFF != 0xFF)) {
 		// TODO fold flags back into ARM status register
 		// TODO change this to allow conditional expressions
 		uint32_t o = arm_bcc[(inst & 0x0F00) >> 8];
 		if(o != 0xFF) {
-			*entry = (o << 24) | ((((uint8_t)inst) << 2) - 4);
+			uint32_t emit = (o << 24) | ((((uint8_t)inst) << 2) - 4);
+			debug("EMIT ARM %08X (Inlined branch)\n", emit);
+			*entry = emit;
 			ICacheFlush(entry, entry + 1);
 		}
 		goto *optab[inst];
