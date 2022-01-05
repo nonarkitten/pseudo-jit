@@ -9,3 +9,13 @@ PJIT is part of [the Buffee Project](https://www.buffee.ca). The hardware can be
 ## Building
 
 Download a copy of Code Composer Studio 10 (this might be buildable with GCC directly, but I'm not bothering with that right now). Git clone this into your workspace and then import it. You should be able to compile and debug from there.
+
+## Building the Test
+
+1. Clone the git
+2. Cd into the cpu/ops folder
+3. Run 'make'
+4. Cd into the cpu folder
+5. Run 'make'
+6. Run 'm68k_test'
+7. Watch your PC explode
