@@ -85,7 +85,7 @@ uint32_t* cache_find_entry(uint32_t m68k_addr) {
 	uint32_t *addr = &(*pjit_cache)[page][i];
 	debug("Entering cache at %p", addr);
 	debug(" (ARM op %08X)\n", *addr);
-	return ;
+	return addr;
 #endif
 }
 

@@ -2,10 +2,10 @@ APPNAME  := m68k_test
 SOURCES  := $(wildcard *.c) $(wildcard ops/*.s) pjit_support.s
 OBJECTS  := $(patsubst %.c,obj/%.o, $(patsubst %.s,obj/%.o, $(patsubst ops/%.s,obj/%.o, $(SOURCES))))
 
-AS = gcc -g \
+AS = gcc -ggdb \
 	-mfloat-abi=hard -mcpu=cortex-a8 -march=armv7-a -mfpu=vfpv3
 SZ = size
-CC = gcc -g -I . -I ops -Os \
+CC = gcc -ggdb -I . -I ops -Os \
 	-flto-compression-level=9 \
 	-mfloat-abi=hard -march=armv7-a -marm -mfpu=vfpv3 -mtune=cortex-a8 \
 	-ffunction-sections \
@@ -28,7 +28,7 @@ LIBS =
 
 .PHONY: all
 all: premake $(OBJECTS)
-	$(CC) -Wl,--gc-sections -s $(OBJECTS) -o $(APPNAME) $(LIBPATH) $(LIBS)
+	$(CC) -Wl,--gc-sections $(OBJECTS) -o $(APPNAME) $(LIBPATH) $(LIBS)
 	$(SZ) $(APPNAME)
 
 obj/%.o: %.c

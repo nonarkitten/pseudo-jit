@@ -172,9 +172,11 @@ void cpu_lookup_nojit(void) {
 // and then also execute it
 void cpu_lookup_safe(void) {
 	uint32_t* entry = (uint32_t*)(lr -= 4);
-	uint32_t* end = copy_opcode(entry, cache_reverse(entry));
+	uint16_t *pc = cache_reverse( entry );
 
-	debug("In cpu_lookup_safe\n");
+	debug("In cpu_lookup_safe, entry %p (pc=%p)\n", entry, pc);
+
+	uint32_t* end = copy_opcode(entry, pc);
 
 	ICacheFlush(entry, end);
 	isb(); // flush the pipeline
@@ -233,9 +235,10 @@ void cpu_lookup_inline(void) {
 }
 
 uint32_t cpu_branch_offset(void* target, void* current) {
-	int32_t _t = (uint32_t)target;
-	int32_t _c = (uint32_t)current;
-	int32_t offset = ((_t & ~3) - (_c & ~3) + 8) >> 2;
+	int32_t _t = (int32_t)target;
+	int32_t _c = (int32_t)current;
+	// offset=(target-bra_addr-8)>>2
+	int32_t offset = (_t - _c - 8) >> 2;
 	if(offset > 0x00FFFFFF || offset < 0xFF000001) {
 		fprintf( stderr, "\n*** Branch out of range (%08x).\n", offset);
 		exit(1);
@@ -328,7 +331,7 @@ void cpu_start(uint32_t m68k_pc) {
 //	}
 	// And, engage!
 	uint32_t* start = cache_find_entry(m68k_pc);
-	goto **start;
+	goto *start;
 }
 
 #undef EXIT_PJIT
