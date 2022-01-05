@@ -11,11 +11,13 @@
 
 #include "pjit.h"
 
-extern ICacheFlush(void *start, void *end);
+//extern ICacheFlush(void *start, void *end);
 
 static jmp_buf jump_buffer;
 
-static uint32_t exec_temp[10] = { 0 };
+static uint32_t exec_temp[16] __attribute__ ((aligned (16))) = { 0 };
+
+//extern void __clear_cache(char* beg, char* end);
 
 void debug(const char* format,...) {
 	va_list args;
@@ -99,16 +101,19 @@ static uint16_t* copy_opcode(uint32_t** out, uint16_t *pc) {
 	uint32_t opaddr = optab[opcode];
 	uint16_t opea = oplen[opcode];
 		
-	debug("In copy_opcode, opcode = %04x\n", opcode);
+	debug("In copy_opcode, opcode=0x%04x, opaddr=0x%04x, opea=0x%04x\n", opcode, opaddr, opea);
 	
 	switch(opea & 0x0F00) {
 	case EXT_WORD_SRC_EXT: 
+		debug("EMIT extension word.\n");
 		*(*out)++ = emit_src_ext((uint32_t)out, *pc++); 
 		break;
 	case EXT_WORD_SRC_16B: 
+		debug("EMIT 16-bit immediate.\n");
 		*(*out)++ = emit_movw(1, *pc++); 
 		break;
 	case EXT_WORD_SRC_32B: 
+		debug("EMIT 32-bit immediate.\n");
 		*(*out)++ = emit_movw(1, *pc++);
 		*(*out)++ = emit_movt(1, *pc++);
 		break;
@@ -116,12 +121,15 @@ static uint16_t* copy_opcode(uint32_t** out, uint16_t *pc) {
 
 	switch(opea & 0xF000) {
 	case EXT_WORD_DST_EXT: 
+		debug("EMIT extension word.\n");
 		*(*out)++ = emit_dst_ext((uint32_t)out, *pc++); 
 		break;
 	case EXT_WORD_DST_16B: 
+		debug("EMIT 16-bit immediate.\n");
 		*(*out)++ = emit_movw(2, *pc++); 
 		break;
 	case EXT_WORD_DST_32B: 
+		debug("EMIT 32-bit immediate.\n");
 		*(*out)++ = emit_movw(2, *pc++);
 		*(*out)++ = emit_movt(2, *pc++);
 		break;
@@ -159,8 +167,13 @@ void cpu_lookup_nojit(void) {
 	emit_save_cpsr(&out);
 	//emit_return(&out);
 
-	ICacheFlush(exec_temp, out);
+	//ICacheFlush(exec_temp, out);
+	#if __unix__
+	__clear_cache(exec_temp, exec_temp+16);
+	#else
+	asm volatile("mcr p15, 0,%0,c7,c5,#1" :: "r"(exec_temp));
 	isb(); // flush the pipeline
+	#endif
 	
 	debug("Executing single op\n");
 	goto *(void*)exec_temp;
@@ -173,13 +186,22 @@ void cpu_lookup_nojit(void) {
 void cpu_lookup_safe(void) {
 	uint32_t* entry = (uint32_t*)(lr -= 4);
 	uint16_t *pc = cache_reverse( entry );
+	uint32_t reg = 0;
 
 	debug("In cpu_lookup_safe, entry %p (pc=%p)\n", entry, pc);
 
-	uint32_t* end = copy_opcode(entry, pc);
+	uint32_t* end = copy_opcode(&entry, pc);
 
-	ICacheFlush(entry, end);
+	// L1 Instruction and Data Cache of 32KB, 4-way, 16-word line, 128 sets
+	// L2 Unified cache of 256 KB, 8-way, 16 word line, 512 sets
+
+	//ICacheFlush(entry, end);
+	#if __unix__
+	__clear_cache(entry, entry+1);
+	#else
+	asm volatile("mcr p15, 0,%0,c7,c5,#1" :: "r"(entry));		
 	isb(); // flush the pipeline
+	#endif
 	// automagically execute the PJIT cache on return
 }
 
@@ -222,14 +244,26 @@ void cpu_lookup_inline(void) {
 			uint32_t emit = (o << 24) | ((((uint8_t)inst) << 2) - 4);
 			debug("EMIT ARM %08X (Inlined branch)\n", emit);
 			*entry = emit;
-			ICacheFlush(entry, entry + 1);
+			//ICacheFlush(entry, entry + 1);
+			//asm volatile("mcr p15, 0,%0,c7,c5,#1" :: "r"(entry));
+			#if __unix__
+			__clear_cache(entry, entry+1);
+			#else
+			asm volatile("mcr p15, 0,%0,c7,c5,#1" :: "r"(entry));
+			isb(); // flush the pipeline
+			#endif
 		}
 		goto *optab[inst];
 		
 	} else {
 		uint32_t* end = copy_opcode(entry, cache_reverse(entry));
-		ICacheFlush(entry, end);
+		//ICacheFlush(entry, end);
+		#if __unix__
+		__clear_cache(entry, entry+1);
+		#else
+		asm volatile("mcr p15, 0,%0,c7,c5,#1" :: "r"(entry));
 		isb(); // flush the pipeline
+		#endif
 		// automagically execute the PJIT cache on return
 	}
 }

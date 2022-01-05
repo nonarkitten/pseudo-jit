@@ -437,8 +437,8 @@ try_again:
 		fprintf(file, "oplen:");
 		
 		for(int i=0; i<0x10000; i++) {
-			if((i & 4095) == 0) fprintf(file, "\n// %04X\n\t.word ", i);
-			else if((i & 7) == 0) fprintf(file, "\n\t.word ");
+			if((i & 4095) == 0) fprintf(file, "\n;// 0x%04X\n\t.hword ", i);
+			else if((i & 7) == 0) fprintf(file, "\t;// 0x%04X\n\t.hword ", i - 8);
 			
 			char sepr = (i & 7) ? ',' : ' ';
 			
@@ -466,8 +466,8 @@ try_again:
 		fprintf(file, "optab:");
 		
 		for(int i=0; i<0x10000; i++) {
-			if((i & 4095) == 0) fprintf(file, "\n// %04X\n\t.long ", i);
-			else if((i & 3) == 0) fprintf(file, "\t// %04X\n\t.long ", i - 4);
+			if((i & 4095) == 0) fprintf(file, "\n// %04X\n\t.word ", i);
+			else if((i & 3) == 0) fprintf(file, "\t// %04X\n\t.word ", i - 4);
 			
 			char sepr = (i & 3) ? ',' : ' ';
 
