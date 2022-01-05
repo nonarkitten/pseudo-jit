@@ -13,6 +13,10 @@
 
 //extern ICacheFlush(void *start, void *end);
 
+// This should be odd-aligned to be impossible addresses to jump to
+#define PJIT_EXIT (0xC0DEBABE | 1)
+
+
 static jmp_buf jump_buffer;
 
 static uint32_t exec_temp[16] __attribute__ ((aligned (16))) = { 0 };
@@ -102,6 +106,7 @@ static uint16_t* copy_opcode(uint32_t** out, uint16_t *pc) {
 	uint16_t opea = oplen[opcode];
 		
 	debug("In copy_opcode, opcode=0x%04x, opaddr=0x%04x, opea=0x%04x\n", opcode, opaddr, opea);
+	if(opcode == 0xFFFF) longjmp( jump_buffer, PJIT_EXIT );
 	
 	switch(opea & 0x0F00) {
 	case EXT_WORD_SRC_EXT: 
@@ -322,9 +327,6 @@ void cpu_dump_state(void) {
 
 }
 
-// This should be odd-aligned to be impossible addresses to jump to
-#define PJIT_EXIT (0xC0DEBABE | 1)
-
 void cpu_exit(void) {
 	longjmp(jump_buffer, PJIT_EXIT);
 }
@@ -351,18 +353,18 @@ void cpu_subroutine(uint32_t m68k_pc) {
 void cpu_start(uint32_t m68k_pc) {
 	static uint32_t m68k_jump_to;
 	// When first called, this is 0
-//	m68k_jump_to = setjmp(jump_buffer);
+	m68k_jump_to = setjmp(jump_buffer);
 	// When we need to jump somewhere, we'll come back here with the new
 	// 68K program counter (and should never be 0)
-//	if(m68k_jump_to) {
-//		debug("Passing thru hyperspace?");
-//		// Special condition to exit PJIT when testing
-//		if(m68k_jump_to == PJIT_EXIT) return;
-//		// Because longjmp cannot pass 0, we need a special case for it
-//		else if(m68k_jump_to == 1) m68k_pc = 0;
-//		// And for all other cases
-//		else m68k_pc = m68k_jump_to;
-//	}
+	if(m68k_jump_to) {
+		debug("Passing thru hyperspace");
+		// Special condition to exit PJIT when testing
+		if(m68k_jump_to == PJIT_EXIT) return;
+		// Because longjmp cannot pass 0, we need a special case for it
+		else if(m68k_jump_to == 1) m68k_pc = 0;
+		// And for all other cases
+		else m68k_pc = m68k_jump_to;
+	}
 	// And, engage!
 	uint32_t* start = cache_find_entry(m68k_pc);
 	goto *start;

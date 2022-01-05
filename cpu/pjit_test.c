@@ -15,6 +15,9 @@ uint16_t bogomips[] = {
 	// EXIT:
 	//		RTS
 	0x4E75,
+	
+	// INVALID
+	0xFFFF
 };
 
 // register cpu_t* cpu asm("r12");
