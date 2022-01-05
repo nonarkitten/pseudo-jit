@@ -199,7 +199,7 @@ int emit_MOVE_TO_SR(char *buffer, uint16_t opcode) {
 }
 int emit_STOP(char *buffer, uint16_t opcode) {
 	int lines = emit_move_to(buffer, opcode, 1);
-	emit("\thlt     #0\n");
+	emit("\twfi\n");
 	return lines;
 }
 int emit_MOVE_USP(char *buffer, uint16_t opcode) {
