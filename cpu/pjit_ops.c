@@ -17,7 +17,7 @@ static jmp_buf jump_buffer;
 
 static uint32_t exec_temp[10] = { 0 };
 
-static debug(const char* format,...) {
+void debug(const char* format,...) {
 	va_list args;
 	va_start(args, format);
 	vfprintf( stderr, format, args );
@@ -233,26 +233,54 @@ void cpu_lookup_inline(void) {
 }
 
 uint32_t cpu_branch_offset(void* target, void* current) {
-	return emit_branch((uint32_t)target, (uint32_t)current);
+	int32_t _t = (uint32_t)target;
+	int32_t _c = (uint32_t)current;
+	int32_t offset = ((_t & ~3) - (_c & ~3) + 8) >> 2;
+	if(offset > 0x00FFFFFF || offset < 0xFF000001) {
+		fprintf( stderr, "\n*** Branch out of range (%08x).\n", offset);
+		exit(1);
+		
+	} else {
+		uint32_t op = 0xEB000000 | (0x00FFFFFF & offset);
+		return op;			
+	}
+//	return emit_branch((uint32_t)target, (uint32_t)current);
 }
 
 void cpu_dump_state(void) {
+	extern cpu_t cpu_state;
+	cpu = &cpu_state;
 	fprintf(stderr, "D%d: %08X  ", 0, D0);
+	cpu = &cpu_state;
 	fprintf(stderr, "D%d: %08X  ", 1, D1);
+	cpu = &cpu_state;
 	fprintf(stderr, "D%d: %08X  ", 2, D2);
+	cpu = &cpu_state;
 	fprintf(stderr, "D%d: %08X\n", 3, D3);
+	cpu = &cpu_state;
 	fprintf(stderr, "D%d: %08X  ", 4, D4);
+	cpu = &cpu_state;
 	fprintf(stderr, "D%d: %08X  ", 5, D5);
+	cpu = &cpu_state;
 	fprintf(stderr, "D%d: %08X  ", 6, D6);
+	cpu = &cpu_state;
 	fprintf(stderr, "D%d: %08X\n", 7, D7);
 	
+	cpu = &cpu_state;
 	fprintf(stderr, "A%d: %08X  ", 0, A0);
+	cpu = &cpu_state;
 	fprintf(stderr, "A%d: %08X  ", 1, A1);
+	cpu = &cpu_state;
 	fprintf(stderr, "A%d: %08X  ", 2, A2);
+	cpu = &cpu_state;
 	fprintf(stderr, "A%d: %08X\n", 3, A3);
+	cpu = &cpu_state;
 	fprintf(stderr, "A%d: %08X  ", 4, A4);
+	cpu = &cpu_state;
 	fprintf(stderr, "A%d: %08X  ", 5, A5);
+	cpu = &cpu_state;
 	fprintf(stderr, "A%d: %08X  ", 6, A6);
+	cpu = &cpu_state;
 	fprintf(stderr, "A%d: %08X\n", 7, A7);
 
 }
@@ -286,19 +314,21 @@ void cpu_subroutine(uint32_t m68k_pc) {
 void cpu_start(uint32_t m68k_pc) {
 	static uint32_t m68k_jump_to;
 	// When first called, this is 0
-	m68k_jump_to = setjmp(jump_buffer);
+//	m68k_jump_to = setjmp(jump_buffer);
 	// When we need to jump somewhere, we'll come back here with the new
 	// 68K program counter (and should never be 0)
-	if(m68k_jump_to) {
-		// Special condition to exit PJIT when testing
-		if(m68k_jump_to == PJIT_EXIT) return;
-		// Because longjmp cannot pass 0, we need a special case for it
-		else if(m68k_jump_to == 1) m68k_pc = 0;
-		// And for all other cases
-		else m68k_pc = m68k_jump_to;
-	}
+//	if(m68k_jump_to) {
+//		debug("Passing thru hyperspace?");
+//		// Special condition to exit PJIT when testing
+//		if(m68k_jump_to == PJIT_EXIT) return;
+//		// Because longjmp cannot pass 0, we need a special case for it
+//		else if(m68k_jump_to == 1) m68k_pc = 0;
+//		// And for all other cases
+//		else m68k_pc = m68k_jump_to;
+//	}
 	// And, engage!
-	goto *cache_find_entry(m68k_pc);
+	uint32_t* start = cache_find_entry(m68k_pc);
+	goto **start;
 }
 
 #undef EXIT_PJIT

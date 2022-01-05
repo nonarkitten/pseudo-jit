@@ -1,5 +1,7 @@
 #include "pjit.h"
 
+extern void debug(const char* format,...);
+
 uint16_t bogomips[] = {
 	// 		TST.L	D0
 	0x4A80,
@@ -15,14 +17,23 @@ uint16_t bogomips[] = {
 	0x4E75,
 };
 
+// register cpu_t* cpu asm("r12");
+cpu_t cpu_state;
+
 //int main(int argc, char** argv) {
 int main(void) {
-	void* cache = malloc(sizeof(pjit_cache_t) 
-		+ sizeof(pjit_tag_cache_t));
-		
-	cache_init((uint32_t)cache);
-
+	//uint32_t size = ;
+	static uint32_t cache[PJIT_CACHE_SIZE + PJIT_TAG_SIZE];
+//	if(!cache) {
+//		fprintf( stderr, "Fatal allocation error.\n" );
+//		exit(1);
+//	}	
+//	debug("Cache allocated %d bytes\n", size);
+	cache_init((uint32_t)&cache);
+	debug("Cache initialized.\n");
+	cpu = &cpu_state;
 	cpu_dump_state();
+	debug("Starting CPU.\n");
 	cpu_start(bogomips);
 	cpu_dump_state();
 }

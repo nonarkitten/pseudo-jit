@@ -52,7 +52,7 @@
 
 // If this is defined, we'll use a simple 2-way set association instead of direct
 // mapped; this doubles the size of the PJIT cache so be forewarned!
-#define SET_ASSOCIATIVE
+//#define SET_ASSOCIATIVE
 
 // must be <= 32MB minus overhead
 #define PAGE_SIZE       10		/* 2 ^ 10 = 1KB PJIT PAGE SIZE */
@@ -75,9 +75,13 @@ static inline uint16_t cache_get_page_select(uint32_t m68k_addr) {
 #ifdef SET_ASSOCIATIVE
 typedef uint32_t (*pjit_cache_t)[2][1 << PAGE_COUNT][1 << PAGE_SIZE];
 typedef uint32_t (*pjit_tag_cache_t)[2][1 << PAGE_COUNT];
+#define PJIT_CACHE_SIZE (2 * (1 << PAGE_COUNT) * (1 << PAGE_SIZE))
+#define PJIT_TAG_SIZE   (2 * (1 << PAGE_COUNT))
 #else
 typedef uint32_t (*pjit_cache_t)[1 << PAGE_COUNT][1 << PAGE_SIZE];
 typedef uint32_t (*pjit_tag_cache_t)[1 << PAGE_COUNT];
+#define PJIT_CACHE_SIZE ((1 << PAGE_COUNT) * (1 << PAGE_SIZE))
+#define PJIT_TAG_SIZE   ((1 << PAGE_COUNT))
 #endif
 
 // wipe out the entire cache

@@ -8,6 +8,8 @@
 
 #include "pjit.h"
 
+extern void debug(const char* format,...);
+
 static pjit_cache_t pjit_cache;
 static pjit_tag_cache_t pjit_tag_cache;
 
@@ -39,7 +41,12 @@ void cache_init(void* base) {
 	pjit_cache = (pjit_cache_t)base;
 	pjit_tag_cache = (pjit_tag_cache_t)(base + sizeof(*pjit_cache));
 
+	debug("In cache_init.\n");
+	debug("  cpu_lookup_safe at %p\n", cpu_lookup_safe);
+	debug("  cpu_lookup_inline at %p\n", cpu_lookup_inline);
+	debug("  clearing pages at %p:", base);
 	for(int p = 0; p < (1 << PAGE_COUNT); p++) {
+		//debug(" %d", p);
 #ifdef SET_ASSOCIATIVE
 		cache_clear(0, p);
 		cache_clear(1, p);
@@ -47,6 +54,7 @@ void cache_init(void* base) {
 		cache_clear(p);
 #endif
 	}
+	debug(" ... done\n");
 }
 
 // give a 68K address return the exact instruction to enter
@@ -56,19 +64,28 @@ uint32_t* cache_find_entry(uint32_t m68k_addr) {
 	uint16_t page = cache_get_page_select(m68k_addr);
 	uint32_t tag = cache_get_tag(m68k_addr);
 	
+	debug("In cache_find_entry; m68k_addr=%04x, i=%d, page=%d, tag=%d\n", m68k_addr, i, page, tag);
+	
 #ifdef SET_ASSOCIATIVE
 	uint32_t set;
-		 if((*pjit_tag_cache)[0][page] == tag) set = 0; // hit!
-	else if((*pjit_tag_cache)[1][page] == tag) set = 1; // hit! 
+		 if((*pjit_tag_cache)[0][page] == tag) { set = 0; debug("Hit!\n"); }
+	else if((*pjit_tag_cache)[1][page] == tag) { set = 1; debug("Hit!\n"); }
 	else { // miss!
 		set = 1 - cache_lru[page];
 		(*pjit_tag_cache)[set][page] = tag;
+		debug("Miss, using set %d and clearing page\n", set);
 		cache_clear(set, page);
 	}
 	return &(*pjit_cache)[set][page][i];
 #else
-	if((*pjit_tag_cache)[page] != tag) cache_clear(page);
-	return &(*pjit_cache)[page][i];
+	if((*pjit_tag_cache)[page] != tag) {
+		debug("Miss, clearing page\n");
+		cache_clear(page);
+	}
+	uint32_t *addr = &(*pjit_cache)[page][i];
+	debug("Entering cache at %p", addr);
+	debug(" (ARM op %08X)\n", *addr);
+	return ;
 #endif
 }
 
