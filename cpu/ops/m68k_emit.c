@@ -316,11 +316,11 @@ try_again:
 
 		do {
 			opcode = bits | base;
-			printf(" %04X", opcode);
+			// printf(" %04X", opcode);
 			if(opcode_len[opcode] == 0) {
 				// return -1 when invalid
 				int n = optab[i].emit(buffer, opcode);
-				if(opcode == 0x0CF8) printf("emit returned %d (%04X) lines:\n%s", n, -n, buffer);
+				//if(opcode == 0x0CF8) printf("emit returned %d (%04X) lines:\n%s", n, -n, buffer);
 
 				if(n != -1) {
 					if(n == 0) { // no length, NOP
@@ -452,7 +452,7 @@ try_again:
 		fclose(file);
 	}
 
-	printf("! %04X\n", -opcode_len[0x0CF8]);
+	//printf("! %04X\n", -opcode_len[0x0CF8]);
 
 	// Emit the op pointers
 	{

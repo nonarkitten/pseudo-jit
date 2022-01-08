@@ -22,25 +22,7 @@
 
 // find and optionally load reg, return 1 if success
 int emit_get_reg(uint8_t* reg_arm, uint8_t reg_68k, uint8_t size) {
-	uint8_t arm, t;
-	if(reg_alloc_68k(&arm, reg_68k) == ALLOC_FAILED) return 0;
-	
-	if(reg_arm == NULL) return 0;
-	
-	if(arm < 4) { // dynamic
-		emit("\tldr     r%d, [r12, #%d]\n", arm, reg_68k * 4); //
-		*reg_arm = arm;
-	
-	} else if(size < 4) { // fixed, but need temp
-		if(reg_alloc_temp(&t) == ALLOC_FAILED) return 0;
-		emit("\tsxt%c    r%d, r%d\n", ((size == 2) ? 'h' : 'b'), t, arm);
-		*reg_arm = t;
-		
-	} else { // fixed and ok as-is
-		*reg_arm = arm;
-	}
-	
-	return 1;
+	return reg_alloc_68k(reg_arm, reg_68k, size) == ALLOC_OKAY;
 }
 
 // \brief Perform effective address load
@@ -54,18 +36,17 @@ int emit_get_reg(uint8_t* reg_arm, uint8_t reg_68k, uint8_t size) {
 static int emit_fetch_ea_data( uint8_t* dRR, uint8_t* sRR, uint16_t sEA, uint8_t sR, uint16_t size, uint8_t is_src ) {
 	uint8_t tRR;
 	uint8_t omit_bic = 0;
-
+	
 	if(dRR == NULL) {
 		if(debug) printf("@ NULL passed for dRR\n");
-		return 0;
+		exit(1);
 	}
 	if(sEA == EA_DREG || sEA == EA_AREG) {
 		if(sEA == EA_AREG && size == 1) {
 			if(debug) printf("@ AREG invalid for destination mode\n");
 			return 0;
 		}
-		if(dRR) *dRR = reg_raw(sR);
-		return sRR ? emit_get_reg(sRR, sR, size) : 1;
+		return emit_get_reg(sRR, sR, size);
 
 	} else if(sEA == EA_IMMD) {
 		if(!is_src) {
@@ -111,9 +92,18 @@ static int emit_fetch_ea_data( uint8_t* dRR, uint8_t* sRR, uint16_t sEA, uint8_t
 		// swap upper/lower bytes
 		if(size == 1) emit("\teor     r%d, r%d, #1\n", *dRR, *dRR);
 		// clear out high 24-bits		
-		if(!omit_bic) emit("\tbic     r%d, r%d, #0xFF000000\n", *dRR, *dRR);
+		if(!omit_bic) {
+			if(*dRR < 4) {
+				emit("\tbic     r%d, r%d, #0xFF000000\n", *dRR, *dRR);
+			} else {
+				if(reg_alloc_temp(&tRR ) == ALLOC_FAILED) return 0;				
+				emit("\tbic     r%d, r%d, #0xFF000000\n", tRR, *dRR);
+				*dRR = tRR;
+			}
+		}
 		// load the data
-		if(sRR) emit("\t%s   r%d, [r%d]\n", ldx(size), *sRR, *dRR);
+		if(!sRR) emit("\t%s   r%d, [r%d]\n", ldx(size), *sRR, *dRR);
+		
 		if(is_src) reg_free(*dRR);
 		// if we're long, swap words
 		if(sRR && (size == 4)) emit("\tror     r%d, #16\n", *sRR);
@@ -144,12 +134,7 @@ int set_destination_data( uint8_t* dRR, uint8_t* tRR, uint16_t dEA, uint16_t siz
 	ALLOC_ERR_t err = ALLOC_OKAY;
 	if(debug) printf("@ in set_destination_data\n");
 	if(dEA == EA_AREG || dEA == EA_DREG) {
-		if((*dRR == 0xFF) || (*tRR == *dRR))
-			err = reg_modified(*tRR);
-		else if(size == 4)
-			emit("\tmov     r%d, r%d\n", *dRR, *tRR);
-		else
-			emit("\tbfi     r%d, r%d, #0, #%d\n", *dRR, *tRR, (size * 8));
+		err = reg_modified(*tRR);
 
 	} else if(dEA == EA_PDIS || dEA == EA_PIDX || dEA == EA_IMMD) {
 		err = ALLOC_FAILED;

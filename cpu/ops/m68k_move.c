@@ -3,27 +3,77 @@
 #include "m68k_emit_ea.h"
 #include "m68k_registers.h"
 
-extern int emit_alu(char *buffer, uint16_t size, uint16_t sEA, uint16_t dEA, ALU_OP_t alu_op);
+//extern int emit_alu(char *buffer, uint16_t size, uint16_t sEA, uint16_t dEA);
+
+int emit_move(char *buffer, uint16_t size, uint16_t sEA, uint16_t dEA) {
+	uint8_t dR, dRR, sR, sRR, tRR;
+
+	if(size == 3 || size > 4) return -1;
+	
+	if(debug) printf("@ emit_alu, sEA %02X, dEA %02X, size %d\n", sEA, dEA, size);
+
+	sR = sEA & 7; sEA = (sEA >> 3) & 7; if(sEA == 7) sEA += sR; if(sEA) sR += 8;
+	dR = dEA & 7; dEA = (dEA >> 3) & 7; if(dEA == 7) dEA += dR; if(dEA) dR += 8;
+	
+	// Universal EA exceptions
+	// Cannot be byte and an address register
+	if((size == 1) && (sEA == EA_AREG)) return -1;
+	if((size == 1) && (dEA == EA_AREG)) return -1;
+	// PC-relative and Immediate are disallowed as destinations
+	if((dEA == EA_PDIS) || (dEA == EA_PIDX) || (dEA == EA_IMMD)) return -1;
+	// Exclude obvious not-real addressing modes above immediate
+	if((sEA > EA_IMMD) || (dEA > EA_IMMD)) return -1;
+	
+	// Guard standard aliasing of addressing modes -- this is an error
+	// Source PC-Relative should be in R1 as an absolute
+	// Both ABS.W and ABS.L should also be in R1 as an absolute
+	// And finally, indexed and displacement are the same modes
+	//if((sEA == EA_ABSW) || (sEA == EA_ADIS) || (sEA == EA_PDIS) || (sEA == EA_PIDX)) return -1;
+	//printf("@ %d\n", __LINE__);
+	// Destination PC modes are already illegal, but R2
+	//if((dEA == EA_ABSW) || (dEA == EA_ADIS)) return -1;
+	//printf("@ %d\n", __LINE__);
+	
+	char flags = (dEA == EA_AREG) ? ' ' : 's';
+
+	lines = 0;
+	emit_reset( buffer );
+
+	get_destination_data( &dRR, &tRR, dEA, dR, size );
+	
+	// using the sEA and size, get the data into sRR
+	get_source_data( &sRR, sEA, sR, size );
+	
+	// using the dEA and size, get the destination data
+	// into tRR and the return address to write to in dRR
+	//if(sRR < 4 && tRR > 4) { uint8_t _t = sRR; sRR = tRR; tRR = _t; }
+	
+	emit("\tmov%c    r%d, r%d\n", flags, tRR, sRR);
+	
+	set_destination_data( &dRR, &tRR, dEA, size );
+	
+	return lines_ext(lines, sEA, dEA, size);
+}
 
 int emit_MOVEB(char *buffer, uint16_t opcode) {
 	uint16_t dEA = ((opcode & 0xE00) >> 9) | ((opcode & 0x1C0) >> 3);
 	uint16_t sEA = (opcode & 0x3F);
 	uint16_t size = 1;
-	return emit_alu(buffer, size, sEA, dEA, ALU_OP_MOVE);
+	return emit_move(buffer, size, sEA, dEA);
 }
 
 int emit_MOVEW(char *buffer, uint16_t opcode) {
 	uint16_t dEA = ((opcode & 0xE00) >> 9) | ((opcode & 0x1C0) >> 3);
 	uint16_t sEA = (opcode & 0x3F);
 	uint16_t size = 2;
-	return emit_alu(buffer, size, sEA, dEA, ALU_OP_MOVE);
+	return emit_move(buffer, size, sEA, dEA);
 }
 
 int emit_MOVEL(char *buffer, uint16_t opcode) {
 	uint16_t dEA = ((opcode & 0xE00) >> 9) | ((opcode & 0x1C0) >> 3);
 	uint16_t sEA = (opcode & 0x3F);
 	uint16_t size = 4;
-	return emit_alu(buffer, size, sEA, dEA, ALU_OP_MOVE);
+	return emit_move(buffer, size, sEA, dEA);
 }
 
 int emit_MOVEP(char *buffer, uint16_t opcode) {

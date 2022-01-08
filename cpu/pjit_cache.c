@@ -8,7 +8,8 @@
 
 #include "pjit.h"
 
-extern void debug(const char* format,...);
+//extern void debug(const char* format,...);
+#define debug(...)
 
 static pjit_cache_t pjit_cache;
 static pjit_tag_cache_t pjit_tag_cache;
@@ -27,11 +28,12 @@ static void cache_clear(uint32_t page) {
 #endif
 	uint32_t opcode;
 	for(int i=0; i<(1 << PAGE_SIZE); i++) {
-		if((i < 128) || (i >= ((1 << PAGE_SIZE)-128))) {
-			opcode = cpu_branch_offset(cpu_lookup_safe, mem);
-		} else {
-			opcode = cpu_branch_offset(cpu_lookup_inline, mem);
-		}
+		opcode = cpu_branch_offset(cpu_lookup_nojit, mem);
+//		if((i < 128) || (i >= ((1 << PAGE_SIZE)-128))) {
+//			opcode = cpu_branch_offset(cpu_lookup_safe, mem);
+//		} else {
+//			opcode = cpu_branch_offset(cpu_lookup_inline, mem);
+//		}
 		*mem++ = opcode;
 	}
 }

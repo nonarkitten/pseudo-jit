@@ -9,7 +9,7 @@ uint16_t bogomips[] = {
 	0x6704,
 	// LOOP:
 	//		SUBQ	D0, #1
-	0x6380,
+	0x5380,
 	//		BNE.S	LOOP
 	0x66FC,
 	// EXIT:

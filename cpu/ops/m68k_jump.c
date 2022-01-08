@@ -109,7 +109,7 @@ int emit_RTR(char *buffer, uint16_t opcode) {
 }
 
 
-int emit_jump(char *buffer, uint16_t opcode, char *jump_to) {
+int emit_jump(char *buffer, uint16_t opcode, int jsr) {
 	uint8_t sR, sRR, sEA;
 
 	sR = opcode & 7; sEA = (opcode >> 3) & 7;
@@ -122,19 +122,25 @@ int emit_jump(char *buffer, uint16_t opcode, char *jump_to) {
 	lines = 0;
 	emit_reset( buffer );	
 
-	reg_alloc_arm(0); // reserve r0 for jump
+	if(jsr) {
+	emit("\tmov     r0, lr\n");
+    emit("\tbl      cache_reverse\n");
+	emit("\tstr     r0, [r11, #-4]!\n");
+	}
+	
 	get_source_data( &sRR, sEA, sR, 4 );
 	if(sRR != 0) emit("\tmov     r0, r%d\n", sRR);
 	reg_free( sRR );
 	
-	emit("\tb       %s\n", jump_to);
+    emit("\tbl      cache_find_entry\n");
+    emit("\tmov     pc, r0\n");	
 	
 	return lines_ext(lines, sEA, 0, 4) | NO_BX_LR;	
 }
 
 int emit_JSR(char *buffer, uint16_t opcode) {
-	return emit_jump(buffer, opcode, "cpu_subroutine");
+	return emit_jump(buffer, opcode, 1);
 }
 int emit_JMP(char *buffer, uint16_t opcode) {
-	return emit_jump(buffer, opcode, "cpu_jump");
+	return emit_jump(buffer, opcode, 2);
 }

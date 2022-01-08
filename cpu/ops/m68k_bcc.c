@@ -40,7 +40,6 @@ int emit_SCC(char *buffer, uint16_t opcode) {
 	lines = 0;
 	emit_reset( buffer );
 
-	reg_alloc_temp(&tRR);	
 	get_destination_data( &dRR, &tRR, dEA, dR, 1 );
 	
 	uint8_t cc = (opcode & 0x0F00) >> 8;
@@ -49,13 +48,13 @@ int emit_SCC(char *buffer, uint16_t opcode) {
 		emit("\tmov     r%d, #0xFF\n", tRR);
 	} else if(cc == 1) {
 		emit("\tmov     r%d, #0\n", tRR);
-	} else {	
+	} else {
 		emit("\tmov%s   r%d, #0xFF\n", arm_cc[cc], tRR);
 		emit("\tmov%s   r%d, #0\n", arm_cc[cc ^ 1], tRR);
 	}
 
 	set_destination_data( &dRR, &tRR, dEA, 1 );
-	return lines_ext(lines, 0, dEA, 1);;
+	return lines_ext(lines, 0, dEA, 1);
 }
 
 // 0101cccc11001nnn
@@ -63,7 +62,7 @@ int emit_SCC(char *buffer, uint16_t opcode) {
 //     ----         Condition code
 
 int emit_DBCC(char *buffer, uint16_t opcode) {
-	uint8_t dR = opcode & 0x0007;
+	uint8_t dRR, dR = opcode & 0x0007;
 
 	lines = 0;
 	emit_reset( buffer );
@@ -71,19 +70,25 @@ int emit_DBCC(char *buffer, uint16_t opcode) {
 	// get our condition code
 	int cc = (opcode & 0x0F00) >> 8;
 	if(cc) {
+		if(cc > 1) emit("\tbx%s    lr\n", arm_cc[cc]);
+		
 		// determine our destination real register
-		uint8_t dRR;
+		reg_alloc_arm(1); // make sure r1 isn't trampled
 		if(!emit_get_reg( &dRR, dR, 2 )) return -1;
-
-		if(cc > 1) emit("\tb%s     0f\n", arm_cc[cc]);
-		emit("\tsubs    r%d, #1\n", dRR);
+		// decrement
+		emit("\tsub     r%d, r%d, #1\n", dRR);
 		reg_modified(dRR);
+		emit("\tcmp     r%d, #-1\n", dRR);
 		reg_flush();
-		emit("\tbmi     0f\n");
-		emit("\tsub     r0, lr, #4\n");
-		emit("\tadd     r0, r1\n");
-		emit("\tb       relative_branch\n");
-		emit("0:\n");
+		
+		// skip if negative; this is fragile, fixme
+		emit("\tbxeq    lr\n");
+
+		emit("\tmov     r0, lr\n");
+		emit("\tbl      cache_reverse\n");
+		emit("\tadd     r0, r0, r1\n");
+		emit("\tbl      cache_find_entry\n");
+		emit("\tmov     pc, r0\n");	
 	}
 
 	
@@ -96,36 +101,41 @@ int emit_DBCC(char *buffer, uint16_t opcode) {
 static int addr_err_emitted = false;
 
 int emit_BCC(char *buffer, uint16_t opcode) {
-
 	lines = 0;
 	emit_reset( buffer );
 
 	int cc = (opcode & 0x0F00) >> 8;
-	if(cc == 1) return -1;
-
-	if(cc) emit("\tb%s     0f\n", arm_cc[cc ^ 1]);
-	
 	int8_t d = (int8_t)(opcode & 0xff);
-	if(d && (d != -1)) {
-		if(d & 1) {
-			if(addr_err_emitted) return addr_err_emitted;
+
+	if(cc > 1) emit("\tb%s     0f\n", arm_cc[cc ^ 1]);
+	if(d & 1) {
+		if(addr_err_emitted) {
+			return addr_err_emitted;
+		} else {
 			addr_err_emitted = -opcode;
 			emit("\tsvc     #%d\n", ADDRESSERR);
 			return lines;
 		}
-		if(d >= 0) 
-			emit("\tmov     r1, #0x%02x\n", d);
-		else 
-			emit("\tmvn     r1, #0x%02x\n", (uint8_t)(~(-d)));
 	}
-	emit("\tsub     r0, lr, #4\n");
-	emit("\tb       relative_branch\n");
 	
-	if(cc) emit("0:\n");
+	emit("\tmov     r0, lr\n");
+    emit("\tbl      cache_reverse @ get 68k pc from lr\n");
+	if(cc == 1) emit("\tstr     r0, [r11, #-4]!\n");
+	
+	if(d == 0) {
+		emit("\tadd     r0, r0, r1\n");
+	} else if(d >= 0) {
+		emit("\tadd     r0, r0, #0x%02x\n", d);
+	} else {
+		emit("\tsub     r0, r0, #0x%02x\n", (uint8_t)(-d));	
+	}
+    emit("\tbl      cache_find_entry @ get arm address from 68k\n");
+    emit("\tmov     pc, r0\n");	
+	
+	if(cc > 1) emit("0:\n"); // else bra (always)
 	
 	uint16_t r = lines;
 	if(!cc) r |= NO_BX_LR;
-	
 	return r;
 }
 
@@ -134,23 +144,7 @@ int emit_BRA(char *buffer, uint16_t opcode) {
 }
 
 int emit_BSR(char *buffer, uint16_t opcode) {
-	lines = 0;
-	emit_reset( buffer );
-	
-	int8_t d = (int8_t)(opcode & 0xff);
-	if(d && (d != -1)) {
-		if(d & 1) {
-			if(addr_err_emitted) return addr_err_emitted;
-			addr_err_emitted = -opcode;
-			emit("\tsvc     #%d\n", ADDRESSERR);
-			return lines;
-		}
-		if(d >= 0) emit("\tmov     r1, #0x%02x\n", d);
-		else emit("\tmvn     r1, #0x%02x\n", (uint8_t)(~(-d)));
-	}
-	emit("\tsub     r0, lr, #4\n");
-	emit("\tb       branch_subroutine\n");	
-	return lines | NO_BX_LR;
+	return emit_BCC(buffer, opcode);
 }
 
 

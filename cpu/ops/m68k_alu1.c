@@ -49,14 +49,9 @@ int emit_alu(char *buffer, uint16_t size, uint16_t sEA, uint16_t dEA, ALU_OP_t a
 	
 	// using the dEA and size, get the destination data
 	// into tRR and the return address to write to in dRR
-	if(alu_op == ALU_OP_MOVE) {
-		get_destination_data( &dRR, NULL, dEA, dR, size );		
-	} else {
-		get_destination_data( &dRR, &tRR, dEA, dR, size );	
-		if(sRR < 4) { uint8_t _t = sRR; sRR = tRR; tRR = _t; }
-	}
+	get_destination_data( &dRR, &tRR, dEA, dR, size );
+	if(sRR < 4 && tRR > 4) { uint8_t _t = sRR; sRR = tRR; tRR = _t; }
 	
-		
 	switch(alu_op) {
 	case ALU_OP_OR:  	emit("\torr%c    r%d, r%d, r%d\n", flags, tRR, tRR, sRR); break;
 	case ALU_OP_AND: 	emit("\tand%c    r%d, r%d, r%d\n", flags, tRR, tRR, sRR); break;
@@ -65,22 +60,13 @@ int emit_alu(char *buffer, uint16_t size, uint16_t sEA, uint16_t dEA, ALU_OP_t a
 	case ALU_OP_SUB: 	emit("\trsb%c    r%d, r%d, r%d\n", flags, tRR, tRR, sRR);
 						emit("\trsb     r%d, #0\n", tRR);
 						break;
-	case ALU_OP_CMP:
-						emit("\tcmp     r%d, r%d\n", tRR, sRR);
+	case ALU_OP_CMP:	emit("\tcmp     r%d, r%d\n", tRR, sRR);
 						break;
-	case ALU_OP_MOVE:
-		if(dEA != EA_AREG) {
-			if(size < 4) emit("\tcmp     r%d, #0\n", sRR);
-			else {
-				// emit_fixup("ror ", "rors");
-				char* ror = strstr( buffer, "ror ");
-				if(ror) memcpy(ror, "rors", 4);
-			}
-		}
-		{ uint8_t _t = tRR; tRR = sRR; sRR = _t; } // SWAP
-		break;
+	case ALU_OP_MOVE:   emit("\tmov%c    r%d, r%d\n", flags, tRR, sRR);
+						break;
 	} // end switch
-	reg_free(sRR);
+	//reg_modified(dRR);
+	//reg_free(sRR);
 	
 	set_destination_data( &dRR, &tRR, dEA, size );
 	

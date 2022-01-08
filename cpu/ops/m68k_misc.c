@@ -277,6 +277,9 @@ int emit_TST(char *buffer, uint16_t opcode) {
 	uint8_t sR, sRR;
 	uint16_t sEA;
 
+	uint16_t size = 1 << ((opcode & 0x00C0) >> 6);
+	if(size > 4) return -1;
+
 	sR = opcode & 7; sEA = (opcode >> 3) & 7; 
 	if(sEA == 7) sEA += sR; if(sEA) sR += 8;
 
@@ -288,9 +291,9 @@ int emit_TST(char *buffer, uint16_t opcode) {
 	lines = 0;
 	emit_reset( buffer );
 	
-	get_source_data( &sRR, sEA, sR, 1 );
+	get_source_data( &sRR, sEA, sR, size );
 	emit("\tcmp     r%d, #0\n", sRR);
 	reg_flush();	
-	return lines_ext(lines, sEA, 0, 1 );
+	return lines_ext(lines, sEA, 0, size );
 }
 

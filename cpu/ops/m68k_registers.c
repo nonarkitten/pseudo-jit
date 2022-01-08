@@ -24,8 +24,8 @@ ALLOC_ERR_t reg_alloc_temp(uint8_t *reg_arm) {
 	for(uint8_t reg=0; reg<REG_MAP_COUNT; reg++) {
 		// is this a dynamic register and is it free?
 		reg_map_t* r = &reg_map[reg];
-		if(!r->used && !r->lock) {
-			reg_map[reg].lock = 1;
+		if(!r->size && !r->lock) {
+			r->lock = 1;
 			if(debug) printf("@ reg_alloc_temp r%d\n", reg);
 			*reg_arm = reg;
 			return ALLOC_OKAY;
@@ -35,53 +35,10 @@ ALLOC_ERR_t reg_alloc_temp(uint8_t *reg_arm) {
 	return ALLOC_FAILED;
 }
 
-// allocate a specific 68k register, returning it's arm register used
-// if a new temp register is needed, this will allocate it, but not load it
-ALLOC_ERR_t reg_alloc_68k(uint8_t *reg_arm, uint8_t reg_68k) {
- 	reg_68k &= 0xF;
- 	
- 	if(!reg_arm) return ALLOC_FAILED;
-
-	// return fixed registers immediately
-	if(reg68k_to_arm[reg_68k] != 0xFF) {
-		uint8_t reg = reg68k_to_arm[reg_68k];
-		if(debug) printf("@ reg_alloc_68k r%d\n", reg);
-		*reg_arm = reg;
-		return ALLOC_OKAY;
-	}
-
-	// check if it's already allocated
-	for(uint8_t reg=0; reg<REG_MAP_COUNT; reg++) {
-		reg_map_t* r = &reg_map[reg];
-		if((r->reg == reg_68k) && r->used && !r->lock) {
-			r->used++;
-			if(debug) printf("@ reg_alloc_68k r%d\n", reg);
-			*reg_arm = reg;
-			return ALLOC_OKAY;
-		}
-	}
-		
-	// allocate a new register
-	for(uint8_t reg=0; reg<REG_MAP_COUNT; reg++) {
-		reg_map_t* r = &reg_map[reg];
-		if(!r->used && !r->lock) {
-			r->reg = reg_68k;
-			r->used = 1;
-			r->lock = 0;
-			r->mod = 0;
-			if(debug) printf("@ reg_alloc_68k r%d\n", reg);
-			*reg_arm = reg;
-			return ALLOC_OKAY;
-		}
-	}
-	printf("@ reg_alloc_68k failed!\n");
-	return ALLOC_FAILED;
-}		
-
 // allocate a specific arm register
 ALLOC_ERR_t reg_alloc_arm(uint8_t reg_arm) {
 	// requires dynamic register and to not be in use
-	if((reg_arm < REG_MAP_COUNT) && (reg_map[reg_arm].used == 0)) {
+	if((reg_arm < REG_MAP_COUNT) && (reg_map[reg_arm].size == 0)) {
 		if(debug) printf("@ reg_alloc r%d\n", reg_arm);
 		reg_map[reg_arm].lock = 1;
 		return ALLOC_OKAY;
@@ -91,15 +48,73 @@ ALLOC_ERR_t reg_alloc_arm(uint8_t reg_arm) {
 	}
 }
 
+// allocate a specific 68k register, returning it's arm register used
+// if a new temp register is needed, this will allocate it, but not load it
+ALLOC_ERR_t reg_alloc_68k(uint8_t *reg_arm, uint8_t reg_68k, int size) {
+ 	reg_68k &= 0xF;
+ 	
+	if(size > 3) size = 3;
+
+	// return fixed registers immediately
+	if(reg68k_to_arm[reg_68k] != 0xFF) {
+		uint8_t reg = reg68k_to_arm[reg_68k];
+		if(size < 3) {
+			uint8_t tRR; 
+			if(debug) printf("@ reg_alloc_68k r%d (need temp)\n", reg);
+			if(reg_alloc_temp(&tRR) == ALLOC_OKAY) {
+				reg_map[tRR].size = size;
+				reg_map[tRR].reg = reg;
+
+				char sgn = (ldx == ldsx) ? 's' : 'u';
+				char sze = (size == 2) ? 'h' : 'b';
+				emit("\t%cxt%c    r%d, r%d\n", sgn, sze, tRR, reg);
+				*reg_arm = tRR;
+
+			} else {
+				printf("@ reg_alloc_68k failed!\n");
+				return ALLOC_FAILED;				
+			}
+		} else {
+			if(debug) printf("@ reg_alloc_68k r%d (fixed)\n", reg);
+			*reg_arm = reg;
+		}
+		return ALLOC_OKAY;
+	}
+
+	// check if it's already allocated
+	for(uint8_t reg=0; reg<REG_MAP_COUNT; reg++) {
+		reg_map_t* r = &reg_map[reg];
+		if((r->reg == reg_68k) && (r->size == size)) {
+			if(debug) printf("@ reg_alloc_68k r%d (existing)\n", reg);
+			*reg_arm = reg;
+			return ALLOC_OKAY;
+		}
+	}
+		
+	// allocate a new register
+	for(uint8_t reg=0; reg<REG_MAP_COUNT; reg++) {
+		reg_map_t* r = &reg_map[reg];
+		if(!r->size && !r->lock) {
+			r->reg = reg_68k;
+			r->size = size;
+			if(debug) printf("@ reg_alloc_68k r%d (new)\n", reg);
+
+			emit("\t%s   r%d, [r12, %d]\n", ldx(size), reg, reg_68k * 4);
+			*reg_arm = reg;
+
+			return ALLOC_OKAY;
+		}
+	}
+	printf("@ reg_alloc_68k failed!\n");
+	return ALLOC_FAILED;
+}
+
 // let the system know the register has been modified to ensure it gets written back
 ALLOC_ERR_t reg_modified(uint8_t reg_arm) {
 	// requires dynamic register and to be in use
-	if((reg_arm < REG_MAP_COUNT) && (reg_map[reg_arm].used)) {
+	if((reg_arm < REG_MAP_COUNT) && (reg_map[reg_arm].size)) {
 		if(debug) printf("@ reg_modified r%d\n", reg_arm);
 		reg_map[reg_arm].mod = 1;
-// 	} else {
-// 		printf("@ r%d reg_modified failed!\n", reg_arm);
-// 		return ALLOC_FAILED;
 	}
 	return ALLOC_OKAY;
 }
@@ -107,71 +122,38 @@ ALLOC_ERR_t reg_modified(uint8_t reg_arm) {
 // when we're done with a register, we should free it; in most cases, it will be
 // good practice to always free the register when it's not needed
 ALLOC_ERR_t reg_free(uint8_t reg_arm) {
-// 	if(reg68k_to_arm[reg_68k] != 0xFF) {
-// 		printf("@ reg_free failed!\n");
-// 		return ALLOC_FAILED;
-// 	}
-	char *was = "";
-	
-	if(reg_map[reg_arm].lock) {
-		was = "locked";
-		reg_map[reg_arm].lock = 0;
-		reg_map[reg_arm].reg = 0;
-		
-	} else {
-		// free used registers
-		if(reg_map[reg_arm].used) {
-			if(--reg_map[reg_arm].used) {
-				was = "used";
-			
-			} else {
-				if(reg_map[reg_arm].mod) {
-					uint16_t offset = reg_map[reg_arm].reg * 4;
-					emit("\tstr     r%d, [r12, #%d]\n", reg_arm, offset);				
-					reg_map[reg_arm].mod = 0;
-					was = "modified";
+	if(reg_arm < REG_MAP_COUNT) {
+		if(debug) printf("@ reg_free r%d (%02X)\n", reg_arm, reg_map[reg_arm].raw);
+		if(reg_map[reg_arm].size && reg_map[reg_arm].mod) {
+			if(reg_map[reg_arm].lock) {
+				// fixed register, but local copy
+				uint8_t dRR = reg_map[reg_arm].reg;
+				if(reg_map[reg_arm].size > 2) {
+					emit("\tmov     r%d, r%d\n", dRR, reg_arm);
+				} else {
+					emit("\tbfi     r%d, r%d, #0, #%d\n", dRR, reg_arm, (reg_map[reg_arm].size * 8));
 				}
-				reg_map[reg_arm].reg = 0;
-				was = "freed";
+				
+			} else {
+				uint16_t offset = reg_map[reg_arm].reg * 4;
+				emit("\t%s    r%d, [r12, %d]\n", stx(reg_map[reg_arm].size), reg_arm, offset);
 			}
-		} else {
-			was = "fixed";
 		}
+		reg_map[reg_arm].raw = 0;
 	}
 	
-	if(debug) {
-		printf("@ reg_free r%d (%s)\n", reg_arm, was);
-		//printf("\n");
-	}
 	return ALLOC_OKAY;
 }
 
 // dump (forcibly) all the registers
-ALLOC_ERR_t reg_flush(void) {
+ALLOC_ERR_t reg_flush() {
+	ALLOC_ERR_t err = ALLOC_OKAY;
+	
 	if(debug) printf("@ reg_flush\n");
 	
 	for(uint8_t reg_arm=0; reg_arm<REG_MAP_COUNT; reg_arm++) {
-		// dump locks
-		if(reg_map[reg_arm].lock) {
-			if(debug) printf("@ r%d locked\n", reg_arm);
-			reg_map[reg_arm].lock = 0;
-		}
-		
-		// free used registers
-		else if(reg_map[reg_arm].used) {
-			reg_map[reg_arm].used = 0;
-			if(reg_map[reg_arm].mod) {
-				if(debug) printf("@ r%d modified\n", reg_arm);
-				// TODO: need to fix-up for size
-				uint16_t offset = reg_map[reg_arm].reg * 4;
-				emit("\tstr     r%d, [r12, #%d]\n", reg_arm, offset);				
-				reg_map[reg_arm].mod = 0;
-			} else {
-				if(debug) printf("@ r%d used\n", reg_arm);
-			}
-		}
-		
-		reg_map[reg_arm].reg = 0;
+		if(reg_free(reg_arm) != ALLOC_OKAY) err = ALLOC_FAILED;
 	}
-	return ALLOC_OKAY;
+
+	return err;
 }

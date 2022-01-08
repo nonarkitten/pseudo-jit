@@ -6,6 +6,16 @@
 // REGISTER ALLOCATION
 typedef enum { ALLOC_FAILED, ALLOC_OKAY } ALLOC_ERR_t;
 
+typedef union {
+	uint8_t raw;
+	struct {
+		uint8_t lock : 1; // is this register locked (reg_alloc_temp or reg_alloc_arm)
+		uint8_t mod  : 1; // has this register been modified
+		uint8_t size : 2; // size of the register, 1, 2 or 4
+		uint8_t reg  : 4; // 68k register index
+	};
+} reg_map_t;
+
 uint8_t reg_raw(uint8_t reg_68k);
 
 // attempt to find any free register and return that
@@ -13,7 +23,7 @@ ALLOC_ERR_t reg_alloc_temp(uint8_t *reg_arm);
 
 // allocate a specific 68k register, returning it's arm register used
 // if a new temp register is needed, this will allocate it, but not load it
-ALLOC_ERR_t reg_alloc_68k(uint8_t *reg_arm, uint8_t reg_68k);
+ALLOC_ERR_t reg_alloc_68k(uint8_t *reg_arm, uint8_t reg_68k, int size);
 
 // allocate a specific arm register
 ALLOC_ERR_t reg_alloc_arm(uint8_t reg_arm);

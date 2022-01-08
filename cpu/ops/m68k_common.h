@@ -24,16 +24,6 @@ extern char *ldux(int size);
 extern char *stx(int size);
 extern char *(*ldx)(int);
 
-typedef union {
-	uint8_t raw;
-	struct {
-		uint8_t lock : 1; // is this ARM register locked
-		uint8_t mod  : 1; // has this register been modified
-		uint8_t used : 2; // has this register been alloc'd
-		uint8_t reg  : 4; // 68k register index
-	};
-} reg_map_t;
-
 #ifndef EXT_WORD_DEFINED
 #define EXT_WORD_DEFINED
 typedef enum {
