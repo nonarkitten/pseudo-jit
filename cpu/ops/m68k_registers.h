@@ -18,6 +18,8 @@ typedef union {
 
 uint8_t reg_raw(uint8_t reg_68k);
 
+bool reg_unalloced(uint8_t reg_arm);
+
 // attempt to find any free register and return that
 ALLOC_ERR_t reg_alloc_temp(uint8_t *reg_arm);
 
@@ -37,5 +39,7 @@ ALLOC_ERR_t reg_free(uint8_t reg_arm);
 
 // dump (forcibly) all the registers
 ALLOC_ERR_t reg_flush(void);
+
+void reg_reset();
 
 #endif // __REG_ALLOC_H__

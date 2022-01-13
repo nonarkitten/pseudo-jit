@@ -46,7 +46,8 @@ static int emit_fetch_ea_data( uint8_t* dRR, uint8_t* sRR, uint16_t sEA, uint8_t
 			if(debug) printf("@ AREG invalid for destination mode\n");
 			return 0;
 		}
-		return emit_get_reg(sRR, sR, size);
+		*dRR = reg_raw(sR);
+		return sRR ? emit_get_reg(sRR, sR, size) : 1;
 
 	} else if(sEA == EA_IMMD) {
 		if(!is_src) {
@@ -69,7 +70,8 @@ static int emit_fetch_ea_data( uint8_t* dRR, uint8_t* sRR, uint16_t sEA, uint8_t
 		} else if(emit_get_reg( dRR, sR, 4 ) == ALLOC_FAILED) {
 			return 0;
 		}
-		if(sRR && reg_alloc_temp( sRR ) == ALLOC_FAILED) return 0;
+
+		if(sRR && reg_unalloced(*sRR) && reg_alloc_temp( sRR ) == ALLOC_FAILED) return 0;
 		if(sEA == EA_AINC) {
 			if(reg_alloc_temp(&tRR ) == ALLOC_FAILED) return 0;
 			emit("\tmov     r%d, r%d\n", tRR, *dRR);
@@ -90,7 +92,16 @@ static int emit_fetch_ea_data( uint8_t* dRR, uint8_t* sRR, uint16_t sEA, uint8_t
 		}
 
 		// swap upper/lower bytes
-		if(size == 1) emit("\teor     r%d, r%d, #1\n", *dRR, *dRR);
+		if(size == 1) {
+			if(*dRR < 4) {
+				emit("\teor     r%d, r%d, #1\n", *dRR, *dRR);
+			} else {
+				if(reg_alloc_temp(&tRR ) == ALLOC_FAILED) return 0;				
+				emit("\teor     r%d, r%d, #1\n", tRR, *dRR);
+				*dRR = tRR;
+			}
+		}
+		
 		// clear out high 24-bits		
 		if(!omit_bic) {
 			if(*dRR < 4) {
@@ -101,13 +112,15 @@ static int emit_fetch_ea_data( uint8_t* dRR, uint8_t* sRR, uint16_t sEA, uint8_t
 				*dRR = tRR;
 			}
 		}
+
 		// load the data
-		if(!sRR) emit("\t%s   r%d, [r%d]\n", ldx(size), *sRR, *dRR);
+		if(sRR) emit("\t%s   r%d, [r%d]\n", ldx(size), *sRR, *dRR);
 		
 		if(is_src) reg_free(*dRR);
 		// if we're long, swap words
-		if(sRR && (size == 4)) emit("\tror     r%d, #16\n", *sRR);
+		if(sRR && (size == 4)) emit("\tror     r%d , r%d, #16\n", *sRR, *sRR);
 	}
+	//reg_flush();
 	return 1;
 }
 
@@ -134,7 +147,9 @@ int set_destination_data( uint8_t* dRR, uint8_t* tRR, uint16_t dEA, uint16_t siz
 	ALLOC_ERR_t err = ALLOC_OKAY;
 	if(debug) printf("@ in set_destination_data\n");
 	if(dEA == EA_AREG || dEA == EA_DREG) {
-		err = reg_modified(*tRR);
+		if(*dRR == 0xFF) err = reg_modified(*tRR);
+		else if(size == 4) emit("\tmov     r%d, r%d\n", *dRR, *tRR);
+		else emit("\tbfi     r%d, r%d, #0, #%d", *dRR, *tRR, size * 8);
 
 	} else if(dEA == EA_PDIS || dEA == EA_PIDX || dEA == EA_IMMD) {
 		err = ALLOC_FAILED;

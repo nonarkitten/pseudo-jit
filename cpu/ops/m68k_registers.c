@@ -15,6 +15,10 @@ static const uint8_t reg68k_to_arm[16] = {
 
 static reg_map_t reg_map[REG_MAP_COUNT] = { 0 };
 
+bool reg_unalloced(uint8_t reg_arm) {
+	return reg_map[reg_arm].size == 0;
+}
+
 uint8_t reg_raw(uint8_t reg_68k) {
 	return reg68k_to_arm[reg_68k & 0xF];
 }
@@ -32,6 +36,7 @@ ALLOC_ERR_t reg_alloc_temp(uint8_t *reg_arm) {
 		}
 	}
 	printf("@ reg_alloc_temp failed!\n");
+	exit(1);
 	return ALLOC_FAILED;
 }
 
@@ -156,4 +161,12 @@ ALLOC_ERR_t reg_flush() {
 	}
 
 	return err;
+}
+
+void reg_reset() {
+	if(debug) printf("@ reg_reset\n");
+	
+	for(uint8_t reg_arm=0; reg_arm<REG_MAP_COUNT; reg_arm++) {
+		reg_map[reg_arm].raw = 0;
+	}
 }

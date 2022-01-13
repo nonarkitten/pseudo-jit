@@ -24,7 +24,7 @@ int emit_store_EA(char *buffer, uint16_t opcode, int is_pea) {
 
 	if(!is_pea) {
 		uint8_t dR = ((opcode & 0x0E00) > 9) | 0x8;
-		reg_alloc_68k( &dRR, dR );
+		reg_alloc_68k( &dRR, dR, 4 );
 	}
 
 	switch(sEA) {
@@ -137,8 +137,8 @@ int emit_EXG(char *buffer, uint16_t opcode) {
 	}
 		
 	uint8_t rry, rrx, tRR;
-	reg_alloc_68k( &rry, ry );
-	reg_alloc_68k( &rrx, rx );
+	reg_alloc_68k( &rry, ry, 4 );
+	reg_alloc_68k( &rrx, rx, 4 );
 	reg_alloc_temp( &tRR );
 
 	emit("\tmov     r%d, r%d\n", tRR, rry);

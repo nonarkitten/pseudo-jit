@@ -6,11 +6,11 @@
 //extern int emit_alu(char *buffer, uint16_t size, uint16_t sEA, uint16_t dEA);
 
 int emit_move(char *buffer, uint16_t size, uint16_t sEA, uint16_t dEA) {
-	uint8_t dR, dRR, sR, sRR, tRR;
+	uint8_t dR=0, dRR=0, sR=0, sRR=0, tRR=0;
 
 	if(size == 3 || size > 4) return -1;
 	
-	if(debug) printf("@ emit_alu, sEA %02X, dEA %02X, size %d\n", sEA, dEA, size);
+	if(debug) printf("@ emit_move, sEA %02X, dEA %02X, size %d\n", sEA, dEA, size);
 
 	sR = sEA & 7; sEA = (sEA >> 3) & 7; if(sEA == 7) sEA += sR; if(sEA) sR += 8;
 	dR = dEA & 7; dEA = (dEA >> 3) & 7; if(dEA == 7) dEA += dR; if(dEA) dR += 8;
@@ -34,23 +34,125 @@ int emit_move(char *buffer, uint16_t size, uint16_t sEA, uint16_t dEA) {
 	//if((dEA == EA_ABSW) || (dEA == EA_ADIS)) return -1;
 	//printf("@ %d\n", __LINE__);
 	
-	char flags = (dEA == EA_AREG) ? ' ' : 's';
+	//
 
 	lines = 0;
 	emit_reset( buffer );
 
-	get_destination_data( &dRR, &tRR, dEA, dR, size );
-	
-	// using the sEA and size, get the data into sRR
-	get_source_data( &sRR, sEA, sR, size );
-	
-	// using the dEA and size, get the destination data
-	// into tRR and the return address to write to in dRR
-	//if(sRR < 4 && tRR > 4) { uint8_t _t = sRR; sRR = tRR; tRR = _t; }
-	
-	emit("\tmov%c    r%d, r%d\n", flags, tRR, sRR);
-	
-	set_destination_data( &dRR, &tRR, dEA, size );
+	// hyper-optimize register-to-register conditions
+	if((sEA <= EA_AREG) && (dEA <= EA_AREG)) {
+		if((reg_raw(sR) == 0xFF) && (reg_raw(dR) == 0xFF)) {
+			// dynamic to dynamic
+			if(debug) printf("@ dyn->dyn optimization\n");
+			reg_alloc_temp(&tRR);
+			emit("\t%s   r%d, [r12, #%d]\n", ldx(size), tRR, sR * 4);
+			if(dEA != EA_AREG) emit("\tcmp     r%d, #0\n", tRR);
+			emit("\t%s    r%d, [r12, #%d]\n", stx(size), tRR, dR * 4);
+			
+		} else if(reg_raw(sR) == 0xFF) {
+			// dynamic into fixed
+			if(debug) printf("@ dyn->fixed optimization\n");
+			reg_alloc_68k(&dRR, dR, 4);
+
+			if(size == 4) {
+				emit("\t%s   r%d, [r12, #%d]\n", ldx(size), dRR, sR * 4);
+				if(dEA != EA_AREG) emit("\tcmp     r%d, #0\n", dRR);
+			} else {
+				reg_alloc_temp(&tRR);
+				emit("\t%s   r%d, [r12, #%d]\n", ldx(size), tRR, sR * 4);
+				if(dEA != EA_AREG) emit("\tcmp     r%d, #0\n", tRR);
+				emit("\tbfi     r%d, r%d, $0, #%d\n", dRR, tRR, size * 8);
+			}
+
+		} else if(reg_raw(dR) == 0xFF) {
+			// fixed into dynamic
+			if(debug) printf("@ fixed->dyn optimization\n");
+			reg_alloc_68k(&sRR, sR, 4);
+			if(dEA != EA_AREG) {
+				if(size != 4) {
+					reg_alloc_temp(&tRR);
+					emit("\tsxt%c    r%d, r%d\n", (size == 1) ? 'b' : 'h', tRR, sRR);
+					sRR = tRR;
+				}
+				emit("\tcmp     r%d, #0\n", sRR);
+			}
+			emit("\t%s    r%d, [r12, #%d]\n", stx(size), sRR, dR * 4);
+
+		} else {
+			// fixed into fixed
+			if(debug) printf("@ fixed->fixed optimization\n");
+			reg_alloc_68k(&sRR, sR, 4);
+			reg_alloc_68k(&dRR, dR, 4);
+			if(dEA == EA_AREG) {
+				if(size == 4) emit("\tmov     r%d, r%d\n", dRR, sRR);
+				else emit("\tsxth    r%d, r%d\n", dRR, sRR);
+			} else {
+				if(size == 4) emit("\tmovs    r%d, r%d\n", dRR, sRR);
+				else {
+					reg_alloc_temp(&tRR);
+					emit("\tsxt%c    r%d, r%d\n", (size == 1) ? 'b' : 'h', tRR, sRR);
+					emit("\tcmp     r%d, #0\n", tRR);
+					emit("\tbfi     r%d, r%d, $0, #%d\n", dRR, tRR, size * 8);
+				}
+			}
+			reg_modified(dRR);
+			reg_flush();
+		}
+
+	} else if(sEA <= EA_AREG) {
+		// reg -> mem
+		if(debug) printf("@ reg->mem optimization\n");
+		reg_alloc_68k(&sRR, sR, size);
+		get_destination_data(&dRR, &sRR, dEA, dR, size);
+		if(dEA != EA_AREG) {
+			if(size == 4) {
+				char *ror = strstr(buffer, "ror");
+				if(ror) memcpy(ror, "rors", 4);
+			} else {
+				emit("\tcmp     r%d, #0\n", sRR);
+			}
+		}
+		set_destination_data(&dRR, &sRR, dEA, size);
+		//exit(1);
+
+	} else if(dEA <= EA_AREG) {
+		// mem -> reg
+		if(debug) printf("@ mem->reg optimization\n");
+		get_source_data(&sRR, sEA, sR, size);
+		if(dEA != EA_AREG) {
+			if(size == 4) {
+				char *ror = strstr(buffer, "ror");
+				if(ror) memcpy(ror, "rors", 4);
+			} else {
+				emit("\tcmp     r%d, #0\n", sRR);
+			}
+		}
+		if(reg_raw(dR) == 0xFF) {
+			// dynamic
+			emit("\t%s    r%d, [r12, #%d]\n", stx(size), sRR, dR * 4);
+		} else if(size == 4) {
+			// fixed, rewrite ror
+			char *ror = strstr(buffer, "ror");
+			if(ror) sprintf( &ror[9], "%d", reg_raw(dR) );
+		} else {
+			// fixed, bfi
+			emit("\tbfi     r%d, r%d, #0, #%d\n", reg_raw(dR), sRR, size * 8);
+		}
+
+		if(size == 4) {
+			if(dEA != EA_AREG) {
+			} else {
+
+			}
+		}
+		
+
+	} else {
+		// get_destination_data( &dRR, &tRR, dEA, dR, size );
+
+		// if(debug) printf("@ %d, %d\n", dRR, sRR);
+		// set_destination_data( &dRR, &sRR, dEA, size );
+	}
 	
 	return lines_ext(lines, sEA, dEA, size);
 }

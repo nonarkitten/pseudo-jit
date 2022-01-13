@@ -294,7 +294,6 @@ try_again:
 					//n = optab[i].emit(buffer, -n);
 					goto try_again;
 				}
-				
 				printf("%s\nLines: %d\n", buffer, n);
 				return 0;
 			}
@@ -316,7 +315,7 @@ try_again:
 
 		do {
 			opcode = bits | base;
-			// printf(" %04X", opcode);
+			printf(" %04X", opcode);
 			if(opcode_len[opcode] == 0) {
 				// return -1 when invalid
 				int n = optab[i].emit(buffer, opcode);
@@ -342,6 +341,8 @@ try_again:
 						total_68k++;
 						total_alias++;
 					}
+				} else {
+					reg_reset();
 				}
 			}
 			bits = (bits - optab[i].bits) & optab[i].bits;
@@ -511,16 +512,14 @@ try_again:
 				
 					buffer[0] = 0;
 					emit_reset( buffer );
+
 					reg_alloc_arm(r);
+
 					uint8_t rD;
-					reg_alloc_68k(&rD, d); // todo bail?
-				
+
 					fprintf(file, "0:\n%s", buffer);
-					if(s==0) {
-						fprintf(file, "\tsxtah   r%d, r%d, r%d\n", r, r, rD);
-					} else {
-						fprintf(file, "\tadd     r%d, r%d\n", r, rD);
-					}
+					reg_alloc_68k(&rD, d, (s * 3) + 1);
+					fprintf(file, "\tadd     r%d, r%d\n", r, rD);
 				
 					fprintf(file, "\tbx      lr\n\n");
 					reg_flush();
