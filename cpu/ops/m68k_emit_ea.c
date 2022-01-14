@@ -35,7 +35,7 @@ int emit_get_reg(uint8_t* reg_arm, uint8_t reg_68k, uint8_t size) {
 // \return If successful, returns 1
 static int emit_fetch_ea_data( uint8_t* dRR, uint8_t* sRR, uint16_t sEA, uint8_t sR, uint16_t size, uint8_t is_src ) {
 	uint8_t tRR;
-	uint8_t omit_bic = 0;
+	uint8_t omit_bic = 0, omit_eor = 0;
 	
 	if(dRR == NULL) {
 		if(debug) printf("@ NULL passed for dRR\n");
@@ -71,20 +71,30 @@ static int emit_fetch_ea_data( uint8_t* dRR, uint8_t* sRR, uint16_t sEA, uint8_t
 			return 0;
 		}
 
-		if(sRR /*&& is_src*/ && reg_alloc_temp( sRR ) == ALLOC_FAILED) return 0;
+		if(sRR && is_src && reg_alloc_temp( sRR ) == ALLOC_FAILED) return 0;
 		
 		if(sEA == EA_AINC) {
 			if(reg_alloc_temp(&tRR ) == ALLOC_FAILED) return 0;
-			emit("\tmov     r%d, r%d\n", tRR, *dRR);
+			if(size == 1) {
+				emit("\teor     r%d, r%d, #1\n", tRR, *dRR);
+				omit_eor = true;
+			} else if(!omit_bic) {
+				emit("\tbic     r%d, r%d, #0xFF000000\n", *dRR, *dRR);
+				omit_bic = true;
+			} else {
+				emit("\tmov     r%d, r%d\n", tRR, *dRR);
+			}
 			emit("\tadd     r%d, r%d, #%d\n", *dRR, tRR, size);
 			reg_modified(*dRR); reg_free(*dRR);
 			*dRR = tRR;
 		} else if(sEA == EA_ADEC) {
 			if(reg_alloc_temp(&tRR ) == ALLOC_FAILED) return 0;
 			emit("\tsub     r%d, r%d, #%d\n", *dRR, *dRR, size);
-			emit("\tmov     r%d, r%d\n", tRR, *dRR);
-			reg_modified(*dRR); reg_free(*dRR);
-			*dRR = tRR;
+			if(size == 4 && !omit_bic) {
+				emit("\tmov     r%d, r%d\n", tRR, *dRR);
+				reg_modified(*dRR); reg_free(*dRR);
+				*dRR = tRR;
+			}
 		} else if(sEA == EA_ADIS || sEA == EA_AIDX) {
 			emit("\tadd     r%d, r%d, r%d\n", (is_src ? 1 : 2), *dRR, size);
 			reg_modified(*dRR); reg_free(*dRR);
@@ -92,7 +102,7 @@ static int emit_fetch_ea_data( uint8_t* dRR, uint8_t* sRR, uint16_t sEA, uint8_t
 		}
 
 		// swap upper/lower bytes
-		if(size == 1) {
+		if(!omit_eor && (size == 1)) {
 			if(*dRR < 4) {
 				emit("\teor     r%d, r%d, #1\n", *dRR, *dRR);
 			} else {
@@ -150,6 +160,7 @@ int set_destination_data( uint8_t* dRR, uint8_t* tRR, uint16_t dEA, uint16_t siz
 	if(debug) printf("@ in set_destination_data\n");
 	if(dEA == EA_AREG || dEA == EA_DREG) {
 		if(*dRR == 0xFF) err = reg_modified(*tRR);
+		else if(*tRR == *dRR) ;
 		else if(size == 4) emit("\tmov     r%d, r%d\n", *dRR, *tRR);
 		else emit("\tbfi     r%d, r%d, #0, #%d\n", *dRR, *tRR, size * 8);
 
