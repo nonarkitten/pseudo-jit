@@ -81,7 +81,7 @@ static int emit_fetch_ea_data( uint8_t* dRR, uint8_t* sRR, uint16_t sEA, uint8_t
 			} else if(!omit_bic) {
 				emit("\tbic     r%d, r%d, #0xFF000000\n", *dRR, *dRR);
 				omit_bic = true;
-			} else { 
+			} else {
 				emit("\tmov     r%d, r%d\n", tRR, *dRR);
 			}
 			emit("\tadd     r%d, r%d, #%d\n", *dRR, tRR, size);
