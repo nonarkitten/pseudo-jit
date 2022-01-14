@@ -124,7 +124,19 @@ int emit_move(char *buffer, uint16_t size, uint16_t sEA, uint16_t dEA) {
 		else fixup_rors(buffer, sRR, size);
 		
 		if(reg_raw(dR) == 0xFF) emit("\t%s    r%d, [r12, #%d]\n", stx(size), sRR, dR * 4); // dynamic
-		else if(size == 4) emit("\tmov     r%d, r%d\n", reg_raw(dR), sRR); // fixed, mov		
+		else if(size == 4) {
+			char *rors = strstr(buffer, "rors");
+			if(rors) {
+				if(debug) printf("@ fixup rors destination");
+				dRR = reg_raw(dR);
+				rors += 9;
+				if(dRR > 9) *rors++ = '1';
+				*rors = '0' + (dRR % 10);
+			} else {
+				// fixed, mov
+				emit("\tmov     r%d, r%d\n", reg_raw(dR), sRR); 
+			}
+		}
 		else emit("\tbfi     r%d, r%d, #0, #%d\n", reg_raw(dR), sRR, size * 8); // fixed, bfi
 
 		reg_flush();

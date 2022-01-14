@@ -351,7 +351,7 @@ try_again:
 			// implemented opcode
 			line_counts[len & 0xFF]++;
 			total_arm += len & 0xFF;
-			if(!(len && NO_BX_LR)) total_arm++;
+			if(!(len & NO_BX_LR)) total_arm++;
 			total_68k++;
 		}
 		else if(len < 0) {
