@@ -10,6 +10,7 @@ int avoid_register_saving = 0;
 
 int lines;
 int debug;
+int last_opcode;
 
 static char* opcodes[65536] = { 0 };
 static int opcode_len[65536] = { 0 };
@@ -220,7 +221,7 @@ static const struct op_details {
 };
 static const uint32_t optab_size = sizeof(optab) / sizeof(struct op_details);
 
-static int invalid = 0;
+//static int invalid = 0;
 
 // Opcode emitters should return the number of lines they emit
 
@@ -269,12 +270,15 @@ int emit_NOP(char *buffer, uint16_t opcode) {
 int main(int argc, char ** argv) {
 //	const char *omitted = "// omitted\n";
 	char buffer[16384];
-	int line_counts[20] = { 0 };
+	int line_counts[256] = { 0 };
 	int total_arm = 0;
 	int total_68k = 0;
 	int total_alias = 0;
 	int total_nops = 0;
-	int total_written = 0;
+	int total_invalid = 0;
+		
+	fprintf(stderr, "Initializing disassembler...\n"); 
+	m68k_disasm(0);
 	
 	if(argc == 2) {
 		uint16_t opcode = strtoul(argv[1], 0, 0);
@@ -287,18 +291,22 @@ try_again:
 				if(n == -1) continue;
 				else if(n == -0x4AFC) break;
 				else if(n == 0) {
-					printf("Opcode is NOP\n");
+					printf("@ Opcode is NOP\n");
 				} else if(n < 0) {
-					printf("Opcode %04X is alias of %04X\n", opcode, -n);
+					printf("@ Opcode %04X is alias of %04X\n", opcode, -n);
 					opcode = -n;
 					//n = optab[i].emit(buffer, -n);
 					goto try_again;
 				}
-				printf("%s\nLines: %d\n", buffer, n);
+				if((n & NO_BX_LR) != NO_BX_LR) {
+					emit("\tbx      lr\n");
+					n++;
+				}
+				printf("%s\n@ Lines: %d (flags %04X)\n", buffer, n & 0xFF, n & 0xFF00);
 				return 0;
 			}
 		}
-		printf("Opcode %04X appears invalid.\n", opcode);
+		printf("@ Opcode %04X appears invalid.\n", opcode);
 		return -1;
 	}
 
@@ -310,80 +318,59 @@ try_again:
 	// >0 actual length + flags
 		
 	// Generate all the opcodes first
+	fprintf(stderr, "Generating opcodes...\n"); 
 	for(int i=0; i<optab_size; i++) {
 		uint16_t base = optab[i].base, bits = 0, opcode;
-
 		do {
 			opcode = bits | base;
-			printf(" %04X", opcode);
-			if(opcode_len[opcode] == 0) {
-				// return -1 when invalid
-				int n = optab[i].emit(buffer, opcode);
-				//if(opcode == 0x0CF8) printf("emit returned %d (%04X) lines:\n%s", n, -n, buffer);
-
-				if(n != -1) {
-					if(n == 0) { // no length, NOP
-						opcode_len[opcode] = -0x4E71;
-						total_nops++;
-						total_68k++;
-						total_alias++;
-					}
-					else if(n > 0) { // actual opcode
-						opcodes[opcode] = strdup(buffer);
-						opcode_len[opcode] = n;
-						line_counts[n & 0xFF]++;
-						total_arm += n & 0xFF;
-						total_written++;
-						total_68k++;
-					}
-					else { // alias
-						opcode_len[opcode] = n;
-						total_68k++;
-						total_alias++;
-					}
-				} else {
-					reg_reset();
-				}
-			}
+			last_opcode = opcode; 
+			
 			bits = (bits - optab[i].bits) & optab[i].bits;
+			
+			if(opcode_len[opcode] == 0) {
+				int n = optab[i].emit(buffer, opcode);
+				if(n == -1) continue;
+				else if(n < 0) opcode_len[opcode] = n; // alias
+				else if(n == 0) opcode_len[opcode] = -0x4E71; // no length, NOP
+				else opcodes[opcode] = strdup(buffer), opcode_len[opcode] = n; // actual opcode
+			}
+			
 		} while(bits);
 	}
-	
-	printf("! %04X\n", -opcode_len[0x0CF8]);
-	
-	int count = 0;
-	for(int i=0; i<0x10000; i++) {
-		int len = opcode_len[i];
-		count += len != 0;
-	}
 
-	int dirty = true;
-	while(dirty) {
-		dirty = false;
-		for(int i=0; i<0x10000; i++) {
-			int len = opcode_len[i];
-			if(len < 0) {
-				uint16_t l2 = -opcode_len[-len];
-				if(l2 == 0x4AFC) {
-					opcode_len[i] = -0x4AFC;
-					//printf("Invalid ");
-					// && (opcode_len[(-len) & 0xFFFF] == 0x4AFC)) {
-					printf("Invalid alias found at %04X to %04X (%04x)\n", i, -len, l2);
-					dirty = true;
-				}
-			}
+	fprintf(stderr, "Scanning table for invalid opcodes...\n"); 
+	for(int i=0; i<0x10000; i++) {
+		int opcode = i;
+		int len = opcode_len[opcode];
+		
+		if(len == 0) { 
+			fprintf(stderr, "Failure at opcode 0x%04X\n", i); 
+			exit(1);
+		}
+		else if(len > 0) {
+			// implemented opcode
+			line_counts[len & 0xFF]++;
+			total_arm += len & 0xFF;
+			if(!(len && NO_BX_LR)) total_arm++;
+			total_68k++;
+		}
+		else if(len < 0) {
+			// look for real opcode
+			while(len < 0) opcode = -len, len = opcode_len[-len];
+			opcode_len[i] = -opcode;
+			if(opcode == 0x4E71) total_nops++;
+			else if(opcode == 0x4AFC) total_invalid++;
+			total_alias++;
 		}
 	}
 	
-	int total_real_valid = 0;
-	int total_errors = 0;
-	
 	// Emit the opcode functions in sixteen files
 	for(int i=0; i<0x10000; i+=0x1000) {
-		char filename[16];
-		
+		char filename[16];		
 		sprintf(filename, "pjit_ops_%04x.s", i);
 		FILE * file = fopen( filename, "w" );
+
+		fprintf(stderr, "Generating file '%s'...\n", filename); 
 				
 		fprintf(file, "%s", header);
 	
@@ -394,7 +381,6 @@ try_again:
 			uint16_t opcode = i + j;
 			const char *m68k_op = m68k_disasm(opcode);
 			bool valid = (opcode == 0x4AFC) || memcmp(m68k_op, "ILLEGAL", 7);
-			if(valid) total_real_valid++;
 			
 			// print out all the aliases for this
 			if(opcode_len[opcode] > 0) {
@@ -410,13 +396,11 @@ try_again:
 					fprintf(file, "\tbx      lr\n");
 				fprintf(file, "\n");
 				if(!valid) {
-					printf("ERR: opcode emitted for invalid pattern %04X\n", opcode);
-					total_errors++;
+					fprintf(stderr, "ERR: opcode emitted for invalid pattern %04X\n", opcode);
 				}
 			} else if(opcode_len[opcode] == 0) {
 				if(valid) {
-				printf("ERR: opcode skipped for valid pattern %04X: %s", opcode, m68k_op);
-					total_errors++;
+					fprintf(stderr, "ERR: opcode skipped for valid pattern %04X: %s", opcode, m68k_op);
 				}
 			}
 		}
@@ -424,13 +408,13 @@ try_again:
 		fclose(file);
 	}
 	
-	printf("Total errors: %d\n", total_errors);
-
 	// Emit the op lengths
 	{
 		char filename[16];
 		sprintf(filename, "pjit_oplen.s");
 		FILE * file = fopen( filename, "w" );
+
+		fprintf(stderr, "Generating file '%s'...\n", filename); 
 		
 		fprintf(file, "%s", header);
 		
@@ -453,13 +437,12 @@ try_again:
 		fclose(file);
 	}
 
-	//printf("! %04X\n", -opcode_len[0x0CF8]);
-
-	// Emit the op pointers
 	{
 		char filename[16];
 		sprintf(filename, "pjit_optab.s");
 		FILE * file = fopen( filename, "w" );
+		
+		fprintf(stderr, "Generating file '%s'...\n", filename); 
 		
 		fprintf(file, "%s", header);
 		
@@ -484,12 +467,13 @@ try_again:
 	
 	// Emit all the extension modes
 	{
-		char branches[8192];
+		char branches[16384];
 		char buffer[256];
 		char filename[16];
 		
 		sprintf(filename, "pjit_extword.s");
 		FILE * file = fopen( filename, "w" );
+		fprintf(stderr, "Generating file '%s'...\n", filename); 
 		
 		for(int r=1; r<3; r++) {
 			char *b = branches;
@@ -497,7 +481,8 @@ try_again:
 				b += sprintf(b, "\tmov     r%d, #%d\n\tb       0f\n", r, i);
 			}
 			for(int i=-128; i; i++) {
-				b += sprintf(b, "\tmvn     r%d, #%d\n\tb       0f\n", r, ~i);
+				b += sprintf(b, "\tmvn     r%d, #%d\n", r, ~i);
+				if(i < -1) b += sprintf(b, "\tb       0f\n");
 			}
 			
 			fprintf(file, "\t.text\n\t.thumb_func\n\t.syntax unified\n");
@@ -505,22 +490,22 @@ try_again:
 			for(int s=0; s<2; s++) {
 				for(int d=0; d<16; d++) {
 					char label[256];
+					uint8_t rD;
+
 					sprintf(label, "extword_%s_%X%d00", ((r==1) ? "src" : "dst" ), d, (s * 8));
+					
 					fprintf(file, "\t.global %s\n", label);
 					fprintf(file, "%s:\n", label);
 					fprintf(file, "%s", branches);
 				
 					buffer[0] = 0;
 					emit_reset( buffer );
-
+					
 					reg_alloc_arm(r);
-
-					uint8_t rD;
-
-					fprintf(file, "0:\n%s", buffer);
-					reg_alloc_68k(&rD, d, (s * 3) + 1);
-					fprintf(file, "\tadd     r%d, r%d\n", r, rD);
+					reg_alloc_68k(&rD, d, s ? 4 : 2); // todo bail?
 				
+					fprintf(file, "0:\n%s", buffer);
+					fprintf(file, "\tadd     r%d, r%d\n", r, rD);				
 					fprintf(file, "\tbx      lr\n\n");
 					reg_flush();
 				}
@@ -532,10 +517,11 @@ try_again:
 
 	// Make the header file too
 	{
-		char filename[16];
-		
+		char filename[16];		
 		sprintf(filename, "pjit_extword.h");
 		FILE * file = fopen( filename, "w" );
+		
+		fprintf(stderr, "Generating file '%s'...\n", filename); 
 		
 		for(int r=1; r<3; r++) {			
 			for(int s=0; s<2; s++) {
@@ -547,39 +533,24 @@ try_again:
 	
 		fclose(file);
 	}
-
-	// add all the return statements and bonus NOPs
-	total_arm += (total_68k - total_alias) + 16;
 	
 	printf("\n");
-	printf("\n");
-	printf("total 68k instructions: %d (should be 65536)\n", total_68k );
-	printf("total real valid 68k instructions: %d\n", total_real_valid );
-	printf("total generated, valid opcodes: %d\n", count);
-	printf("total missing opcodes: %d\n", total_real_valid - count);
-	printf("\n");
-	printf("total 68k instructions with code: %d\n", total_written );
-	printf("\n");
-	printf("total aliased 68k instructions: %d\n", total_alias );
-	printf("  invalid aliased 68k instructions: %d\n", invalid );
-	printf("  aliased nop 68k instructions: %d\n", total_nops );
-
-//	print_old_optab();
-// 	int total_nops = 0;
-// 	int total_written = 0;
-		
-//	printf("missing 68k instructions: %d\n", bad_opcodes);//total_68k - (total_written + total_alias) );
-	
-	//printf("unique 68k instructions: %d\n", (total_68k - total_alias));
-	printf("total arm instructions: %d (%d bytes)\n", total_arm, total_arm * 4);
+	printf("Total real 68k instructions: %d\n", total_68k );
+	printf("Total aliased 68k instructions: %d\n", total_alias );
+	printf("Total invalid 68k instructions: %d\n", total_invalid );
+	printf("Total opcode count is %s\n", (((total_68k + total_alias) == 65536) ? "valid" : "invalid"));
+	printf("\n");	
+	printf("Total arm instructions: %d (%d bytes)\n", total_arm, total_arm * 4);
 	
 	float average = 0.0f;
-	for(int i=1; i<20; i++) {
+	for(int i=1; i<255; i++) {
+		if(line_counts[i] == 0) continue;
+		//if(i < 20) 
 		printf("functions with %d lines: %d\n", i, line_counts[i]);
 		average += i * line_counts[i];
-		if(i > 8 && line_counts[i] == 0) break;
+		//if(i > 8 && (line_counts[i] == 0) && (line_counts[i + 1] == 0)) break;
 	}
-	average /= (float)(total_68k - total_alias);
+	average /= (float)total_68k;
 	printf("line average: %f\n", average);
 	
 }

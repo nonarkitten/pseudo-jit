@@ -43,12 +43,23 @@ int emit_ADDQ(char *buffer, uint16_t opcode) {
 	uint8_t val = (opcode & 0x0E00) >> 9;
 	if(!val) val = 8;
 	
-	if(opcode & 0x0100) { // subq
-		emit("\trsbs    r%d, r%d, #%d\n", tRR, tRR, val);		
-		emit("\trsb     r%d, #0\n", tRR);
+	if(dEA == EA_AREG) {
+		if(opcode & 0x0100) { // subq
+			emit("\trsb     r%d, r%d, #%d\n", tRR, tRR, val);		
+			emit("\trsb     r%d, #0\n", tRR);
 
-	} else { // addq
-		emit("\tadds    r%d, r%d, #%d\n", tRR, tRR, val);		
+		} else { // addq
+			emit("\tadd     r%d, r%d, #%d\n", tRR, tRR, val);		
+		}
+		
+	} else {
+		if(opcode & 0x0100) { // subq
+			emit("\trsbs    r%d, r%d, #%d\n", tRR, tRR, val);		
+			emit("\trsb     r%d, #0\n", tRR);
+
+		} else { // addq
+			emit("\tadds    r%d, r%d, #%d\n", tRR, tRR, val);		
+		}
 	}
 	
 	set_destination_data( &dRR, &tRR, dEA, size );
@@ -77,7 +88,7 @@ int emit_MOVEQ(char *buffer, uint16_t opcode) {
 	if(dVal >= 0)
 		emit("\tmov     r%d, #0x%02x\n", dRR, dVal);
 	else 
-		emit("\tmvn     r%d, #0x%02x\n", dRR, (uint8_t)(~(-dVal)));
+		emit("\tmvn     r%d, #0x%02x\n", dRR, (uint8_t)(~dVal));
 
 	reg_modified(dRR);
 	reg_flush();

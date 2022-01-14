@@ -71,7 +71,7 @@ static int emit_fetch_ea_data( uint8_t* dRR, uint8_t* sRR, uint16_t sEA, uint8_t
 			return 0;
 		}
 
-		if(sRR && reg_unalloced(*sRR) && reg_alloc_temp( sRR ) == ALLOC_FAILED) return 0;
+		if(sRR && is_src && reg_alloc_temp( sRR ) == ALLOC_FAILED) return 0;
 		if(sEA == EA_AINC) {
 			if(reg_alloc_temp(&tRR ) == ALLOC_FAILED) return 0;
 			emit("\tmov     r%d, r%d\n", tRR, *dRR);
@@ -82,7 +82,6 @@ static int emit_fetch_ea_data( uint8_t* dRR, uint8_t* sRR, uint16_t sEA, uint8_t
 			if(reg_alloc_temp(&tRR ) == ALLOC_FAILED) return 0;
 			emit("\tsub     r%d, r%d, #%d\n", *dRR, *dRR, size);
 			emit("\tmov     r%d, r%d\n", tRR, *dRR);
-//			reg_modified(*dRR); reg_free(*dRR); reg_alloc_arm(*dRR);
 			reg_modified(*dRR); reg_free(*dRR);
 			*dRR = tRR;
 		} else if(sEA == EA_ADIS || sEA == EA_AIDX) {
@@ -114,11 +113,13 @@ static int emit_fetch_ea_data( uint8_t* dRR, uint8_t* sRR, uint16_t sEA, uint8_t
 		}
 
 		// load the data
-		if(sRR) emit("\t%s   r%d, [r%d]\n", ldx(size), *sRR, *dRR);
+		if(sRR) {
+			emit("\t%s   r%d, [r%d]\n", ldx(size), *sRR, *dRR);
+			// if we're long, swap words
+			if(size == 4) emit("\tror     r%d , r%d, #16\n", *sRR, *sRR);
+		}
 		
 		if(is_src) reg_free(*dRR);
-		// if we're long, swap words
-		if(sRR && (size == 4)) emit("\tror     r%d , r%d, #16\n", *sRR, *sRR);
 	}
 	//reg_flush();
 	return 1;
@@ -149,7 +150,7 @@ int set_destination_data( uint8_t* dRR, uint8_t* tRR, uint16_t dEA, uint16_t siz
 	if(dEA == EA_AREG || dEA == EA_DREG) {
 		if(*dRR == 0xFF) err = reg_modified(*tRR);
 		else if(size == 4) emit("\tmov     r%d, r%d\n", *dRR, *tRR);
-		else emit("\tbfi     r%d, r%d, #0, #%d", *dRR, *tRR, size * 8);
+		else emit("\tbfi     r%d, r%d, #0, #%d\n", *dRR, *tRR, size * 8);
 
 	} else if(dEA == EA_PDIS || dEA == EA_PIDX || dEA == EA_IMMD) {
 		err = ALLOC_FAILED;

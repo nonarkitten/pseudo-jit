@@ -120,26 +120,27 @@ static int emit_ea(char *buffer, uint16_t opcode, ALU_OP_t alu_op) {
 		// standard substitutions
 		if(sEA == 0x39) return -(opcode & 0xFFF8); // change EA_ABSL to EA_ABSW
 		if((sEA & 0x38) == 0x28) return -(opcode ^ 0x0018); // change to EA_AIDX
-// 		if((sEA == 0x3C) && (opcode != 0x823C)) {
-// 			if(debug) printf("@ alu -> alui optimization\n");
-// 			// or  -> ori 
-// 			if((opcode & 0xF000) == 0x8000) 
-// 				return -((opcode & 0xC0) | ((opcode & 0xE00) >> 9) | 0x0000);
-// 			// and -> andi
-// 			if((opcode & 0xF000) == 0xC000) 
-// 				return -((opcode & 0xC0) | ((opcode & 0xE00) >> 9) | 0x0200);
-// 			// sub -> subi
-// 			if((opcode & 0xF000) == 0x9000) 
-// 				return -((opcode & 0xC0) | ((opcode & 0xE00) >> 9) | 0x0400);
-// 			// add -> addi
-// 			if((opcode & 0xF000) == 0xD000) 
-// 				return -((opcode & 0xC0) | ((opcode & 0xE00) >> 9) | 0x0600);
-// 			// cmp -> cmpi
-// 			if((opcode & 0xF100) == 0xB000) 
-// 				return -((opcode & 0xC0) | ((opcode & 0xE00) >> 9) | 0x0C00);
-// 			//
-// 			return -1;
-// 		}
+ 		if((sEA == 0x3C) && (opcode != 0x803C) && (opcode != 0x823C)) {
+ 			if(debug) printf("@ alu -> alui optimization\n");
+ 			// or  -> ori 
+ 			if((opcode & 0xF000) == 0x8000) 
+ 				opcode = ((opcode & 0xC0) | ((opcode & 0xE00) >> 9) | 0x0000);
+ 			// and -> andi
+ 			if((opcode & 0xF000) == 0xC000) 
+ 				opcode = ((opcode & 0xC0) | ((opcode & 0xE00) >> 9) | 0x0200);
+ 			// sub -> subi
+ 			if((opcode & 0xF000) == 0x9000) 
+ 				opcode = ((opcode & 0xC0) | ((opcode & 0xE00) >> 9) | 0x0400);
+ 			// add -> addi
+ 			if((opcode & 0xF000) == 0xD000) 
+ 				opcode = ((opcode & 0xC0) | ((opcode & 0xE00) >> 9) | 0x0600);
+ 			// cmp -> cmpi
+ 			if((opcode & 0xF100) == 0xB000) 
+ 				opcode = ((opcode & 0xC0) | ((opcode & 0xE00) >> 9) | 0x0C00);
+ 			
+ 			if(debug) printf("@ new opcode %04X\n", opcode);
+ 			return -opcode;
+ 		}
 		
 		if(debug) printf("@ R = R op EA (%04X)\n", (opcode & 0x0100));
 	} else {
