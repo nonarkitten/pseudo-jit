@@ -65,7 +65,6 @@ emit_store
 	[r1/r2]		for EA_ABSW, EA_ABSL
 	[rX]		for EA_ADDR, EA_ADEC and sometimes EA_ADIS, EA_AIDX
 	
-
 */
 extern void emit_get_cpsr(void);
 extern void emit_save_cpsr(void);
@@ -77,8 +76,8 @@ int emit_RTE(char *buffer, uint16_t opcode) {
 	emit_get_cpsr(); // cpsr is in r2
 	emit("\ttst     r2, #0x4000\n");
 	emit("\tsvcne   #%d\n", PRIV);
-	emit("\tldrh    r0, [r12], #-2\n");
-	emit("\tbfi     r2, r0, #0, #16\n");
+	emit("\tldrh    r2, [r12], #-2\n");
+	//emit("\tbfi     r2, r0, #0, #16\n");
 	emit_save_cpsr();
 
 	emit("\tldr     r0, [r12], #-4\n");
@@ -99,15 +98,14 @@ int emit_RTR(char *buffer, uint16_t opcode) {
 	emit_get_cpsr(); // cpsr is in r2
 // 	emit("\ttst     r2, #0x4000\n");
 // 	emit("\tsvcne   #%d\n", PRIV);
-	emit("\tldrh    r0, [r12], #-2\n");
-	emit("\tbfi     r2, r0, #0, #8\n");
+	emit("\tldrh    r2, [r12], #-2\n");
+//	emit("\tbfi     r2, r0, #0, #8\n");
 	emit_save_cpsr();
 
 	emit("\tldr     r0, [r12], #-4\n");
 	emit("\tb       cpu_jump\n");
 	return lines | NO_BX_LR;
 }
-
 
 int emit_jump(char *buffer, uint16_t opcode, int jsr) {
 	uint8_t sR, sRR, sEA;
@@ -122,19 +120,13 @@ int emit_jump(char *buffer, uint16_t opcode, int jsr) {
 	lines = 0;
 	emit_reset( buffer );	
 
-	if(jsr) {
-	emit("\tmov     r0, lr\n");
-    emit("\tbl      cache_reverse\n");
-	emit("\tstr     r0, [r11, #-4]!\n");
-	}
-	
 	get_source_data( &sRR, sEA, sR, 4 );
 	if(sRR != 0) emit("\tmov     r0, r%d\n", sRR);
 	reg_free( sRR );
-	
-    emit("\tbl      cache_find_entry\n");
-    emit("\tmov     pc, r0\n");	
-	
+
+    if(jsr) emit("\tb       cpu_subroutine\n");
+	else emit("\tb       cpu_jump\n");
+
 	return lines_ext(lines, sEA, 0, 4) | NO_BX_LR;	
 }
 

@@ -62,37 +62,40 @@ int emit_SCC(char *buffer, uint16_t opcode) {
 //     ----         Condition code
 
 int emit_DBCC(char *buffer, uint16_t opcode) {
-	uint8_t dRR, dR = opcode & 0x0007;
+	uint8_t tRR, dRR, dR = opcode & 0x0007;
 
 	lines = 0;
 	emit_reset( buffer );
 	
 	// get our condition code
 	int cc = (opcode & 0x0F00) >> 8;
-	if(cc) {
-		if(cc > 1) emit("\tbx%s    lr\n", arm_cc[cc]);
-		
-		// determine our destination real register
-		reg_alloc_arm(1); // make sure r1 isn't trampled
-		if(!emit_get_reg( &dRR, dR, 2 )) return -1;
-		// decrement
-		emit("\tsub     r%d, r%d, #1\n", dRR);
-		reg_modified(dRR);
-		emit("\tcmp     r%d, #-1\n", dRR);
-		reg_flush();
-		
-		// skip if negative; this is fragile, fixme
-		emit("\tbxeq    lr\n");
+	if(!cc) return 0; // NOP
 
-		emit("\tmov     r0, lr\n");
-		emit("\tbl      cache_reverse\n");
-		emit("\tadd     r0, r0, r1\n");
-		emit("\tbl      cache_find_entry\n");
-		emit("\tmov     pc, r0\n");	
-	}
-
+	if(cc > 1) emit("\tbx%s    lr\n", arm_cc[cc]);
 	
-	return lines;	
+	reg_alloc_arm(0);
+	reg_alloc_temp(&tRR);
+
+	emit("\tmrs     r%d, CPSR\n", tRR);
+	
+	// determine our destination real register
+	reg_alloc_arm(1); // make sure r1 isn't trampled
+	if(!emit_get_reg( &dRR, dR, 2 )) return -1;
+	// decrement
+	emit("\tsub     r%d, r%d, #1\n", dRR, dRR);
+	emit("\tcmp     r%d, #-1\n", dRR);
+	reg_modified(dRR);
+	reg_flush();
+	
+	// skip if negative; this is fragile, fixme
+	emit("\tbne     0f\n");
+	emit("\tmsr     CPSR_fc, r%d\n", tRR);
+	emit("\tbx      lr\n");
+	emit("0:  add     r0, lr, r1, asl #1\n");
+	emit("\tmsr     CPSR_fc, r%d\n", tRR);
+	emit("\tb       cpu_jump\n");
+
+	return lines | NO_BX_LR;
 }
 
 // 0110ccccdddddddd
@@ -117,20 +120,16 @@ int emit_BCC(char *buffer, uint16_t opcode) {
 			return lines;
 		}
 	}
-	
-	emit("\tmov     r0, lr\n");
-    emit("\tbl      cache_reverse @ get 68k pc from lr\n");
-	if(cc == 1) emit("\tstr     r0, [r11, #-4]!\n");
-	
+//	if(cc == 1) emit("\tstr     r0, [r11, #-4]!\n");
 	if(d == 0) {
-		emit("\tadd     r0, r0, r1\n");
+		emit("\tadd     r0, lr, r1, asl #1\n");
 	} else if(d >= 0) {
-		emit("\tadd     r0, r0, #0x%02x\n", d);
+		emit("\tadd     r0, lr, #0x%02x\n", 2 * d);
 	} else {
-		emit("\tsub     r0, r0, #0x%02x\n", (uint8_t)(-d));	
+		emit("\tsub     r0, lr, #0x%02x\n", 2 * (uint8_t)(-d));	
 	}
-    emit("\tbl      cache_find_entry @ get arm address from 68k\n");
-    emit("\tmov     pc, r0\n");	
+    if(cc == 1) emit("\tb       cpu_subroutine\n");
+	else emit("\tb       cpu_jump\n");
 	
 	if(cc > 1) emit("0:\n"); // else bra (always)
 	

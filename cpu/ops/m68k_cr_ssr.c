@@ -6,17 +6,16 @@
 void emit_get_cpsr(void) {	
 	// get flags and conver them to 68K
 	emit("\tmrs     r0, CPSR\n");
-	emit("\tlsr     r0, r0, #28\n");
-	emit("\tadd     r0, r0, #%d\n", offsetof(cpu_t, arm2cc));
-	emit("\tldrb    r0, [r12, r0]\n");
+	emit("\tadd     r0, r12, r0, lsr #28\n");	
+	emit("\tldrb    r0, [r0, %d]\n", offsetof(cpu_t, arm2cc));
 	
 	// load the sr_ccr and replace the low bytes
 	emit("\tldrh    r2, [r12, #%d]\n", offsetof(cpu_t, sr));
 	emit("\tbfi     r2, r0, #0, #4\n");
 
 	// load X
-	emit("\tldr     r0, [r12, #%d]\n", offsetof(cpu_t, x));
-	emit("\tbfi     r2, r0, #4, #1\n");
+	// emit("\tldr     r0, [r12, #%d]\n", offsetof(cpu_t, x));
+	// emit("\tbfi     r2, r0, #4, #1\n");
 }
 
 void emit_save_cpsr(void) {
@@ -24,13 +23,13 @@ void emit_save_cpsr(void) {
 	emit("\tstrh    r2, [r12, #%d]\n", offsetof(cpu_t, sr));
 	
 	// save X
-	emit("\tror     r2, #4\n");
-	emit("\tstr     r2, [r12, #%d]\n", offsetof(cpu_t, x));
+	// emit("\tror     r2, #4\n");
+	// emit("\tstr     r2, [r12, #%d]\n", offsetof(cpu_t, x));
 		
 	// convert back to ARM flags
 	emit("\tand     r2, r2, #0xF\n");
 	emit("\tadd     r2, r2, #%d\n", offsetof(cpu_t, cc2arm));
-	emit("\tldr     r0, [r12, r2]\n");
+	emit("\tldr     r0, [r12, r2, lsl #2]\n");
 	emit("\tmsr     CPSR_fc, r0\n");
 }
 

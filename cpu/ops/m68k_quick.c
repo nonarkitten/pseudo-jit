@@ -40,8 +40,8 @@ int emit_ADDQ(char *buffer, uint16_t opcode) {
 	get_destination_data( &dRR, &tRR, dEA, dR, size );
 
 	// get the 'quick' integer
-	uint8_t val = (opcode & 0x0E00) >> 9;
-	if(!val) val = 8;
+	uint8_t val = (opcode >> 9) & 7;
+	if(val == 0) val = 8;
 	
 	if(dEA == EA_AREG) {
 		if(opcode & 0x0100) { // subq
