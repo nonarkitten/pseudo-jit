@@ -13,6 +13,7 @@ static const uint8_t reg68k_to_arm[16] = {
 };
 // 0xC, 0xD, 0xE, 0xF are reserved
 
+extern int last_opcode;
 static reg_map_t reg_map[REG_MAP_COUNT] = { 0 };
 
 bool reg_unalloced(uint8_t reg_arm) {
@@ -35,7 +36,7 @@ ALLOC_ERR_t reg_alloc_temp(uint8_t *reg_arm) {
 			return ALLOC_OKAY;
 		}
 	}
-	printf("@ reg_alloc_temp failed!\n");
+	printf("@ reg_alloc_temp failed at opcode %04X!\n", last_opcode);
 	exit(1);
 	return ALLOC_FAILED;
 }

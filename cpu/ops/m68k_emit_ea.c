@@ -70,11 +70,9 @@ static int emit_fetch_ea_data( uint8_t* dRR, uint8_t* sRR, uint16_t sEA, uint8_t
 		} else if(emit_get_reg( dRR, sR, 4 ) == ALLOC_FAILED) {
 			return 0;
 		}
-
-		if(sRR && is_src && reg_alloc_temp( sRR ) == ALLOC_FAILED) return 0;
 		
 		if(sEA == EA_AINC) {
-			if(reg_alloc_temp(&tRR ) == ALLOC_FAILED) return 0;
+			if(reg_alloc_temp( &tRR ) == ALLOC_FAILED) return 0;
 			if(size == 1) {
 				emit("\teor     r%d, r%d, #1\n", tRR, *dRR);
 				omit_eor = true;
@@ -88,9 +86,9 @@ static int emit_fetch_ea_data( uint8_t* dRR, uint8_t* sRR, uint16_t sEA, uint8_t
 			reg_modified(*dRR); reg_free(*dRR);
 			*dRR = tRR;
 		} else if(sEA == EA_ADEC) {
-			if(reg_alloc_temp(&tRR ) == ALLOC_FAILED) return 0;
-			emit("\tsub     r%d, r%d, #%d\n", *dRR, *dRR, size);
+			emit("\tsub     r%d, r%d, #%d @ bob\n", *dRR, *dRR, size);
 			if(size == 4 && !omit_bic) {
+				if(reg_alloc_temp(&tRR ) == ALLOC_FAILED) return 0;
 				emit("\tmov     r%d, r%d\n", tRR, *dRR);
 				reg_modified(*dRR); reg_free(*dRR);
 				*dRR = tRR;
@@ -125,6 +123,7 @@ static int emit_fetch_ea_data( uint8_t* dRR, uint8_t* sRR, uint16_t sEA, uint8_t
 
 		// load the data
 		if(sRR) {
+			if(/*is_src &&*/ reg_alloc_temp( sRR ) == ALLOC_FAILED) return 0;
 			emit("\t%s   r%d, [r%d]\n", ldx(size), *sRR, *dRR);
 			// if we're long, swap words
 			if(size == 4) emit("\tror     r%d , r%d, #16\n", *sRR, *sRR);

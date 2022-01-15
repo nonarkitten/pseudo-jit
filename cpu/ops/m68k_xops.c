@@ -36,7 +36,7 @@ static int emit_add_sub_x(char *buffer, uint16_t opcode, int is_sub) {
 	get_x_flag(is_sub); // put X into the C flag
 
 	get_source_data( &sRR, EA, sR, size );
-	reg_alloc_temp( &tRR );
+	//reg_alloc_temp( &tRR );
 	get_destination_data( &dRR, &tRR, EA, dR, size );
 
 	if(is_sub) {
