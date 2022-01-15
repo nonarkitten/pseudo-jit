@@ -102,25 +102,6 @@ int emit_ROD_EA(char *buffer, uint16_t opcode) {
 	return emit_ea(buffer, opcode, (opcode & 0x0100) ? emit_rol_ea : emit_ror_ea); 
 }
 
-static int emit_immd(char *buffer, uint16_t opcode, int(*callback)(uint8_t,uint16_t,uint16_t)) {	
-	uint16_t size = 1 << ((opcode & 0x00C0) >> 6);
-	if(size > 4) return -1;
-	
-	lines = 0;
-	emit_reset( buffer );	
-
-	uint8_t dRR, tRR, dR = opcode & 7;
-	get_destination_data(&dRR, &tRR, 0, dR, size);
-	
-	uint8_t amt = (opcode >> 9) & 7;
-	if(amt == 0) amt = 8;
-	
-	if(callback(tRR, amt, size) == -1) return -1;
-	
-	set_destination_data(&dRR, &tRR, 0, size);
-	return lines;
-}
-
 static int emit_asl_immd(uint8_t tR2, uint16_t amt, uint16_t size) {
 	if(amt > 1) emit("\tlsl     r%d, #%d\n", tR2, (amt - 1)); 
 	emit("\tadds    r%d, r%d, r%d\n", tR2, tR2, tR2); 
@@ -167,6 +148,30 @@ static int emit_lsr_reg(uint8_t tR2, uint16_t sR, uint16_t size) {
 	emit("\tlsrs    r%d, r%d\n", tR2, sRR);	
 	reg_free(sRR);
 	return 0;
+}
+static int emit_immd(char *buffer, uint16_t opcode, int(*callback)(uint8_t,uint16_t,uint16_t)) {	
+	uint16_t size = 1 << ((opcode & 0x00C0) >> 6);
+	if(size > 4) return -1;
+	
+	uint8_t dRR, tRR, dR = opcode & 7;
+
+	uint8_t amt = (opcode >> 9) & 7;
+	if(amt == 0) amt = 8;
+
+	if(amt == 1 && callback == emit_asl_immd) {
+		// asl.bwl	#1,dn		add.bwl 	dn,dn
+		return -(0xD000 | (opcode & 0xC7) | (dR << 9));
+	}
+
+	lines = 0;
+	emit_reset( buffer );	
+
+	get_destination_data(&dRR, &tRR, 0, dR, size);
+		
+	if(callback(tRR, amt, size) == -1) return -1;
+	
+	set_destination_data(&dRR, &tRR, 0, size);
+	return lines;
 }
 
 int emit_ASD(char *buffer, uint16_t opcode) {

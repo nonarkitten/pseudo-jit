@@ -15,8 +15,12 @@ static void fixup_rors(char *buffer, uint8_t sRR, uint16_t size) {
 	}
 }
 
-int emit_move(char *buffer, uint16_t size, uint16_t sEA, uint16_t dEA) {
+int emit_move(char *buffer, uint16_t size, uint16_t opcode) {
+	uint16_t dEA = ((opcode & 0xE00) >> 9) | ((opcode & 0x1C0) >> 3);
+	uint16_t sEA = (opcode & 0x3F);
+
 	uint8_t dR=0, dRR=0, sR=0, sRR=0, tRR=0;
+	uint8_t org_sEA = sEA;//, org_dEA = dEA;
 
 	if(size == 3 || size > 4) return -1;
 	
@@ -45,6 +49,28 @@ int emit_move(char *buffer, uint16_t size, uint16_t sEA, uint16_t dEA) {
 	//printf("@ %d\n", __LINE__);
 	
 	//
+	if(sR == dR) {
+		if(sEA == EA_DREG && dEA == EA_DREG) {
+			// move.bwl	dn,dn		tst.bwl		dn
+			return -(0x4A00 | ((size / 2) << 6) | org_sEA);
+		}
+		if(sEA == EA_ADDR && dEA == EA_ADDR) {
+			// move.bwl (an),(an)	tst.bwl		(an)
+			return -(0x4A00 | ((size / 2) << 6) | org_sEA);
+		}
+		if(sEA == EA_ADEC && dEA == EA_ADDR) {
+			// move.bwl -(an),(an)	tst.bwl		-(an)
+			return -(0x4A00 | ((size / 2) << 6) | org_sEA);
+		}
+		if(sEA == EA_AINC && dEA == EA_ADEC) {
+			// move.bwl (an)+,-(an)	tst.bwl		(an)
+			return -(0x4A10 | ((size / 2) << 6) | (org_sEA & 7));
+		}
+		if(sEA == EA_AINC && dEA == EA_ADDR) {
+			// movea.wl	(an)+,an	movea.wl	(an),an	
+			return -(opcode & 0xFFF7);
+		}
+	}
 
 	lines = 0;
 	emit_reset( buffer );
@@ -155,24 +181,18 @@ int emit_move(char *buffer, uint16_t size, uint16_t sEA, uint16_t dEA) {
 }
 
 int emit_MOVEB(char *buffer, uint16_t opcode) {
-	uint16_t dEA = ((opcode & 0xE00) >> 9) | ((opcode & 0x1C0) >> 3);
-	uint16_t sEA = (opcode & 0x3F);
 	uint16_t size = 1;
-	return emit_move(buffer, size, sEA, dEA);
+	return emit_move(buffer, size, opcode);
 }
 
 int emit_MOVEW(char *buffer, uint16_t opcode) {
-	uint16_t dEA = ((opcode & 0xE00) >> 9) | ((opcode & 0x1C0) >> 3);
-	uint16_t sEA = (opcode & 0x3F);
 	uint16_t size = 2;
-	return emit_move(buffer, size, sEA, dEA);
+	return emit_move(buffer, size, opcode);
 }
 
 int emit_MOVEL(char *buffer, uint16_t opcode) {
-	uint16_t dEA = ((opcode & 0xE00) >> 9) | ((opcode & 0x1C0) >> 3);
-	uint16_t sEA = (opcode & 0x3F);
 	uint16_t size = 4;
-	return emit_move(buffer, size, sEA, dEA);
+	return emit_move(buffer, size, opcode);
 }
 
 int emit_MOVEP(char *buffer, uint16_t opcode) {

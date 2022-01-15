@@ -14,18 +14,22 @@ int emit_store_EA(char *buffer, uint16_t opcode, int is_pea) {
 	// handle common aliases
 	else if(sEA >  EA_ABSW)	return -(opcode & 0xFFF8); // change to EA_ABSW
 	else if(sEA == EA_ADIS) return -(opcode ^ 0x0018); // change to EA_AIDX
-	
+
+	uint8_t sR = (opcode & 0x0007) | 8;
+	uint8_t dR = ((opcode & 0x0E00) > 9) | 8;
+
+	if(!is_pea && (sEA == EA_ADDR)) {
+		return -((opcode & 0x0E07) | 0x2048);
+	}
+
 	lines = 0;
 	emit_reset( buffer );	
 
 	reg_alloc_arm(1);
-	uint8_t dRR, sRR, sR = (opcode & 0x0007) | 8;
+	uint8_t dRR, sRR;
 	if(!emit_get_reg( &sRR, sR, 4 )) return -1;
 
-	if(!is_pea) {
-		uint8_t dR = ((opcode & 0x0E00) > 9) | 0x8;
-		reg_alloc_68k( &dRR, dR, 4 );
-	}
+	if(!is_pea) reg_alloc_68k( &dRR, dR, 4 );
 
 	switch(sEA) {
 	case EA_ADDR:
@@ -124,6 +128,7 @@ int emit_EXG(char *buffer, uint16_t opcode) {
 
 	uint8_t ry = (opcode & 0x0007) >> 0;
 	uint8_t rx = (opcode & 0x0E00) >> 9;
+	if(rx == ry) return 0;
 
 	switch(opcode & 0x00F8) {
 	case 0x0048: // Ax <-> Ay
@@ -166,7 +171,7 @@ int emit_CLR(char *buffer, uint16_t opcode) {
 	if(dEA == EA_AREG || dEA >= EA_PDIS) return -1;
 	else if(dEA >  EA_ABSW)	return -(opcode & 0xFFF8); // change to EA_ABSW
 	else if(dEA == EA_ADIS) return -(opcode ^ 0x0018); // change to EA_AIDX
-	
+	else if(size == 4 && dEA == EA_DREG) return -(0x7000 | (dR << 9)); // change to moveq.l #0,dn
 	lines = 0;
 	emit_reset( buffer );
 	reg_alloc_arm( 0 );

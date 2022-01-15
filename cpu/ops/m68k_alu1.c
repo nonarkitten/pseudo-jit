@@ -28,6 +28,18 @@ int emit_alu(char *buffer, uint16_t size, uint16_t sEA, uint16_t dEA, ALU_OP_t a
 	if((dEA == EA_PDIS) || (dEA == EA_PIDX) || (dEA == EA_IMMD)) return -1;
 	// Exclude obvious not-real addressing modes above immediate
 	if((sEA > EA_IMMD) || (dEA > EA_IMMD)) return -1;
+	// Alias with TST
+	if(sR == dR && sEA == EA_DREG && dEA == EA_DREG) {
+		if(alu_op == ALU_OP_AND || alu_op == ALU_OP_OR) {
+			// replace with tst.bwl dn
+			return -(0x4A00 | ((size / 2) << 6) | dR);
+		}
+		if(alu_op == ALU_OP_EOR || alu_op == ALU_OP_SUB) {
+			// eor.bwl	dn,dn		clr.bwl		dn
+			return -(0x4200 | ((size / 2) << 6) | dR);
+		}
+
+	}
 	
 	// Guard standard aliasing of addressing modes -- this is an error
 	// Source PC-Relative should be in R1 as an absolute
@@ -50,7 +62,7 @@ int emit_alu(char *buffer, uint16_t size, uint16_t sEA, uint16_t dEA, ALU_OP_t a
 	// using the dEA and size, get the destination data
 	// into tRR and the return address to write to in dRR
 	get_destination_data( &dRR, &tRR, dEA, dR, size );
-	if(sRR < 4 && tRR > 4) { uint8_t _t = sRR; sRR = tRR; tRR = _t; }
+	//if(sRR < 4 && tRR > 4) { uint8_t _t = sRR; sRR = tRR; tRR = _t; }
 	
 	switch(alu_op) {
 	case ALU_OP_OR:  	emit("\torr%c    r%d, r%d, r%d\n", flags, tRR, tRR, sRR); break;

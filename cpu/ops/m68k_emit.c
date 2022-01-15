@@ -94,28 +94,43 @@ static const char* header =
 	//
 	// USE OF IMMEDIATE FORMS (DONE)
 	// add.bwl	#imm,Dn		addi.bwl	#imm.Dn
+	// addq.w	#imm,An		addq.l 		#imm,An
 	// and.bwl	#imm,Dn		andi.bwl 	#imm,An
+	// and.bwl	dn,dn		tst.bwl		dn				24
+	// asl.bwl	#1,dn		add.bwl 	dn,dn			24
+	// clr.l	dn			moveq.l 	#0,dn			8
 	// cmp.bwl	#imm,Dn		cmpi.bwl 	#imm.Dn
+	// eor.bwl	dn,dn		clr.bwl		dn				16
+	// exg.l	rn,rn		nop			-				16
+	// lea.l	(an),an		nop			-				8
+	// lea.l	(as),ad		movea.l 	as,ad			64
+	// movea.l	an,an		nop			-				8
+	// movea.wl	(an)+,an	movea.wl	(an),an			16
+	// move.bwl	dn,dn		tst.bwl		dn				24
+	// move.bwl (an),(an)	tst.bwl		(an)			24
+	// move.bwl -(an),(an)	tst.bwl		-(an)			24
+	// move.bwl (an)+,-(an)	tst.bwl		(an)			24
+	// or.bwl	dn,dn		tst.bwl		dn				24
 	// or.bwl	#imm,Dn		ori.bwl		#imm,Dn
 	// sub.bwl	#imm,Dn		subi.bwl	#imm,Dn
-	//
-	// QUICK EQUIVALENT (DONE)
-	// addq.w	#imm,An		addq.l 		#imm,An
+	// sub.bwl	dn,dn		clr.wl		dn	(clear x)	24 // 390
 	// subq.w	#imm,Dn		subq.l 		#imm,Dn
 	//
 	// NOT DONE
-	// adda.w	#imm,An	 	lea.l 		imm(An),An
-	// asl.bwl	#1,Dn		add.bwl 	Dn,Dn
-	// bra.s	*+4			dbt.w 		Dx,xxxx (32 bit NOP)
-	// bra.w	d16			jmp 		d16(PC)
-	// bsr.w	d16			jsr 		d16(PC)
-	// clr.l	Dn			moveq.l 	#0,Dn
-	// lea.l	(As),Ad		movea.l 	As,Ad
-	// lea.l	abs.w,An	movea.w 	#imm16,An
-	// lea.l	abs.l,An	movea.l 	#imm32,An
-	// movea.l	(A7),A7		unlk 		a7
+	// adda.w	#imm,an	 	lea.l 		imm(an),an		8
+	// bra.s	*+4			dbt.w 		dx,xxxx			1
+	// bra.w	d16			jmp 		d16(pc)			1
+	// bsr.w	d16			jsr 		d16(pc)			1
+	// lea.l	abs.w,an	movea.w 	#imm16,an		1
+	// lea.l	abs.l,an	movea.l 	#imm32,an		1
+	// movea.l	(a7),a7		unlk 		a7				1
 	//
-	
+	// CAN'T DO
+	// cmp.bwl	dn,dn		tst.l		#0				24
+	// cmpa.l	an,an		tst.l		#0				8
+	// move.bwl -(an),(an)+	tst.bwl		<1,2,4>(an)		24
+
+
 //}
 
 
@@ -538,6 +553,7 @@ try_again:
 	printf("Total real 68k instructions: %d\n", total_68k );
 	printf("Total aliased 68k instructions: %d\n", total_alias );
 	printf("Total invalid 68k instructions: %d\n", total_invalid );
+	printf("Total 68k no-op instructions: %d\n", total_nops );
 	printf("Total opcode count is %s\n", (((total_68k + total_alias) == 65536) ? "valid" : "invalid"));
 	printf("\n");	
 	printf("Total arm instructions: %d (%d bytes)\n", total_arm, total_arm * 4);

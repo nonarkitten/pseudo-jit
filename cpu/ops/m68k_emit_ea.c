@@ -87,7 +87,7 @@ static int emit_fetch_ea_data( uint8_t* dRR, uint8_t* sRR, uint16_t sEA, uint8_t
 			*dRR = tRR;
 		} else if(sEA == EA_ADEC) {
 			emit("\tsub     r%d, r%d, #%d @ bob\n", *dRR, *dRR, size);
-			if(size == 4 && !omit_bic) {
+			if((size != 1) && omit_bic) {
 				if(reg_alloc_temp(&tRR ) == ALLOC_FAILED) return 0;
 				emit("\tmov     r%d, r%d\n", tRR, *dRR);
 				reg_modified(*dRR); reg_free(*dRR);
