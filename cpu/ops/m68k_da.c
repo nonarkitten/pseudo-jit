@@ -737,7 +737,7 @@ const char* m68k_disasm(uint16_t op) {
 					count++;
 				}
 			}
-			sprintf( buffer, "%s\n", &opcodes[i][17] );
+			sprintf( buffer, "%s", &opcodes[i][17] );
 			ops[i].match = match;
 			ops[i].equal = equal;
 			ops[i].op = strdup(buffer);
@@ -772,7 +772,7 @@ const char* m68k_disasm(uint16_t op) {
 	for(int i=0; i<OPCODE_COUNT; i++) {
 		if((op & ops[i].match) == ops[i].equal) {
 			//int x = strlen(ops[i].op) - 5; // back up over \n
-			if(debug) printf("@ Disassembling opcode %04X\n", op);
+			//if(debug) printf("@ Disassembling opcode %04X\n", op);
 			char* ea1 = strstr(ops[i].op, "%E");
 			char* ea2 = ea1 ? strstr(ea1 + 1, "%E") : 0;
 			char* imm = strstr(ops[i].op, "%N");
