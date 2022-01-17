@@ -844,7 +844,7 @@ const char* m68k_disasm(uint16_t op) {
 		}
 	}
 	
-	return "ILLEGAL\n";
+	return "ILLEGAL";
 }
 
 
