@@ -204,6 +204,9 @@ typedef struct {
 
 	// Base address cache
 	void        *base_ptr;
+
+	// The M68K address of the current cache page
+	uint32_t 	m68k_page;
 		
 #ifdef MC68881
 	/* 68881 regs: */

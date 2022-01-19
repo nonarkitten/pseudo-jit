@@ -104,13 +104,16 @@ int emit_DBCC(char *buffer, uint16_t opcode) {
 static int addr_err_emitted = false;
 
 int emit_BCC(char *buffer, uint16_t opcode) {
+	static bool emit_bsr = false;
+	static bool emit_bra = false;
+
 	lines = 0;
 	emit_reset( buffer );
 
 	int cc = (opcode & 0x0F00) >> 8;
-	int8_t d = (int8_t)(opcode & 0xff);
+	if(cc > 1) emit("\tb%s     lr\n", arm_cc[cc ^ 1]);
 
-	if(cc > 1) emit("\tb%s     0f\n", arm_cc[cc ^ 1]);
+	int8_t d = (int8_t)(opcode & 0xff);
 	if(d & 1) {
 		if(addr_err_emitted) {
 			return addr_err_emitted;
@@ -120,22 +123,52 @@ int emit_BCC(char *buffer, uint16_t opcode) {
 			return lines;
 		}
 	}
-//	if(cc == 1) emit("\tstr     r0, [r11, #-4]!\n");
-	if(d == 0) {
-		emit("\tadd     r0, lr, r1, asl #1\n");
-	} else if(d >= 0) {
-		emit("\tadd     r0, lr, #0x%02x\n", 2 * d);
+	if(d > 0) emit("\tmov     r1, #0x%02x\n", d);
+	if(d < 0) emit("\tmov     r1, #0x%02x\n", (uint8_t)(-d));	
+	
+	if(cc == 1) {
+		if(emit_bsr) {
+			emit("\tb      branch_subroutine\n");
+		} else {
+			emit("branch_subroutine:\n");
+			emit("\tsub     r3, lr, #4\n");
+			emit("\tldr     r0, [r12, #%d]\n", offsetof(cpu_t, m68k_page));
+			emit("\tubfx    r3, r3, #1, #12\n");
+			emit("\torr     r0, r3, r0\n");
+			emit("\tstr     r0, [r11, #-4]!\n");
+			emit("\tadd     r0, r0, r1\n");
+			emit("\tb       cpu_jump\n");
+		}
+		emit_bsr = true;
+
 	} else {
-		emit("\tsub     r0, lr, #0x%02x\n", 2 * (uint8_t)(-d));	
+		if(emit_bra) {
+			emit("\tb      branch_normal\n");
+		} else {
+			emit("branch_normal:\n");
+			emit("\tsub     r3, lr, #4\n");
+			emit("\tldr     r0, [r12, #%d]\n", offsetof(cpu_t, m68k_page));
+			emit("\tubfx    r3, r3, #1, #12\n");
+			emit("\torr     r0, r3, r0\n");
+			emit("\tadd     r0, r0, r1\n");
+			emit("\tb       cpu_jump\n");
+		}
+		emit_bra = true;
 	}
-    if(cc == 1) emit("\tb       cpu_subroutine\n");
-	else emit("\tb       cpu_jump\n");
+	// emit("\tsub     r3, lr, #4\n");
+	// emit("\tldr     r0, [r12, #%d]\n", offsetof(cpu_t, m68k_page));
+	// emit("\tubfx    r3, r3, #1, #12\n");
+	// emit("\torr     r0, r3, r0\n");
+
+	// if(cc == 1) emit("\tstr     r0, [r11, #-4]!\n");
+
+
+    //if(cc == 1) emit("\tb       cpu_subroutine\n");
+	//else 
 	
-	if(cc > 1) emit("0:\n"); // else bra (always)
+//	if(cc > 1) emit("0:\n"); // else bra (always)
 	
-	uint16_t r = lines;
-	if(!cc) r |= NO_BX_LR;
-	return r;
+	return lines | NO_BX_LR;
 }
 
 int emit_BRA(char *buffer, uint16_t opcode) {
