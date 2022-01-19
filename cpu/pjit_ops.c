@@ -123,7 +123,7 @@ static uint16_t copy_opcode(uint32_t** out, uint16_t *pc, bool link) {
 	uint32_t opaddr = optab[opcode];
 	uint16_t opea = oplen[opcode];
 		
-	debug("In copy_opcode, opcode=0x%04x, opaddr=0x%04x, opea=0x%04x\n", opcode, opaddr, opea);
+	debug("In copy_opcode, opcode=0x%04x (%s), opaddr=0x%04x, opea=0x%04x\n", opcode, m68k_disasm(opcode), opaddr, opea);
 	if(opcode == 0xFFFF) longjmp( jump_buffer, PJIT_EXIT );
 	
 	switch(opea & 0x0F00) {
@@ -191,7 +191,7 @@ void cpu_lookup_nojit(void) {
 	uint16_t *pc = cache_reverse(lr - 4);
 	uint32_t *out = (uint32_t*)exec_temp;
 
-	debug("In cpu_lookup_nojit\n");
+	//debug("In cpu_lookup_nojit\n");
 
 	// given an opcode, write out the necessary steps to execute it, assuming
 	// we're going to run this immediately in interpreter mode which means we
@@ -379,6 +379,8 @@ void branch_subroutine(uint32_t _lr, int32_t offset) {
 // when the system hits another interpreter command; that is, this is a
 // loop, even if it doesn't look like one
 void cpu_start(uint32_t m68k_pc) {
+	m68k_disasm(0);
+	
 	while(setjmp(jump_buffer) != PJIT_EXIT) {
 		//static uint32_t m68k_jump_to;
 		

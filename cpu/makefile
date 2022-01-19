@@ -1,6 +1,12 @@
 APPNAME  := m68k_test
-SOURCES  := $(wildcard *.c) $(wildcard ops/*.s) pjit_support.s
-OBJECTS  := $(patsubst %.c,obj/%.o, $(patsubst %.s,obj/%.o, $(patsubst ops/%.s,obj/%.o, $(SOURCES))))
+SOURCES  := $(wildcard *.c) $(wildcard ops/*.s) pjit_support.s ops/m68k_da.c
+OBJECTS  := \
+	$(patsubst %.c,obj/%.o, \
+	$(patsubst %.s,obj/%.o, \
+	$(patsubst ops/%.s,obj/%.o, \
+	$(patsubst ops/%.c,obj/%.o, \
+	$(SOURCES) \
+	))))
 
 AS = gcc -ggdb \
 	-mfloat-abi=hard -mcpu=cortex-a8 -march=armv7-a -mfpu=vfpv3
@@ -34,10 +40,13 @@ all: premake $(OBJECTS)
 obj/%.o: %.c
 	$(CC) -c $< -o $@
 
-obj/%.o: ops/%.s
-	$(AS) -c $< -o $@
+obj/%.o: ops/%.c
+	$(CC) -c $< -o $@
 
 obj/%.o: %.s
+	$(AS) -c $< -o $@
+
+obj/%.o: ops/%.s
 	$(AS) -c $< -o $@
 
 .PHONY: premake

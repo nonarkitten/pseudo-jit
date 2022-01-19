@@ -123,8 +123,8 @@ static int emit_asl_reg(uint8_t tR2, uint16_t sR, uint16_t size) {
 	uint8_t sRR;
 	if(!emit_get_reg(&sRR, sR, 1)) return -1;
 	emit("\tsubs    r%d, r%d, #1\n", sRR, sRR);
-	emit("\tlslgts  r%d, r%d, r%d\n", tR2, tR2, sRR);
-	emit("\taddges  r%d, r%d, r%d\n", tR2, tR2, tR2);
+	emit("\tlslsgt  r%d, r%d, r%d\n", tR2, tR2, sRR);
+	emit("\taddsge  r%d, r%d, r%d\n", tR2, tR2, tR2);
 	reg_free(sRR);
 	return 0;
 }
