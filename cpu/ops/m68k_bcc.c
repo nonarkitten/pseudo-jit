@@ -71,29 +71,46 @@ int emit_DBCC(char *buffer, uint16_t opcode) {
 	int cc = (opcode & 0x0F00) >> 8;
 	if(!cc) return 0; // NOP
 
-	if(cc > 1) emit("\tbx%s    lr\n", arm_cc[cc]);
+	//if(cc > 1) emit("\tbx%s    lr\n", arm_cc[cc]);
+	if(cc == 2) { // bhi
+		// 68K : /C & /Z
+		emit("\tbcc     lr\n");
+		emit("\tbne     lr\n");
+
+	} else if(cc == 3) { // bls
+		// 68K : C | Z
+		emit("\tbcc     0f\n");
+		emit("\tbeq     lr\n");
+		emit("0:");
+
+	} else if(cc > 3) {
+		emit("\tb%s     lr\n", arm_cc[cc]);
+
+	}
 	
 	reg_alloc_arm(0);
+	reg_alloc_arm(1); // our offset
+
 	reg_alloc_temp(&tRR);
 
 	emit("\tmrs     r%d, CPSR\n", tRR);
 	
 	// determine our destination real register
-	reg_alloc_arm(1); // make sure r1 isn't trampled
 	if(!emit_get_reg( &dRR, dR, 2 )) return -1;
 	// decrement
 	emit("\tsub     r%d, r%d, #1\n", dRR, dRR);
-	emit("\tcmp     r%d, #-1\n", dRR);
 	reg_modified(dRR);
 	reg_flush();
 	
-	// skip if negative; this is fragile, fixme
+	// skip if negative one
+	emit("\tcmp     r%d, #-1\n", dRR);
 	emit("\tbne     0f\n");
 	emit("\tmsr     CPSR_fc, r%d\n", tRR);
 	emit("\tbx      lr\n");
-	emit("0:  add     r0, lr, r1, asl #1\n");
-	emit("\tmsr     CPSR_fc, r%d\n", tRR);
-	emit("\tb       cpu_jump\n");
+
+	// otherwise branch normally
+	emit("0:  msr     CPSR_fc, r%d\n", tRR);
+	emit("\tb       branch_normal\n");
 
 	return lines | NO_BX_LR;
 }
@@ -111,7 +128,21 @@ int emit_BCC(char *buffer, uint16_t opcode) {
 	emit_reset( buffer );
 
 	int cc = (opcode & 0x0F00) >> 8;
-	if(cc > 1) emit("\tb%s     lr\n", arm_cc[cc ^ 1]);
+	if(cc == 2) { // bhi
+		// 68K : /C & /Z
+		emit("\tbcc     0f\n");
+		emit("\tbeq     lr\n");
+		emit("0:\n");
+
+	} else if(cc == 3) { // bls
+		// 68K : C | Z
+		emit("\tbcc     lr\n");
+		emit("\tbne     lr\n");
+
+	} else if(cc > 3) {
+		emit("\tb%s     lr\n", arm_cc[cc ^ 1]);
+
+	}
 
 	int8_t d = (int8_t)(opcode & 0xff);
 	if(d & 1) {
@@ -155,18 +186,6 @@ int emit_BCC(char *buffer, uint16_t opcode) {
 		}
 		emit_bra = true;
 	}
-	// emit("\tsub     r3, lr, #4\n");
-	// emit("\tldr     r0, [r12, #%d]\n", offsetof(cpu_t, m68k_page));
-	// emit("\tubfx    r3, r3, #1, #12\n");
-	// emit("\torr     r0, r3, r0\n");
-
-	// if(cc == 1) emit("\tstr     r0, [r11, #-4]!\n");
-
-
-    //if(cc == 1) emit("\tb       cpu_subroutine\n");
-	//else 
-	
-//	if(cc > 1) emit("0:\n"); // else bra (always)
 	
 	return lines | NO_BX_LR;
 }
