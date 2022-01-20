@@ -69,9 +69,15 @@ int emit_alu(char *buffer, uint16_t size, uint16_t sEA, uint16_t dEA, ALU_OP_t a
 	case ALU_OP_AND: 	emit("\tand%c    r%d, r%d, r%d\n", flags, tRR, tRR, sRR); break;
 	case ALU_OP_ADD: 	emit("\tadd%c    r%d, r%d, r%d\n", flags, tRR, tRR, sRR); break;
 	case ALU_OP_EOR: 	emit("\teor%c    r%d, r%d, r%d\n", flags, tRR, tRR, sRR); break;
-	case ALU_OP_SUB: 	emit("\trsb%c    r%d, r%d, r%d\n", flags, tRR, tRR, sRR);
+	case ALU_OP_SUB:
+		if(flags == ' ') {
+					 	emit("\tsub%c    r%d, r%d, r%d\n", flags, tRR, tRR, sRR);
+						break;
+		} else {
+					 	emit("\trsb%c    r%d, r%d, r%d\n", flags, tRR, tRR, sRR);
 						emit("\trsb     r%d, #0\n", tRR);
 						break;
+		}
 	case ALU_OP_CMP:	emit("\tcmp     r%d, r%d\n", tRR, sRR);
 						break;
 	case ALU_OP_MOVE:   emit("\tmov%c    r%d, r%d\n", flags, tRR, sRR);

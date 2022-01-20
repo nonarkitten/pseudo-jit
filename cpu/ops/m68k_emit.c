@@ -298,7 +298,7 @@ int main(int argc, char ** argv) {
 	if(argc == 2) {
 		uint16_t opcode = strtoul(argv[1], 0, 0);
 		debug = 1;
-		printf("@ %s", m68k_disasm(opcode));
+		printf("@ %s\n", m68k_disasm(opcode));
 try_again:
 		for(int i=0; i<optab_size; i++) {
 			if((opcode & ~optab[i].bits) == optab[i].base) {
@@ -404,7 +404,7 @@ try_again:
 				if(len > 0) op = opcodes[opcode];
 				fprintf(file, "\t.global opcode_%04x\n", opcode);
 				fprintf(file, "\t.syntax unified\n");
-				fprintf(file, "\t@ %s", m68k_op);
+				fprintf(file, "\t@ %s\n", m68k_op);
 				fprintf(file, "opcode_%04x:\n%s", opcode, op);
 				
 				if((opcode_len[opcode] & NO_BX_LR) != NO_BX_LR)

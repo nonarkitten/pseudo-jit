@@ -81,7 +81,7 @@ int emit_DBCC(char *buffer, uint16_t opcode) {
 		// 68K : C | Z
 		emit("\tbcc     0f\n");
 		emit("\tbeq     lr\n");
-		emit("0:");
+		emit("0:\n");
 
 	} else if(cc > 3) {
 		emit("\tb%s     lr\n", arm_cc[cc]);

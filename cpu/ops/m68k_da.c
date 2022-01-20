@@ -767,7 +767,7 @@ const char* m68k_disasm(uint16_t op) {
 	}
 
 	static char buffer2[64];
-	extern int debug;
+	//extern int debug;
 	
 	for(int i=0; i<OPCODE_COUNT; i++) {
 		if((op & ops[i].match) == ops[i].equal) {
