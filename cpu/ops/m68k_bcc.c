@@ -62,25 +62,31 @@ int emit_SCC(char *buffer, uint16_t opcode) {
 //     ----         Condition code
 
 int emit_DBCC(char *buffer, uint16_t opcode) {
+	static bool emit_extern = false;
 	uint8_t tRR, dRR, dR = opcode & 0x0007;
 
 	lines = 0;
 	emit_reset( buffer );
-	
+
 	// get our condition code
 	int cc = (opcode & 0x0F00) >> 8;
 	if(!cc) return 0; // NOP
 
+	if(!emit_extern) {
+		emit_extern = true;
+		emit("\t.extern branch_normal\n");
+	}
+	
 	//if(cc > 1) emit("\tbx%s    lr\n", arm_cc[cc]);
 	if(cc == 2) { // bhi
 		// 68K : /C & /Z
-		emit("\tbcc     lr\n");
-		emit("\tbne     lr\n");
+		emit("\tbxcc    lr\n");
+		emit("\tbxne    lr\n");
 
 	} else if(cc == 3) { // bls
 		// 68K : C | Z
 		emit("\tbcc     0f\n");
-		emit("\tbeq     lr\n");
+		emit("\tbxeq    lr\n");
 		emit("0:\n");
 
 	} else if(cc > 3) {
@@ -131,13 +137,13 @@ int emit_BCC(char *buffer, uint16_t opcode) {
 	if(cc == 2) { // bhi
 		// 68K : /C & /Z
 		emit("\tbcc     0f\n");
-		emit("\tbeq     lr\n");
+		emit("\tbxeq    lr\n");
 		emit("0:\n");
 
 	} else if(cc == 3) { // bls
 		// 68K : C | Z
-		emit("\tbcc     lr\n");
-		emit("\tbne     lr\n");
+		emit("\tbxcc    lr\n");
+		emit("\tbxne    lr\n");
 
 	} else if(cc > 3) {
 		emit("\tb%s     lr\n", arm_cc[cc ^ 1]);
