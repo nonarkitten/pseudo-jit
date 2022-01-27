@@ -21,3 +21,4 @@ settings.json
 # PJIT generated code
 cpu/ops/m68k_test
 cpu/ops/*.s
+/Debug/

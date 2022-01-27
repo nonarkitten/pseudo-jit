@@ -6,7 +6,8 @@
 #ifndef __PJIT_H__
 #define __PJIT_H__
 
-#include "m68k_cpu.h"
+#include "ops/m68k_cpu.h"
+#include "ops/pjit_extword.h"
 
 register uint32_t D0 asm("r4");
 register uint32_t D1 asm("r5");
@@ -31,7 +32,6 @@ register cpu_t* cpu asm("r12");
 register uint32_t lr asm("r14");
 
 #include "pjit_cache.h"
-#include "pjit_extword.h"
 #include "pjit_ops.h"
 
 extern uint16_t oplen[65536];

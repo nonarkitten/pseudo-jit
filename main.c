@@ -3,7 +3,6 @@
 #include "am335x_pru.h"
 #include "am335x_gpio.h"
 #include "pinmux.h"
-#include "68000.h"
 
 __attribute__ ((used, aligned (MMU_PAGETABLE_ALIGN_SIZE)))
 static volatile uint32_t pageTable[MMU_PAGETABLE_NUM_ENTRY] = { 0 };
@@ -133,12 +132,12 @@ int main(void) {
 
     test_gpmc();
 
-    printf("[BOOT] Resetting emulation\n");
-    HWReset();
-    printf("[BOOT] Starting emulation\n");
-    CPURun();
+//    printf("[BOOT] Resetting emulation\n");
+//    HWReset();
+//    printf("[BOOT] Starting emulation\n");
+//    CPURun();
 
-    //test_native_bogomips();
+    test_native_bogomips();
     //test_pjit_bogomips();
 
     // PJIT: 249.99 BogoMIPS no inline, register in SRAM

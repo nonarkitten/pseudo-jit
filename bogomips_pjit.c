@@ -8,66 +8,44 @@
 #include "pjit.h"
 #include "am335x_dmtimer1.h"
 
-#define D0 __d0
-#define D1 __d1
-#define D2 cpu->d[2]
-#define D3 cpu->d[3]
-#define D4 cpu->d[4]
-#define D5 cpu->d[5]
-#define D6 cpu->d[6]
-#define D7 cpu->d[7]
+#include "cpu/pjit.h"
 
-#define A0 __a0
-#define A1 __a1
-#define A2 cpu->a[2]
-#define A3 cpu->a[3]
-#define A4 __a4
-#define A5 __a5
-#define A6 __a6
-#define A7 __a7
+uint16_t bogomips[] = {
+	// 		TST.L	D0
+	0x4A80,
+	// 		BEQ.S	EXIT
+	0x6704,
+	// LOOP:
+	//		SUBQ	D0, #1
+	0x5380,
+	//		BNE.S	LOOP
+	0x66FC,
+	// EXIT:
+	//		RTS
+	0x4E75,
 
-static cpu_t _cpu = { 0 };
-static int loops;
-static double duration;
+	// INVALID
+	0xFFFF
+};
 
-/* Run BogoMIPS loop without having loaded the whole pjit table
-** This does the best job of imitating what PJIT ought to emit
-*/
-static inline void tst_d0_l(void) {
-    uint32_t t0 = D0;
-    ASM("rors\t%0, %1, %2" : "=r"(t0) : "r"(t0), "n"(0));
-}
+static uint32_t cache[PJIT_CACHE_SIZE + PJIT_TAG_SIZE];
+static double duration = 0;
+static int loops = 0;
 
-//static inline
-void subq_l_1_d0(void) {
-    uint32_t t0 = D0;
-    ASM("subs\t%0, %1, %2" : "=r"(t0) : "r"(t0), "n"(0x01));
-    D0 = t0;
-}
-
-__attribute__((noinline)) void pjit_bogomips(int loops) {
-    cpu = &_cpu;
-    D0 = loops;
-//    tst_d0_l();
-//    ASM_GOTO("beq\t%l0" :::: exit);
-loop:
-    subq_l_1_d0();
-    ASM_GOTO("bne\t%l0" :::: loop);
-exit:
-    ASM("");
-}
-
+// register cpu_t* cpu asm("r12");
+cpu_t cpu_state;
 
 __attribute__((noinline)) double dopjit(void) {
     double begin, end;
-    loops = 1;
+
 
     do {
         loops = loops * 2;
 
         begin = am335x_dmtimer1_get_time();
-        pjit_bogomips(loops);
+    	cpu_start(bogomips);
         end = am335x_dmtimer1_get_time();
+
         duration = end - begin;
 
     } while(duration < 1.0);
@@ -77,7 +55,13 @@ __attribute__((noinline)) double dopjit(void) {
 
 void test_pjit_bogomips(void) {
     static int pass = 0;
-    pass++;
+
+	cache_init((uint32_t)&cache);
+	printf("[PJIT] Cache initialized.\n");
+	cpu = &cpu_state;
+	cpu_dump_state();
+
+	pass++;
     printf("[PJIT] Performing PJIT BogoMIPS benchmark, warming up\n");
     dopjit();
     printf("[PJIT] Warm up complete, starting pass %d\n", pass);

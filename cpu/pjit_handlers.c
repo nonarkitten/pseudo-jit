@@ -1,7 +1,7 @@
-#include "m68k_common.h"
-#include "m68k_cpu.h"
-#include "m68k_emit_ea.h"
-#include "m68k_registers.h"
+#include "ops/m68k_common.h"
+#include "ops/m68k_cpu.h"
+#include "ops/m68k_emit_ea.h"
+#include "ops/m68k_registers.h"
 
 static inline unsigned __get_cpsr(void) {
     unsigned long retval;

@@ -103,7 +103,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="AM335x.lds" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="cpu/pjit_test.c|cpu/ops/temp|cpu/ops/obj|cpu/ops/m68k_xops.c|cpu/ops/m68k_shifts.c|cpu/ops/m68k_registers.c|cpu/ops/m68k_quick.c|cpu/ops/m68k_muldiv.c|cpu/ops/m68k_move.c|cpu/ops/m68k_misc.c|cpu/ops/m68k_jump.c|cpu/ops/m68k_emit.c|cpu/ops/m68k_emit_ea.c|cpu/ops/m68k_da.c|cpu/ops/m68k_cr_ssr.c|cpu/ops/m68k_common.c|cpu/ops/m68k_bits.c|cpu/ops/m68k_bcd.c|cpu/ops/m68k_bcc.c|cpu/ops/m68k_alu1.c|AM335x.lds" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
