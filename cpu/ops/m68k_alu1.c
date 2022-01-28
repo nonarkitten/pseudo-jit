@@ -85,8 +85,8 @@ int emit_alu(char *buffer, uint16_t size, uint16_t sEA, uint16_t dEA, ALU_OP_t a
 	} // end switch
 	//reg_modified(dRR);
 	//reg_free(sRR);
-	
-	set_destination_data( &dRR, &tRR, dEA, size );
+	if(alu_op == ALU_OP_CMP) reg_flush();
+	else set_destination_data( &dRR, &tRR, dEA, size );
 	
 	return lines_ext(lines, sEA, dEA, size);
 }

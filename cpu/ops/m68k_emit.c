@@ -389,9 +389,15 @@ try_again:
 				
 		fprintf(file, "%s", header);
 	
-		fprintf(file, "\t.text\n\n");
-		fprintf(file, "\t.code 32\n\n");
-				
+		fprintf(file, "\t.text\n");
+		fprintf(file, "\t.code 32\n");
+		if(i == 0x5000) {
+			fprintf(file, "\t.extern branch_normal\n");
+		} else if(i == 0x6000) {
+			fprintf(file, "\t.global branch_normal\n");
+		}
+		fprintf(file, "\n");
+
 		for(int j=0; j<0x1000; j++) {
 			uint16_t opcode = i + j;
 			const char *m68k_op = m68k_disasm(opcode);
@@ -402,6 +408,7 @@ try_again:
 				char *op = "\tnop\n";
 				int len = opcode_len[opcode] & 0xFF;
 				if(len > 0) op = opcodes[opcode];
+
 				fprintf(file, "\t.global opcode_%04x\n", opcode);
 				fprintf(file, "\t.syntax unified\n");
 				fprintf(file, "\t@ %s\n", m68k_op);

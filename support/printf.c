@@ -107,10 +107,10 @@ static inline int printi(char **out, int32_t x, int base, const char* base_chars
     return pc + printu(out, (uint32_t)x, base, base_chars, width, pad);
 }
 
-static int print(char **out, int *varg) {
+static int print(char **out, char *format, int *varg) {
     int width, pad;
     int pc = 0;
-    char *format = (char *)(*varg++);
+    //char *format = (char *)(*varg++);
 
     for (; *format != 0; ++format) {
         if (*format == '%') {
@@ -147,14 +147,18 @@ static int print(char **out, int *varg) {
     return pc;
 }
 
+int vprintf(const char * format, va_list arg) {
+    return print(0, (char *)(&format), (int *)(&arg));
+}
+
 int printf(const char *format, ...) {
-    int r = print(0, (int *)(&format));
+    int r = print(0, (char *)(&format), (int *)((&format) + 1));
     flushUART();
     return r;
 }
 
 int sprintf(char *out, const char *format, ...) {
-    return print(&out, (int *)(&format));
+    return print(&out, (char *)(&format), (int *)((&format) + 1));
 }
 
 int puts ( const char * str ) {
@@ -169,5 +173,8 @@ int putchar ( int c ) {
     return c;
 }
 
+void exit(int status) {
+	while(1) ;
+}
 
 

@@ -90,7 +90,7 @@ int emit_DBCC(char *buffer, uint16_t opcode) {
 		emit("0:\n");
 
 	} else if(cc > 3) {
-		emit("\tb%s     lr\n", arm_cc[cc]);
+		emit("\tbx%s    lr\n", arm_cc[cc]);
 
 	}
 	
@@ -146,7 +146,7 @@ int emit_BCC(char *buffer, uint16_t opcode) {
 		emit("\tbxne    lr\n");
 
 	} else if(cc > 3) {
-		emit("\tb%s     lr\n", arm_cc[cc ^ 1]);
+		emit("\tbx%s    lr\n", arm_cc[cc ^ 1]);
 
 	}
 

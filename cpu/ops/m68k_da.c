@@ -690,11 +690,12 @@ const char* opcodes[] = {
 typedef struct {
 	uint16_t match;
 	uint16_t equal;
-	const char *op;
 } opcode_t;
 
 char *ea(uint16_t ea) {
-	static char buffer[32];
+	static char b1[32], b2[32], *buffer;
+	if(buffer == b1) buffer = b2; else buffer = b1;
+
 	switch(ea & 0x38) {
 	case 0x00: sprintf( buffer, "D%d", ea & 7 ); break;
 	case 0x08: sprintf( buffer, "A%d", ea & 7 ); break;
@@ -713,20 +714,20 @@ char *ea(uint16_t ea) {
 		}
 		break;
 	} // end switch
-	return strdup(buffer);
+	return buffer;
 }
 
 const char* m68k_disasm(uint16_t op) {
 	static bool inited = false;
 	static opcode_t ops[OPCODE_COUNT] = { 0 };
 	static char buffer[64];
+	static char buffer2[64];
 	
 	if(!inited) {
 		int total_ops = 0;
 		inited = true;
 		for(int i=0; i<OPCODE_COUNT; i++) {
 			uint16_t match = 0, equal = 0, count = 0;
- 			// fprintf( stderr, "Parsing %s ", opcodes[i]);
 			for(int b=0; b<16; b++) {
 				uint16_t bit = 0x8000 >> b;
 				char c = opcodes[i][b];
@@ -737,74 +738,43 @@ const char* m68k_disasm(uint16_t op) {
 					count++;
 				}
 			}
-			sprintf( buffer, "%s", &opcodes[i][17] );
 			ops[i].match = match;
 			ops[i].equal = equal;
-			ops[i].op = strdup(buffer);
-			total_ops += 1 << count;
- 			// for(int s=strlen(ops[i].op); s<20; s++) 
- 			// 	fprintf( stderr, " ");
- 			// fprintf( stderr, "%04x %04x\n", match, equal);
-		}
-		for(int i=0; i<0x10000; i++) {
-			int count = 0;
-			for(int j=0; j<OPCODE_COUNT; j++) {
-				if((i & ops[j].match) == ops[j].equal) {
-					count++;
-				}
-			}
-			if(count > 1) {
-				printf("Verify error with opcode 0x%04X, %d matches:\n", i, count);
-				for(int j=0; j<OPCODE_COUNT; j++) {
-					if(((i & ops[j].match) == ops[j].equal) && (ops[j].op)) {
-						printf(" %d %s", j, opcodes[j]);
-					}
-				}
-				printf("\n");
-			}
 		}
 		printf("%d total opcodes loaded.\n", total_ops);
 	}
 
-	static char buffer2[64];
+
 	//extern int debug;
 	
 	for(int i=0; i<OPCODE_COUNT; i++) {
 		if((op & ops[i].match) == ops[i].equal) {
+			sprintf( buffer, "%s", &opcodes[i][17] );
+
 			//int x = strlen(ops[i].op) - 5; // back up over \n
 			//if(debug) printf("@ Disassembling opcode %04X\n", op);
-			char* ea1 = strstr(ops[i].op, "%E");
+			char* ea1 = strstr(buffer, "%E");
 			char* ea2 = ea1 ? strstr(ea1 + 1, "%E") : 0;
-			char* imm = strstr(ops[i].op, "%N");
-			char* reg = strstr(ops[i].op, "%R");
+			char* imm = strstr(buffer, "%N");
+			char* reg = strstr(buffer, "%R");
 			
-			int ea1_off = ea1 - ops[i].op;
-			int ea2_off = ea2 - ops[i].op;
-			int imm_off = imm - ops[i].op;
-			int reg_off = reg - ops[i].op;
-			
-			strcpy(buffer, ops[i].op);
-			
+			int ea1_off = ea1 - buffer;
+			int ea2_off = ea2 - buffer;
+			int imm_off = imm - buffer;
+			int reg_off = reg - buffer;
+
 			unsigned _i = (op >> 9) & 7;
 			unsigned _r = (op & 7);
 			
 			if(ea1) buffer[ea1_off + 1] = 's';
-			//if(ea1 && debug) printf("@ ea1_off=0x%02x\n", ea1_off);
 			if(ea2) buffer[ea2_off + 1] = 's';
-			//if(ea2 && debug) printf("@ ea2_off=0x%02x\n", ea2_off);
 			if(imm) buffer[imm_off + 1] = 'd';
-			//if(imm && debug) printf("@ imm_off=0x%02x\n", imm_off);
 			if(reg) buffer[reg_off + 1] = 'd';
-			//if(reg && debug) printf("@ reg_off=0x%02x\n", reg_off);
-			
-			//if(debug) printf("@ format=%s", buffer);
 			
 			if(ea1 && ea2) {
 				char* _ea1 = ea(op & 0x3F);
 				char* _ea2 = ea(((op >> 9) & 0x07) | ((op >> 3) & 0x38));
 				sprintf(buffer2, buffer, _ea1, _ea2);
-				free(_ea1); 
-				free(_ea2);
 				
 			} else if(ea1) {
 				char* _ea = ea(op & 0x3F);
@@ -827,7 +797,6 @@ const char* m68k_disasm(uint16_t op) {
 					else                    sprintf(buffer2, buffer, _r,_ea);  //return [reg,imm,ea1];
 					
 				} else                      sprintf(buffer2, buffer, _ea);  //return [reg,imm,ea1];
-				free(_ea);
 				
 			} else {
 				if(imm && reg) {

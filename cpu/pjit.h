@@ -21,6 +21,7 @@ register uint32_t D3 asm("r7");
 register uint32_t A0 asm("r8");
 register uint32_t A1 asm("r9");
 register uint32_t A2 asm("r10");
+#define           A2 cpu->a[2]
 #define           A3 cpu->a[3]
 #define           A4 cpu->a[4]
 #define           A5 cpu->a[5]

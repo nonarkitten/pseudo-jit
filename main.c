@@ -138,7 +138,7 @@ int main(void) {
 //    CPURun();
 
     test_native_bogomips();
-    //test_pjit_bogomips();
+    test_pjit_bogomips();
 
     // PJIT: 249.99 BogoMIPS no inline, register in SRAM
     // PJIT: 285.71 BogoMIPS no inline, register in SRAM, Os

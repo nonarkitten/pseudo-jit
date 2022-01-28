@@ -27,7 +27,7 @@ static uint32_t exec_temp[16] __attribute__ ((aligned (16))) = { 0 };
 void debug(const char* format,...) {
 	va_list args;
 	va_start(args, format);
-	vfprintf( stderr, format, args );
+	vprintf( format, args );
 	va_end(args);
 }
 
@@ -35,7 +35,7 @@ void debug(const char* format,...) {
 static uint32_t emit_branch_link(uint32_t target, uint32_t current) {
 	int32_t offset = target - current - 8;
 	if(offset > 0x03FFFFFC || offset < 0xFC000004) {
-		fprintf( stderr, "\n*** Branch out of range (%08x).\n", offset);
+		printf("\n*** Branch out of range (%08x).\n", offset);
 		__asm__("BKPT 0");
 		//exit(1);
 	}
@@ -46,7 +46,7 @@ static uint32_t emit_branch_link(uint32_t target, uint32_t current) {
 static uint32_t emit_branch(uint32_t target, uint32_t current) {
 	int32_t offset = target - current - 8;
 	if(offset > 0x03FFFFFC || offset < 0xFC000004) {
-		fprintf( stderr, "\n*** Branch out of range (%08x).\n", offset);
+		printf("\n*** Branch out of range (%08x).\n", offset);
 		__asm__("BKPT 0");
 		//exit(1);
 	}
@@ -300,7 +300,7 @@ uint32_t cpu_branch_offset(void* target, void* current) {
 	// offset=(target-bra_addr-8)>>2
 	int32_t offset = (_t - _c - 8) >> 2;
 	if(offset > 0x00FFFFFF || offset < 0xFF000001) {
-		fprintf( stderr, "\n*** Branch out of range (%08x).\n", offset);
+		printf("\n*** Branch out of range (%08x).\n", offset);
 		exit(1);
 		
 	} else {
@@ -312,38 +312,38 @@ uint32_t cpu_branch_offset(void* target, void* current) {
 
 void cpu_dump_state(void) {
 	cpu = &cpu_state;
-	fprintf(stderr, "D%d: %08X  ", 0, D0);
+	printf("D%d: %08X  ", 0, D0);
 	cpu = &cpu_state;
-	fprintf(stderr, "D%d: %08X  ", 1, D1);
+	printf("D%d: %08X  ", 1, D1);
 	cpu = &cpu_state;
-	fprintf(stderr, "D%d: %08X  ", 2, D2);
+	printf("D%d: %08X  ", 2, D2);
 	cpu = &cpu_state;
-	fprintf(stderr, "D%d: %08X\n", 3, D3);
+	printf("D%d: %08X\n", 3, D3);
 	cpu = &cpu_state;
-	fprintf(stderr, "D%d: %08X  ", 4, D4);
+	printf("D%d: %08X  ", 4, D4);
 	cpu = &cpu_state;
-	fprintf(stderr, "D%d: %08X  ", 5, D5);
+	printf("D%d: %08X  ", 5, D5);
 	cpu = &cpu_state;
-	fprintf(stderr, "D%d: %08X  ", 6, D6);
+	printf("D%d: %08X  ", 6, D6);
 	cpu = &cpu_state;
-	fprintf(stderr, "D%d: %08X\n", 7, D7);
+	printf("D%d: %08X\n", 7, D7);
 	
 	cpu = &cpu_state;
-	fprintf(stderr, "A%d: %08X  ", 0, A0);
+	printf("A%d: %08X  ", 0, A0);
 	cpu = &cpu_state;
-	fprintf(stderr, "A%d: %08X  ", 1, A1);
+	printf("A%d: %08X  ", 1, A1);
 	cpu = &cpu_state;
-	fprintf(stderr, "A%d: %08X  ", 2, A2);
+	printf("A%d: %08X  ", 2, A2);
 	cpu = &cpu_state;
-	fprintf(stderr, "A%d: %08X\n", 3, A3);
+	printf("A%d: %08X\n", 3, A3);
 	cpu = &cpu_state;
-	fprintf(stderr, "A%d: %08X  ", 4, A4);
+	printf("A%d: %08X  ", 4, A4);
 	cpu = &cpu_state;
-	fprintf(stderr, "A%d: %08X  ", 5, A5);
+	printf("A%d: %08X  ", 5, A5);
 	cpu = &cpu_state;
-	fprintf(stderr, "A%d: %08X  ", 6, A6);
+	printf("A%d: %08X  ", 6, A6);
 	cpu = &cpu_state;
-	fprintf(stderr, "A%d: %08X\n", 7, A7);
+	printf("A%d: %08X\n", 7, A7);
 	cpu = &cpu_state;
 }
 
@@ -379,7 +379,7 @@ void branch_subroutine(uint32_t _lr, int32_t offset) {
 // when the system hits another interpreter command; that is, this is a
 // loop, even if it doesn't look like one
 void cpu_start(uint32_t m68k_pc) {
-	m68k_disasm(0);
+	//m68k_disasm(0);
 	
 	while(setjmp(jump_buffer) != PJIT_EXIT) {
 		//static uint32_t m68k_jump_to;

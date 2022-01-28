@@ -86,7 +86,7 @@ static int emit_fetch_ea_data( uint8_t* dRR, uint8_t* sRR, uint16_t sEA, uint8_t
 			reg_modified(*dRR); reg_free(*dRR);
 			*dRR = tRR;
 		} else if(sEA == EA_ADEC) {
-			emit("\tsub     r%d, r%d, #%d @ bob\n", *dRR, *dRR, size);
+			emit("\tsub     r%d , r%d, #%d @ bob\n", *dRR, *dRR, size);
 			if((size != 1) && omit_bic) {
 				if(reg_alloc_temp(&tRR ) == ALLOC_FAILED) return 0;
 				emit("\tmov     r%d, r%d\n", tRR, *dRR);
@@ -94,7 +94,7 @@ static int emit_fetch_ea_data( uint8_t* dRR, uint8_t* sRR, uint16_t sEA, uint8_t
 				*dRR = tRR;
 			}
 		} else if(sEA == EA_ADIS || sEA == EA_AIDX) {
-			emit("\tadd     r%d, r%d, r%d\n", (is_src ? 1 : 2), *dRR, size);
+			emit("\tadd     r%d , r%d, r%d\n", (is_src ? 1 : 2), *dRR, size);
 			reg_modified(*dRR); reg_free(*dRR);
 			*dRR = is_src ? 1 : 2;
 		}
@@ -104,7 +104,7 @@ static int emit_fetch_ea_data( uint8_t* dRR, uint8_t* sRR, uint16_t sEA, uint8_t
 			if(*dRR < 4) {
 				emit("\teor     r%d, r%d, #1\n", *dRR, *dRR);
 			} else {
-				if(reg_alloc_temp(&tRR ) == ALLOC_FAILED) return 0;				
+				if(reg_alloc_temp(&tRR ) == ALLOC_FAILED) return 0;
 				emit("\teor     r%d, r%d, #1\n", tRR, *dRR);
 				*dRR = tRR;
 			}
@@ -115,7 +115,7 @@ static int emit_fetch_ea_data( uint8_t* dRR, uint8_t* sRR, uint16_t sEA, uint8_t
 			if(*dRR < 4) {
 				emit("\tbic     r%d, r%d, #0xFF000000\n", *dRR, *dRR);
 			} else {
-				if(reg_alloc_temp(&tRR ) == ALLOC_FAILED) return 0;				
+				if(reg_alloc_temp(&tRR ) == ALLOC_FAILED) return 0;
 				emit("\tbic     r%d, r%d, #0xFF000000\n", tRR, *dRR);
 				*dRR = tRR;
 			}

@@ -37,14 +37,19 @@ int emit_store_EA(char *buffer, uint16_t opcode, int is_pea) {
 		else emit("\tmov     r%d, r%d\n", dRR, sRR);
 		break;
 	case EA_AIDX: case EA_ADIS:
-		emit("\tadd     r1, r1, r%d\n", sRR);
+		if(dRR > 3) {
+			emit("\tadd     r%d, r1, r%d\n", dRR, sRR);
+			break;
+		} else {
+			emit("\tadd     r1, r1, r%d\n", sRR);
+		}
 	case EA_ABSW: case EA_ABSL: case EA_PDIS: case EA_PIDX:
 		if(is_pea) emit("\tstr     r1, [r12, #-4]!\n");
 		else emit("\tmov     r%d, r1\n", dRR);
 		break;
 	}
-
-	reg_flush();		
+// mov
+	reg_flush();
 	return lines_ext(lines, sEA, 0, 4 );
 }
 int emit_LEA(char *buffer, uint16_t opcode) {
@@ -140,19 +145,34 @@ int emit_EXG(char *buffer, uint16_t opcode) {
 	default:
 		return -1;
 	}
-		
-	uint8_t rry, rrx, tRR;
-	reg_alloc_68k( &rry, ry, 4 );
-	reg_alloc_68k( &rrx, rx, 4 );
-	reg_alloc_temp( &tRR );
-
-	emit("\tmov     r%d, r%d\n", tRR, rry);
-	emit("\tmov     r%d, r%d\n", rry, rrx);
-	emit("\tmov     r%d, r%d\n", rrx, tRR);
 	
-	reg_modified(rry);
-	reg_modified(rrx);
-	reg_flush();
+	// memory <-> cpu reg? use SWP
+	// SWP only allows simple direct addressing
+	if(reg_raw(rx) == 0xFF && reg_raw(ry) != 0xFF) {
+		// rx is memory
+		uint8_t dRR = reg_raw(ry);
+		if(rx) emit("\tadd     r0, r12, #%d\n", rx * 4);
+		emit("\tswp     r%d, r%d, [r0]\n", dRR, dRR);
+
+	} else if(reg_raw(rx) != 0xFF && reg_raw(ry) == 0xFF) {
+		// ry is memory
+		uint8_t dRR = reg_raw(rx);
+		if(ry) emit("\tadd     r0, r12, #%d\n", ry * 4);
+		emit("\tswp     r%d, r%d, [r0]\n", dRR, dRR);
+
+	} else {
+		uint8_t rry, rrx, tRR;
+		reg_alloc_68k( &rry, ry, 4 );
+		reg_alloc_68k( &rrx, rx, 4 );
+		reg_alloc_temp( &tRR );
+		emit("\tmov     r%d, r%d\n", tRR, rry);
+		emit("\tmov     r%d, r%d\n", rry, rrx);
+		emit("\tmov     r%d, r%d\n", rrx, tRR);
+
+		reg_modified(rry);
+		reg_modified(rrx);
+		reg_flush();
+	}
 	
 	return lines;	
 		

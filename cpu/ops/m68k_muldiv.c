@@ -18,9 +18,14 @@ static int emit_muldiv(char *buffer, uint16_t opcode, void(*op)(uint8_t,uint8_t)
 	uint8_t dRR, tRR, dR = ((opcode & 0x0E00) >> 9);
 	get_destination_data( &dRR, &tRR, 0, dR, 2 );
 	
-	op(tRR, sRR);
+	if(dRR > 3) {
+		op(dRR, sRR);
+		reg_flush();
+	} else {
+		op(tRR, sRR);
+		set_destination_data( &dRR, &tRR, 0, 4 );
+	}
 
-	set_destination_data( &dRR, &tRR, 0, 4 );	
 	return lines_ext(lines, sEA, 0, 2);
 }
 

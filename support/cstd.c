@@ -184,5 +184,3 @@ char * strncat ( char * destination, const char * source, size_t num ) {
     char *d = destination + strlen(source);
     return strncpy(d, source, num);
 }
-
-
