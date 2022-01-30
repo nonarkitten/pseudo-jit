@@ -24,12 +24,7 @@ static uint32_t exec_temp[16] __attribute__ ((aligned (16))) = { 0 };
 
 //extern void __clear_cache(char* beg, char* end);
 
-void debug(const char* format,...) {
-	va_list args;
-	va_start(args, format);
-	vprintf( format, args );
-	va_end(args);
-}
+#define debug(...) printf(__VA_ARGS__)
 
 // return the ARM32 opcode for an unconditional branch to the target
 static uint32_t emit_branch_link(uint32_t target, uint32_t current) {

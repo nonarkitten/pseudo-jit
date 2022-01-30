@@ -10,7 +10,7 @@
 
 //#pragma scalar_storage_order big-endian
 
-#define __builtin_bswap32(X) (X)
+//#define __builtin_bswap32(X) (X)
 
 
 #endif /* PREINCLUDE_H_ */

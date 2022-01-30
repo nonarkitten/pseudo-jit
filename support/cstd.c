@@ -146,6 +146,7 @@ const char * strstr ( const char * str1, const char * str2 ) {
         int i = 0;
         while(str1[i] && (str1[i] == str2[i])) i++;
         if(str2[i] == 0) return str1;
+        str1++;
     }
     return NULL;
 }

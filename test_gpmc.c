@@ -245,8 +245,7 @@ int test_gpmc(void) {
 			0x6578, 0x6563, 0x2033, 0x342E
 	};
 	uint16_t read[16] = { 0 };
-	uint16_t* read_be = (uint16_t*)__builtin_bswap32((uint32_t)read);
-//
+
 	volatile uint16_t* d_base = (uint16_t*)0x00000000;
 //	volatile uint8_t* cia_base = (uint8_t*)0x00BFE001;
 //	volatile uint16_t* custom = (uint32_t*)0x00DFF000;

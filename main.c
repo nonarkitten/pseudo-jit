@@ -137,7 +137,7 @@ int main(void) {
 //    printf("[BOOT] Starting emulation\n");
 //    CPURun();
 
-    test_native_bogomips();
+    //test_native_bogomips();
     test_pjit_bogomips();
 
     // PJIT: 249.99 BogoMIPS no inline, register in SRAM
