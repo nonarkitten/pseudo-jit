@@ -8,8 +8,8 @@
 
 #include "pjit.h"
 
-//extern void debug(const char* format,...);
-#define debug(...)
+//#define debug(...)
+#define debug(...) printf(__VA_ARGS__)
 
 static pjit_cache_t pjit_cache;
 static pjit_tag_cache_t pjit_tag_cache;

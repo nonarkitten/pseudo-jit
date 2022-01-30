@@ -3,17 +3,20 @@
 #include "ops/m68k_emit_ea.h"
 #include "ops/m68k_registers.h"
 
+__attribute__((always_inline))
 static inline unsigned __get_cpsr(void) {
     unsigned long retval;
     asm volatile ("mrs\t%0, cpsr" : "=r" (retval) :  );
     return retval;
 }
 
+__attribute__((always_inline))
 static inline void __set_cpsr(unsigned val) {
     asm volatile ("msr\tcpsr, %0":  :"r" (val));
 }
 
-static inline unsigned __get_cpsr_x(int is_sub) {
+__attribute__((always_inline))
+static inline unsigned __get_cpsr_x(const int is_sub) {
     unsigned long retval;
 	asm volatile ("ldr\t%0, [r12, %1]" : "=r"(retval) : "i"(offsetof(cpu_t, x)));
 	asm volatile ("rsb\t%0, %0, %1" : "+r"(retval) : "i"(is_sub ? 1 : 0));
@@ -21,6 +24,7 @@ static inline unsigned __get_cpsr_x(int is_sub) {
     return retval;
 }
 
+__attribute__((always_inline))
 static inline void __set_cpsr_x(unsigned val) {
     asm volatile ("msr\tcpsr, %0" : :"r" (val));
 	asm volatile ("movcc\t%0, #0" : "=r" (val));

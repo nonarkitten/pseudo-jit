@@ -64,6 +64,7 @@ static inline int __attribute__ ((optimize("Os"))) _strlen(char *buf) {
 
 #define PAD_RIGHT 1
 #define PAD_ZERO 2
+#define PAD_SIGN 4
 
 static int prints(char **out, char *str, int width, int pad) {
     if(str == NULL) return prints(out, "(null)", width, pad);
@@ -102,6 +103,8 @@ static inline int printi(char **out, int32_t x, int base, const char* base_chars
     if((x < 0) && (base == 10)) {
         pc += printchar(out, '-');
         x = -x;
+    } else if((pad & PAD_SIGN) && (base == 10)) {
+        pc += printchar(out, '+');
     }
 
     return pc + printu(out, (uint32_t)x, base, base_chars, width, pad);
@@ -120,6 +123,10 @@ static int print(char **out, int *varg) {
             if (*format == '-') {
                 ++format;
                 pad = PAD_RIGHT;
+            }
+            if (*format == '+') {
+            	++format;
+            	pad |= PAD_SIGN;
             }
             while (*format == '0') {
                 ++format;
