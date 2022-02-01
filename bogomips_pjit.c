@@ -28,7 +28,10 @@ uint16_t bogomips[] = {
 	0xFFFF
 };
 
-static uint32_t cache[PJIT_CACHE_SIZE + PJIT_TAG_SIZE];
+//static uint32_t cache[PJIT_CACHE_SIZE + PJIT_TAG_SIZE];
+extern const uint32_t __HeapBase;
+static uint32_t *cache = (uint32_t *)&__HeapBase;
+
 static double duration = 0;
 static int loops = 0;
 
@@ -56,7 +59,7 @@ __attribute__((noinline)) double dopjit(void) {
 void test_pjit_bogomips(void) {
     static int pass = 0;
 
-	cache_init((uint32_t)&cache);
+	cache_init(cache);
 	printf("[PJIT] Cache initialized.\n");
 	cpu = &cpu_state;
 	cpu_dump_state();

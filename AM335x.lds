@@ -117,26 +117,18 @@ SECTIONS
 
 	    } > DDR0
 
-        .heap :
-        {
-            . = ALIGN(4);
-            __end__ = .;
-            end = __end__;
-            __HeapBase = __end__;
-            *(.heap*)
-            . = . + 0x800;
-            __HeapLimit = .;
-        } >DDR0
-
         .stack :
         {
             . = ALIGN(256);
             __StackLimit = . ;
             *(.stack*)
-            . = . + 0x800;
+            . = . + 0x2000;
             __StackTop = .;
         } >DDR0
         _stack = __StackTop;
+
+        . = ALIGN(4096);
+        __HeapBase = .;
 
 }
 /**************************************************************************/
