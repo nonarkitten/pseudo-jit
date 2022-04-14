@@ -20,7 +20,7 @@ uint16_t bogomips[] = {
 	0xFFFF
 };
 
-// register cpu_t* cpu asm("r12");
+// register cpu_t* cpu asm(CPU);
 cpu_t cpu_state;
 
 //int main(int argc, char** argv) {

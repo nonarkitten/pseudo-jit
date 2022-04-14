@@ -94,9 +94,7 @@ int emit_DBCC(char *buffer, uint16_t opcode) {
 
 	}
 	
-	reg_alloc_arm(0);
 	reg_alloc_arm(1); // our offset
-
 	reg_alloc_temp(&tRR);
 
 	emit("\tmrs     r%d, CPSR\n", tRR);
@@ -169,7 +167,7 @@ int emit_BCC(char *buffer, uint16_t opcode) {
 		} else {
 			emit("branch_subroutine:\n");
 			emit("\tsub     r3, lr, #4\n");
-			emit("\tldr     r0, [r12, #%d]\n", offsetof(cpu_t, m68k_page));
+			emit("\tldr     r0, [" CPU ", #%d]\n", offsetof(cpu_t, m68k_page));
 			emit("\tubfx    r3, r3, #1, #12\n");
 			emit("\torr     r0, r3, r0\n");
 			emit("\tstr     r0, [r11, #-4]!\n");
@@ -184,7 +182,7 @@ int emit_BCC(char *buffer, uint16_t opcode) {
 		} else {
 			emit("branch_normal:\n");
 			emit("\tsub     r3, lr, #4\n");
-			emit("\tldr     r0, [r12, #%d]\n", offsetof(cpu_t, m68k_page));
+			emit("\tldr     r0, [" CPU ", #%d]\n", offsetof(cpu_t, m68k_page));
 			emit("\tubfx    r3, r3, #1, #12\n");
 			emit("\torr     r0, r3, r0\n");
 			emit("\tadd     r0, r0, r1\n");

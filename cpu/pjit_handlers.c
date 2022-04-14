@@ -18,7 +18,7 @@ static inline void __set_cpsr(unsigned val) {
 __attribute__((always_inline))
 static inline unsigned __get_cpsr_x(const int is_sub) {
     unsigned long retval;
-	asm volatile ("ldr\t%0, [r12, %1]" : "=r"(retval) : "i"(offsetof(cpu_t, x)));
+	asm volatile ("ldr\t%0, [" CPU ", %1]" : "=r"(retval) : "i"(offsetof(cpu_t, x)));
 	asm volatile ("rsb\t%0, %0, %1" : "+r"(retval) : "i"(is_sub ? 1 : 0));
     asm volatile ("mrs\t%0, cpsr" : "=r" (retval) :  );
     return retval;
@@ -29,7 +29,7 @@ static inline void __set_cpsr_x(unsigned val) {
     asm volatile ("msr\tcpsr, %0" : :"r" (val));
 	asm volatile ("movcc\t%0, #0" : "=r" (val));
 	asm volatile ("movcs\t%0, #1" : "=r" (val));
-	asm volatile ("str\t%0, [r12, %1]" : "=r"(val) : "i"(offsetof(cpu_t, x)));
+	asm volatile ("str\t%0, [" CPU ", %1]" : "=r"(val) : "i"(offsetof(cpu_t, x)));
 }
 
 unsigned handle_abcd(uint8_t xx, uint8_t yy) {

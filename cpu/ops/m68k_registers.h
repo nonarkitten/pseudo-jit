@@ -3,6 +3,12 @@
 #ifndef __REG_ALLOC_H__
 #define __REG_ALLOC_H__
 
+// Number of temporary ARM registers
+#define REG_MAP_COUNT 3
+
+// Register for CPU pointer
+#define CPU "r5"
+
 // REGISTER ALLOCATION
 typedef enum { ALLOC_FAILED, ALLOC_OKAY } ALLOC_ERR_t;
 

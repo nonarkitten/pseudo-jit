@@ -10,7 +10,7 @@ CXX     := g++
 .PHONY: all
 all: premake $(OBJECTS)
 	$(CXX) $(CFLAGS) $(CXXFLAGS) $(INCLUDE) $(OBJECTS) -o $(OUTPUT)
-#	./$(OUTPUT)
+	./$(OUTPUT)
 	
 .PHONY: premake
 premake:

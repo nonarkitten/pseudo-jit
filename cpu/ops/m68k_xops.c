@@ -7,16 +7,16 @@
 static void get_x_flag(int is_sub) {
 	uint8_t tRR;
 	reg_alloc_temp(&tRR);	
-	emit("\tldr     r%d, [r12, #%d]\n", tRR, offsetof(cpu_t, x));
-	emit("\trsb     r%d, r%d, #%d\n", tRR, tRR, is_sub ? 1 : 0);
+	emit("\tldr     r%d, [" CPU ", #%d] @ get x flag into c flag\n", tRR, offsetof(cpu_t, x));
+	emit("\trsbs    r%d, r%d, #%d\n", tRR, tRR, is_sub ? 1 : 0);
 	reg_free(tRR);
 }
 
 // save X by copying the carry bit
 static void set_x_flag(uint8_t tRR) {
-	emit("\tmovcc   r%d, #0\n", tRR);
+	emit("\tmovcc   r%d, #0 @ save c flag to x\n", tRR);
 	emit("\tmovcs   r%d, #1\n", tRR);
-	emit("\tstr     r%d, [r12, #%d]\n", tRR, offsetof(cpu_t, x));	
+	emit("\tstr     r%d, [" CPU ", #%d]\n", tRR, offsetof(cpu_t, x));	
 }
 
 static int emit_add_sub_x(char *buffer, uint16_t opcode, int is_sub) {
@@ -45,10 +45,9 @@ static int emit_add_sub_x(char *buffer, uint16_t opcode, int is_sub) {
 	} else {
 		emit("\tadcs    r%d, r%d, r%d\n", tRR, tRR, sRR);	
 	}
-	
-	set_x_flag(tRR); // put C into the X flag
-	
+		
 	set_destination_data( &dRR, &tRR, EA, size );	
+	set_x_flag(tRR); // put C into the X flag
 	return lines;	
 }
 
@@ -77,10 +76,11 @@ int emit_NEGX(char *buffer, uint16_t opcode) {
 
 	get_destination_data( &dRR, &tRR, dEA, dR, size );
 	
-	emit("\tnegs    r%d, r%d\n", tRR, tRR);
-	emit("\tsbc     r%d, #0\n", tRR);
+	emit("\trscs    r%d, r%d, #0\n", tRR, tRR);
 
 	set_destination_data( &dRR, &tRR, dEA, size );
+	set_x_flag(tRR); // put C into the X flag
+
 	return lines_ext(lines, 0, dEA, size );
 }
 

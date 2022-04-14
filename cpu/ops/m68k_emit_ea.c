@@ -25,113 +25,125 @@ int emit_get_reg(uint8_t* reg_arm, uint8_t reg_68k, uint8_t size) {
 	return reg_alloc_68k(reg_arm, reg_68k, size) == ALLOC_OKAY;
 }
 
-// \brief Perform effective address load
-// \param sRR The register number which contains the read DATA
-// \param dRR The register number which contains the real ARM address this came from; if sEA is a register mode, then this is not used
+// \brief Perform effective address load.
+// Calculates the EA (sEA), loads the required register into sRR, and
+// loads the data from memory into dRR. If EA is a register mode, then
+// dRR will hold the ARM register.
+// \param dRR (out) The register number which contains the calculated address; cannot be NULL
+// \param sRR (out) The register number which contains the read DATA; pass NULL to suppress actual load
 // \param sEA The source effective address
 // \param sR The 68K source register
 // \param size The size of the operation in bytes (1, 2 ro 4)
 // \param is_src Set to true when this is a source EA mode and data will not be rewritten
 // \return If successful, returns 1
 static int emit_fetch_ea_data( uint8_t* dRR, uint8_t* sRR, uint16_t sEA, uint8_t sR, uint16_t size, uint8_t is_src ) {
-	uint8_t tRR;
+	uint8_t tRR, oRR;
 	uint8_t omit_bic = 0, omit_eor = 0;
 	
 	if(dRR == NULL) {
 		if(debug) printf("@ NULL passed for dRR\n");
 		exit(1);
 	}
-	if(sEA == EA_DREG || sEA == EA_AREG) {
-		if(sEA == EA_AREG && size == 1) {
-			if(debug) printf("@ AREG invalid for destination mode\n");
+
+	switch(sEA) {
+	default:
+		if(debug) printf("@ unknown EA\n");
+		return 0;
+	
+	case EA_DREG:
+		*dRR = reg_raw(sR);
+		return sRR ? emit_get_reg(sRR, sR, size) : 1;
+
+	case EA_AREG:
+		if(size == 1) {
+			if(debug) printf("@ AREG invalid for byte mode\n");
 			return 0;
 		}
 		*dRR = reg_raw(sR);
 		return sRR ? emit_get_reg(sRR, sR, size) : 1;
 
-	} else if(sEA == EA_IMMD) {
+	case EA_ADDR: case EA_AINC: // (Ax)+
+		if(emit_get_reg( dRR, sR, 4 ) == ALLOC_FAILED) return 0;
+		break;
+	
+	case EA_ADEC: // -(Ax)
+		if(emit_get_reg( dRR, sR, 4 ) == ALLOC_FAILED) return 0;
+		emit("\tsub     r%d , r%d, #%d @ pre-dec\n", *dRR, *dRR, size);
+		break;
+
+	case EA_ADIS: case EA_AIDX:
+		if(emit_get_reg( dRR, sR, 4 ) == ALLOC_FAILED) return 0;
+		emit("\tadd     r%d , r%d, r%d\n", (is_src ? 1 : 2), (is_src ? 1 : 2), *dRR);
+		reg_modified(*dRR); reg_free(*dRR);
+		*dRR = is_src ? 1 : 2;
+		// assume PJIT eors index
+		// omit_eor = true;
+		break;
+
+	case EA_PIDX: case EA_PDIS:
+		if(!is_src) {
+			if(debug) printf("@ PC invalid for destination mode\n");
+			return 0;
+		}
+	case EA_ABSW: case EA_ABSL:
+		*dRR = is_src ? 1 : 2;
+		// assumpe PJIT clips to 24-bits when scanning
+		omit_bic = true;
+		// assumpe PJIT eors absolute addresses
+		omit_eor = true;
+		break;
+
+	case EA_IMMD:
 		if(!is_src) {
 			if(debug) printf("@ IMMD invalid for destination mode\n");
 			return 0;
 		}
-		if(sRR) *sRR = is_src ? 1 : 2;
-		return 1;
-
-	} else {
-		if(sEA ==  EA_PIDX || sEA == EA_PDIS) {
-			if(!is_src) {
-				if(debug) printf("@ PC EA invalid for destination mode\n");
-			}
-			*dRR = is_src ? 1 : 2;
-		} else if(sEA == EA_ABSW || sEA ==  EA_ABSL) {
-			// assumpe PJIT clips to 24-bits when scanning
-			if(sEA == EA_ABSL) omit_bic = true;
-			*dRR = is_src ? 1 : 2;
-		} else if(emit_get_reg( dRR, sR, 4 ) == ALLOC_FAILED) {
-			return 0;
-		}
-		
-		if(sEA == EA_AINC) {
-			if(reg_alloc_temp( &tRR ) == ALLOC_FAILED) return 0;
-			if(size == 1) {
-				emit("\teor     r%d, r%d, #1\n", tRR, *dRR);
-				omit_eor = true;
-			} else if(!omit_bic) {
-				emit("\tbic     r%d, r%d, #0xFF000000\n", *dRR, *dRR);
-				omit_bic = true;
-			} else {
-				emit("\tmov     r%d, r%d\n", tRR, *dRR);
-			}
-			emit("\tadd     r%d, r%d, #%d\n", *dRR, tRR, size);
-			reg_modified(*dRR); reg_free(*dRR);
-			*dRR = tRR;
-		} else if(sEA == EA_ADEC) {
-			emit("\tsub     r%d , r%d, #%d @ bob\n", *dRR, *dRR, size);
-			if((size != 1) && omit_bic) {
-				if(reg_alloc_temp(&tRR ) == ALLOC_FAILED) return 0;
-				emit("\tmov     r%d, r%d\n", tRR, *dRR);
-				reg_modified(*dRR); reg_free(*dRR);
-				*dRR = tRR;
-			}
-		} else if(sEA == EA_ADIS || sEA == EA_AIDX) {
-			emit("\tadd     r%d , r%d, r%d\n", (is_src ? 1 : 2), *dRR, size);
-			reg_modified(*dRR); reg_free(*dRR);
-			*dRR = is_src ? 1 : 2;
-		}
-
-		// swap upper/lower bytes
-		if(!omit_eor && (size == 1)) {
-			if(*dRR < 4) {
-				emit("\teor     r%d, r%d, #1\n", *dRR, *dRR);
-			} else {
-				if(reg_alloc_temp(&tRR ) == ALLOC_FAILED) return 0;
-				emit("\teor     r%d, r%d, #1\n", tRR, *dRR);
-				*dRR = tRR;
-			}
-		}
-		
-		// clear out high 24-bits		
-		if(!omit_bic) {
-			if(*dRR < 4) {
-				emit("\tbic     r%d, r%d, #0xFF000000\n", *dRR, *dRR);
-			} else {
-				if(reg_alloc_temp(&tRR ) == ALLOC_FAILED) return 0;
-				emit("\tbic     r%d, r%d, #0xFF000000\n", tRR, *dRR);
-				*dRR = tRR;
-			}
-		}
-
-		// load the data
 		if(sRR) {
-			if(/*is_src &&*/ reg_alloc_temp( sRR ) == ALLOC_FAILED) return 0;
-			emit("\t%s   r%d, [r%d]\n", ldx(size), *sRR, *dRR);
-			// if we're long, swap words
-			if(size == 4) emit("\tror     r%d , r%d, #16\n", *sRR, *sRR);
+			*sRR = is_src ? 1 : 2;
+			reg_alloc_arm(*sRR);
+			*dRR = *sRR; // ??? does this make sense?
 		}
-		
-		if(is_src) reg_free(*dRR);
+		return 1; // data already present
+
 	}
-	//reg_flush();
+
+	oRR = *dRR; // for EA_AINC
+
+	// swap upper/lower bytes
+	if(size == 1) {
+		if(*dRR < REG_MAP_COUNT) {
+			emit("\teor     r%d, r%d, #1\n", *dRR, *dRR);
+		} else {
+			if(reg_alloc_temp(&tRR ) == ALLOC_FAILED) return 0;
+			emit("\teor     r%d, r%d, #1\n", tRR, *dRR);
+			*dRR = tRR;
+		}
+	}
+	
+	// clear out high 24-bits		
+	if(!omit_bic) {
+		if(*dRR < REG_MAP_COUNT) {
+			emit("\tbic     r%d, r%d, #0xFF000000\n", *dRR, *dRR);
+		} else {
+			if(reg_alloc_temp(&tRR ) == ALLOC_FAILED) return 0;
+			emit("\tbic     r%d, r%d, #0xFF000000\n", tRR, *dRR);
+			*dRR = tRR;
+		}
+	}
+
+	if(sEA == EA_AINC) {
+		emit("\tadd     r%d , r%d, #%d @ post-inc\n", oRR, oRR, size);
+	}
+
+	// load the data
+	if(sRR) {
+		if(/*is_src &&*/ reg_alloc_temp( sRR ) == ALLOC_FAILED) return 0;
+		emit("\t%s   r%d, [r%d]\n", ldx(size), *sRR, *dRR);
+		// if we're long, swap words
+		if(size == 4) emit("\tror     r%d , r%d, #16\n", *sRR, *sRR);
+	}
+	
+	if(is_src) reg_free(*dRR);
 	return 1;
 }
 
@@ -145,6 +157,16 @@ int get_source_data( uint8_t* sRR, uint16_t sEA, uint8_t sR, uint16_t size ) {
 	return err;
 }
 
+// \brief Perform effective address load for read-modify-write operations.
+// Calculates the EA (dEA), loads the required register into tRR, and
+// loads the data from memory into dRR. If EA is a register mode, then
+// dRR will hold the ARM register.
+// \param dRR (out) The register number which contains the calculated address
+// \param tRR (out) The register number which contains the read DATA
+// \param dEA The destination effective address
+// \param dR The 68K destination register
+// \param size The size of the operation in bytes (1, 2 or 4)
+// \return If successful, returns 1
 int get_destination_data( uint8_t* dRR, uint8_t* tRR, uint16_t dEA, uint8_t dR, uint16_t size ) {
 	int err;
 
@@ -153,6 +175,7 @@ int get_destination_data( uint8_t* dRR, uint8_t* tRR, uint16_t dEA, uint8_t dR, 
 	if(err == 0 && debug) printf("@ error\n");
 	return err;
 }
+//	set_destination_data( &dRR, &tRR, dEA, size & 3 );
 
 int set_destination_data( uint8_t* dRR, uint8_t* tRR, uint16_t dEA, uint16_t size ) {
 	ALLOC_ERR_t err = ALLOC_OKAY;

@@ -76,18 +76,18 @@ int emit_RTE(char *buffer, uint16_t opcode) {
 	emit_get_cpsr(); // cpsr is in r2
 	emit("\ttst     r2, #0x4000\n");
 	emit("\tsvcne   #%d\n", PRIV);
-	emit("\tldrh    r2, [r12], #-2\n");
+	emit("\tldrh    r2, [" CPU "], #-2\n");
 	//emit("\tbfi     r2, r0, #0, #16\n");
 	emit_save_cpsr();
 
-	emit("\tldr     r0, [r12], #-4\n");
+	emit("\tldr     r0, [" CPU "], #-4\n");
 	emit("\tb       cpu_jump\n");
 	return lines | NO_BX_LR;
 }
 int emit_RTS(char *buffer, uint16_t opcode) {
 	lines = 0;
 	emit_reset( buffer );
-	emit("\tldr     r0, [r12], #-4\n");
+	emit("\tldr     r0, [" CPU "], #-4\n");
 	emit("\tb       cpu_jump\n");
 	return lines | NO_BX_LR;
 }
@@ -98,11 +98,11 @@ int emit_RTR(char *buffer, uint16_t opcode) {
 	emit_get_cpsr(); // cpsr is in r2
 // 	emit("\ttst     r2, #0x4000\n");
 // 	emit("\tsvcne   #%d\n", PRIV);
-	emit("\tldrh    r2, [r12], #-2\n");
+	emit("\tldrh    r2, [" CPU "], #-2\n");
 //	emit("\tbfi     r2, r0, #0, #8\n");
 	emit_save_cpsr();
 
-	emit("\tldr     r0, [r12], #-4\n");
+	emit("\tldr     r0, [" CPU "], #-4\n");
 	emit("\tb       cpu_jump\n");
 	return lines | NO_BX_LR;
 }
@@ -122,7 +122,7 @@ int emit_jump(char *buffer, uint16_t opcode, int jsr) {
 
 	if(jsr) {
         emit("\tsub     r3, lr, #4\n");
-        emit("\tldr     r0, [r12, #%d]\n", offsetof(cpu_t, m68k_page));
+        emit("\tldr     r0, [" CPU ", #%d]\n", offsetof(cpu_t, m68k_page));
         emit("\tubfx    r3, r3, #1, #12\n");
         emit("\torr     r0, r3, r0\n");
 		emit("\tstr     r0, [r11, #-4]!\n");

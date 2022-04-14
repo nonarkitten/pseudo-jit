@@ -6,30 +6,30 @@
 void emit_get_cpsr(void) {	
 	// get flags and conver them to 68K
 	emit("\tmrs     r0, CPSR\n");
-	emit("\tadd     r0, r12, r0, lsr #28\n");	
+	emit("\tadd     r0, " CPU ", r0, lsr #28\n");	
 	emit("\tldrb    r0, [r0, %d]\n", offsetof(cpu_t, arm2cc));
 	
 	// load the sr_ccr and replace the low bytes
-	emit("\tldrh    r2, [r12, #%d]\n", offsetof(cpu_t, sr));
+	emit("\tldrh    r2, [" CPU ", #%d]\n", offsetof(cpu_t, sr));
 	emit("\tbfi     r2, r0, #0, #4\n");
 
 	// load X
-	// emit("\tldr     r0, [r12, #%d]\n", offsetof(cpu_t, x));
+	// emit("\tldr     r0, [" CPU ", #%d]\n", offsetof(cpu_t, x));
 	// emit("\tbfi     r2, r0, #4, #1\n");
 }
 
 void emit_save_cpsr(void) {
 	// save sr_ccr
-	emit("\tstrh    r2, [r12, #%d]\n", offsetof(cpu_t, sr));
+	emit("\tstrh    r2, [" CPU ", #%d]\n", offsetof(cpu_t, sr));
 	
 	// save X
 	// emit("\tror     r2, #4\n");
-	// emit("\tstr     r2, [r12, #%d]\n", offsetof(cpu_t, x));
+	// emit("\tstr     r2, [" CPU ", #%d]\n", offsetof(cpu_t, x));
 		
 	// convert back to ARM flags
 	emit("\tand     r2, r2, #0xF\n");
 	emit("\tadd     r2, r2, #%d\n", offsetof(cpu_t, cc2arm));
-	emit("\tldr     r0, [r12, r2, lsl #2]\n");
+	emit("\tldr     r0, [" CPU ", r2, lsl #2]\n");
 	emit("\tmsr     CPSR_fc, r0\n");
 }
 
@@ -214,10 +214,10 @@ int emit_MOVE_USP(char *buffer, uint16_t opcode) {
 
 	if(opcode & 0x0008) {
 		// [Ax] -> USP
-		emit("\tstr     r%d, [r12, #%d]\n", dRR, offsetof(cpu_t, usp));
+		emit("\tstr     r%d, [" CPU ", #%d]\n", dRR, offsetof(cpu_t, usp));
 	} else {
 		// USP -> [Ax]
-		emit("\tldr     r%d, [r12, #%d]\n", dRR, offsetof(cpu_t, usp));
+		emit("\tldr     r%d, [" CPU ", #%d]\n", dRR, offsetof(cpu_t, usp));
 	}
 	reg_flush();
 	return lines;

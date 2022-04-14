@@ -33,18 +33,18 @@ int emit_store_EA(char *buffer, uint16_t opcode, int is_pea) {
 
 	switch(sEA) {
 	case EA_ADDR:
-		if(is_pea) emit("\tstr     r%d, [r12, #-4]!\n", sRR);
+		if(is_pea) emit("\tstr     r%d, [" CPU ", #-4]!\n", sRR);
 		else emit("\tmov     r%d, r%d\n", dRR, sRR);
 		break;
 	case EA_AIDX: case EA_ADIS:
-		if(dRR > 3) {
+		if(dRR >= REG_MAP_COUNT) {
 			emit("\tadd     r%d, r1, r%d\n", dRR, sRR);
 			break;
 		} else {
 			emit("\tadd     r1, r1, r%d\n", sRR);
 		}
 	case EA_ABSW: case EA_ABSL: case EA_PDIS: case EA_PIDX:
-		if(is_pea) emit("\tstr     r1, [r12, #-4]!\n");
+		if(is_pea) emit("\tstr     r1, [" CPU ", #-4]!\n");
 		else emit("\tmov     r%d, r1\n", dRR);
 		break;
 	}
@@ -67,7 +67,7 @@ int emit_LINK(char *buffer, uint16_t opcode) {
 	uint8_t dRR, dR = ((opcode & 0x0007) >> 0) |  0x8;
 	reg_alloc_arm(1);
 	if(!emit_get_reg( &dRR, dR, 4 )) return -1;
-	emit("\tstr     r%d, [r12, #-4]!\n", dRR );
+	emit("\tstr     r%d, [" CPU ", #-4]!\n", dRR );
 	emit("\tmov     r%d, r11\n", dRR);
 	emit("\tadd     r11, r1\n");
 	reg_modified( dRR );
@@ -84,7 +84,7 @@ int emit_UNLK(char *buffer, uint16_t opcode) {
 	uint8_t dRR, dR = ((opcode & 0x0007) >> 0) |  0x8;
 	if(!emit_get_reg( &dRR, dR, 4 )) return -1;
 	emit("\tmov     r11, r%d\n", dRR);
-	emit("\tstr     r%d, [r12], #4\n", dRR ); 
+	emit("\tstr     r%d, [" CPU "], #4\n", dRR ); 
 	reg_flush();		
 	return lines;
 }
@@ -151,13 +151,13 @@ int emit_EXG(char *buffer, uint16_t opcode) {
 	if(reg_raw(rx) == 0xFF && reg_raw(ry) != 0xFF) {
 		// rx is memory
 		uint8_t dRR = reg_raw(ry);
-		if(rx) emit("\tadd     r0, r12, #%d\n", rx * 4);
+		if(rx) emit("\tadd     r0, " CPU ", #%d\n", rx * 4);
 		emit("\tswp     r%d, r%d, [r0]\n", dRR, dRR);
 
 	} else if(reg_raw(rx) != 0xFF && reg_raw(ry) == 0xFF) {
 		// ry is memory
 		uint8_t dRR = reg_raw(rx);
-		if(ry) emit("\tadd     r0, r12, #%d\n", ry * 4);
+		if(ry) emit("\tadd     r0, " CPU ", #%d\n", ry * 4);
 		emit("\tswp     r%d, r%d, [r0]\n", dRR, dRR);
 
 	} else {
@@ -198,7 +198,7 @@ int emit_CLR(char *buffer, uint16_t opcode) {
 
 	get_destination_data( &dRR, NULL, dEA, dR, size );
 	emit("\tmov     r0, #0\n", tRR);
-	set_destination_data( &dRR, &tRR, dEA, size );
+	set_destination_data( &dRR, &tRR, dEA, size & 3 );
 
 	return lines_ext(lines, 0, dEA, size );
 }

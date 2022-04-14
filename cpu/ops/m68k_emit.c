@@ -390,7 +390,7 @@ try_again:
 		fprintf(file, "%s", header);
 	
 		fprintf(file, "\t.text\n");
-		fprintf(file, "\t.code 32\n");
+		fprintf(file, "\t.code 32\n"); 
 		if(i == 0x5000) {
 			fprintf(file, "\t.extern branch_normal\n");
 		} else if(i == 0x6000) {
@@ -468,19 +468,66 @@ try_again:
 		
 		fprintf(file, "%s", header);
 		
-		fprintf(file, "\t.text\n\t.global optab\n");
-		fprintf(file, "optab:");
-		
+		uint16_t real_opcode[65536];
 		for(int i=0; i<0x10000; i++) {
-			if((i & 4095) == 0) fprintf(file, "\n// %04X\n\t.word ", i);
-			else if((i & 3) == 0) fprintf(file, "\t// %04X\n\t.word ", i - 4);
-			
-			char sepr = (i & 3) ? ',' : ' ';
-
 			int len = opcode_len[i];
-			uint16_t opcode = (len < 0) ? -len : i;
-			fprintf(file, "%c opcode_%04x", sepr, opcode);
+			real_opcode[i] = (len < 0) ? -len : i;
 		}
+
+		uint16_t compressed_opcodes_index[8192];
+		uint16_t compressed_opcodes[65536];
+		uint16_t compressed_opcodes_count = 0;
+		int matches = 0;
+		for(int i=0; i<0x10000; i+=8) {
+			bool match = false;
+			for(int j=0; j<i; j+=8) {
+				if(0 == memcmp(&real_opcode[i], &real_opcode[j], 16)) {
+					// fprintf(stderr, "Fragment match: %04x & %04x\n", i, j);
+					compressed_opcodes_index[i / 8] =
+						compressed_opcodes_index[j / 8];
+					matches ++;
+					match = true;
+					break;
+				}
+			}
+			if(!match) {
+				// fprintf(stderr, "Fragment miss: %04x\n", i);
+				compressed_opcodes_index[i / 8] = 
+					compressed_opcodes_count;
+				memcpy(&compressed_opcodes[compressed_opcodes_count],
+					&real_opcode[i], 32);
+				compressed_opcodes_count += 8;
+			}
+		}
+		fprintf(stderr, "Opcode fragments: %d\n", compressed_opcodes_count/8);
+		fprintf(stderr, "Fragment matches: %d\n", matches);
+
+		fprintf(file, "\t.text\n\t.global optab\n");
+		fprintf(file, "optab:\n\t.word ");
+		for(int i=0; i<compressed_opcodes_count; i++) {
+			//if((i & 4095) == 0) fprintf(file, "\n// %04X\n\t.word ", i);
+			if(i && ((i & 3) == 0)) fprintf(file, "\t// %04X\n\t.word ", i - 4);
+			char sepr = (i & 3) ? ',' : ' ';
+			fprintf(file, "%c opcode_%04x", sepr, compressed_opcodes[i]);
+		}
+
+		fprintf(file, "\n\n\n\t.text\n\t.global optab_idx\n");
+		fprintf(file, "optab_idx:\n\t.word ");
+		for(int op=0; op<0x10000; op+=8) {
+			int i = op / 8;
+			if(i && ((i & 3) == 0)) fprintf(file, "\t// %04X\n\t.word ", op - 32);
+			char sepr = (i & 3) ? ',' : ' ';
+			fprintf(file, "%c 0x%04x", sepr, compressed_opcodes_index[i]);
+		}
+
+
+			
+		// 	
+
+		// 	int len = opcode_len[i];
+		// 	uint16_t opcode = (len < 0) ? -len : i;
+		// 	
+		// }
 		
 		fprintf(file, "\n\n");
 

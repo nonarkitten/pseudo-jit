@@ -5,7 +5,7 @@ static struct pjit_page_ctrl_t {
     uint8_t cacheable : 1;
 } pjit_ctrl[256] = { 0 };
 
-register cpu_t cpu asm("r12");
+register cpu_t cpu asm(CPU);
 
 /*
     PJIT can run in one of two basic operating modes; interpreter and JIT.

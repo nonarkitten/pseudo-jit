@@ -1,17 +1,19 @@
 APPNAME  := m68k_test
-SOURCES  := $(wildcard *.c) $(wildcard ops/*.s) pjit_support.s ops/m68k_da.c
-OBJECTS  := \
-	$(patsubst %.c,obj/%.o, \
-	$(patsubst %.s,obj/%.o, \
-	$(patsubst ops/%.s,obj/%.o, \
-	$(patsubst ops/%.c,obj/%.o, \
-	$(SOURCES) \
-	))))
+# SOURCES  := $(wildcard ops/*.s) $(wildcard *.c) pjit_support.s ops/m68k_da.c
+# OBJECTS  := \
+# 	$(patsubst ops/%.s,obj/%.o, \
+# 	$(patsubst %.c,obj/%.o, \
+# 	$(patsubst %.s,obj/%.o, \
+# 	$(patsubst ops/%.c,obj/%.o, \
+# 	$(SOURCES) \
+# 	))))
+SOURCES  := $(wildcard ops/*.s)
+OBJECTS  := $(patsubst ops/%.s,obj/%.o, $(SOURCES))
 
-AS = gcc -ggdb \
+AS = arm-none-eabi-gcc -ggdb \
 	-mfloat-abi=hard -mcpu=cortex-a8 -march=armv7-a -mfpu=vfpv3
-SZ = size
-CC = gcc -ggdb -I . -I ops -Os \
+SZ = sarm-none-eabi-ize
+CC = arm-none-eabi-gcc -ggdb -I . -I ops -Os \
 	-flto-compression-level=9 \
 	-mfloat-abi=hard -march=armv7-a -marm -mfpu=vfpv3 -mtune=cortex-a8 \
 	-ffunction-sections \

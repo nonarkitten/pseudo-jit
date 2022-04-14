@@ -35,7 +35,6 @@ static uint32_t *cache = (uint32_t *)&__HeapBase;
 static double duration = 0;
 static int loops = 0;
 
-// register cpu_t* cpu asm("r12");
 cpu_t cpu_state;
 
 __attribute__((noinline)) double dopjit(void) {

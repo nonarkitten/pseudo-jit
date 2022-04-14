@@ -66,23 +66,23 @@ static int emit_ror_ea(uint8_t tR2) {
 static int emit_roxl_ea(uint8_t tR2) {
 	uint8_t tRR;
 	if(reg_alloc_temp(&tRR) == ALLOC_FAILED) return -1;
-	emit("\tldr     r%d, [r12, #%d]\n", tRR, offsetof(cpu_t, x));
+	emit("\tldr     r%d, [" CPU ", #%d]\n", tRR, offsetof(cpu_t, x));
 	emit("\tadds    r%d, r%d, r%d\n", tR2, tR2, tR2);
 	emit("\tadd     r%d, r%d, r%d\n", tR2, tR2, tRR);
 	emit("\tmovcs   r%d, #1\n", tRR);
 	emit("\tmovcc   r%d, #0\n", tRR);
-	emit("\tstr     r%d, [r12, #%d]\n", tRR, offsetof(cpu_t, x));
+	emit("\tstr     r%d, [" CPU ", #%d]\n", tRR, offsetof(cpu_t, x));
 	return 0;
 }
 static int emit_roxr_ea(uint8_t tR2) {
 	uint8_t tRR;
 	if(reg_alloc_temp(&tRR) == ALLOC_FAILED) return -1;
-	emit("\tldr     r%d, [r12, #%d]\n", tRR, offsetof(cpu_t, x));
+	emit("\tldr     r%d, [" CPU ", #%d]\n", tRR, offsetof(cpu_t, x));
 	emit("\tlsrs    r%d, #1\n", tR2);
 	emit("\tadd     r%d, r%d, r%d, lsl #%d\n", tR2, tR2, tRR, 16);
 	emit("\tmovcs   r%d, #1\n", tRR);
 	emit("\tmovcc   r%d, #0\n", tRR);
-	emit("\tstr     r%d, [r12, #%d]\n", tRR, offsetof(cpu_t, x));
+	emit("\tstr     r%d, [" CPU ", #%d]\n", tRR, offsetof(cpu_t, x));
 	return 0;
 }
 
