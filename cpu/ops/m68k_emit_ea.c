@@ -110,7 +110,7 @@ static int emit_fetch_ea_data( uint8_t* dRR, uint8_t* sRR, uint16_t sEA, uint8_t
 	oRR = *dRR; // for EA_AINC
 
 	// swap upper/lower bytes
-	if(size == 1) {
+	if(!omit_eor && (size == 1)) {
 		if(*dRR < REG_MAP_COUNT) {
 			emit("\teor     r%d, r%d, #1\n", *dRR, *dRR);
 		} else {

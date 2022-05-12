@@ -135,9 +135,10 @@ ALLOC_ERR_t reg_alloc_68k(uint8_t *reg_arm, uint8_t reg_68k, int size) {
 			r->reg = reg_68k;
 			r->size = size;
 			if(debug) printf("@ reg_alloc_68k r%d (new)\n", reg);
-
+			if(!suppress_load) {
 			emit("\t%s   r%d, [" CPU ", %d]\n", ldx(size), reg, reg_68k * 4);
 			*reg_arm = reg;
+			}
 
 			used_regs++;
 			return ALLOC_OKAY;
