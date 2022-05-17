@@ -112,7 +112,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="cpu/pjit_test.c|cpu/ops/m68k_xops.c|cpu/ops/m68k_shifts.c|cpu/ops/m68k_registers.c|cpu/ops/m68k_quick.c|cpu/ops/m68k_muldiv.c|cpu/ops/m68k_move.c|cpu/ops/m68k_misc.c|cpu/ops/m68k_jump.c|cpu/ops/m68k_emit.c|cpu/ops/m68k_emit_ea.c|cpu/ops/m68k_cr_ssr.c|cpu/ops/m68k_common.c|cpu/ops/m68k_bits.c|cpu/ops/m68k_bcd.c|cpu/ops/m68k_bcc.c|cpu/ops/m68k_alu1.c|AM335x.lds" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="startup.s|cpu/pjit_test.c|cpu/ops/m68k_xops.c|cpu/ops/m68k_shifts.c|cpu/ops/m68k_registers.c|cpu/ops/m68k_quick.c|cpu/ops/m68k_muldiv.c|cpu/ops/m68k_move.c|cpu/ops/m68k_misc.c|cpu/ops/m68k_jump.c|cpu/ops/m68k_emit.c|cpu/ops/m68k_emit_ea.c|cpu/ops/m68k_cr_ssr.c|cpu/ops/m68k_common.c|cpu/ops/m68k_bits.c|cpu/ops/m68k_bcd.c|cpu/ops/m68k_bcc.c|cpu/ops/m68k_alu1.c|AM335x.lds" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -184,6 +184,9 @@
 							<tool id="com.ti.ccstudio.buildDefinitions.TMS470_GNU_7.0.hex.1996787111" name="GNU Objcopy Utility" superClass="com.ti.ccstudio.buildDefinitions.TMS470_GNU_7.0.hex"/>
 						</toolChain>
 					</folderInfo>
+					<sourceEntries>
+						<entry excluding="startup.s" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+					</sourceEntries>
 				</configuration>
 			</storageModule>
 			<storageModule moduleId="org.eclipse.cdt.core.externalSettings"/>

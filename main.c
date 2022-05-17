@@ -81,18 +81,6 @@ static const MMU_Config_t mmu_config[] = {
     { 0, 0, 0 }
 };
 
-/* Pin mux for m68k bus module */
-static pin_muxing_t pru_pins[] = {
-		{ CONF_MCASP0_ACLKR,   (IEN  | PTD | DIS | M6) }, /* CLK7  pr1_pru0_pru_r31_4*/
-		{ CONF_MCASP0_AHCLKX,  (IDIS | PTD | DIS | M5) }, /* E-CLK pr1_pru0_pru_r30_7 */
-		{ CONF_MCASP0_AXR0,    (IDIS | PTD | DIS | M7) }, /* RESET gpio3_16 */
-		{ 0xFFFFFFFF },
-};
-
-extern void init_gpmc(void);
-extern int test_gpmc(void);
-extern uint8_t rawData[148];
-
 int QueryIRQ(int level) {
 	// check GPIO and return real levels
 	return 7;
@@ -107,30 +95,12 @@ int main(void) {
 	CP15DCacheDisable();
 	CP15ICacheDisable();
 
-    // RESET
-    config_mux(pru_pins);
-    am335x_gpio_init(AM335X_GPIO3);
-    am335x_gpio_change_state(AM335X_GPIO3, 16, 0);
-    am335x_dmtimer1_wait_us(150);
-    am335x_gpio_change_state(AM335X_GPIO3, 16, 1);
-
     printf("[BOOT] PJIT Built on %s at %s\n", __DATE__, __TIME__);
-    InitializeMCUClock(STARTUP_CLOCK);
-
-    am335x_pru_init();
-    am335x_pru_memcpy(PRU_ICSS1, PRU0_IRAM, 0, sizeof(rawData), (uint32_t*)rawData);
-    am335x_pru_enable(PRU_ICSS1, PRU0);
-
-    test_flash();
-
-    init_gpmc();
 
     InitializeMMU(pageTable);
     ConfigureMMU(pageTable, mmu_config);
     EnableMMU(pageTable);
     CacheEnable(CACHE_ALL);
-
-    test_gpmc();
 
 //    printf("[BOOT] Resetting emulation\n");
 //    HWReset();
