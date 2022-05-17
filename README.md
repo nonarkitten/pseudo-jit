@@ -6,6 +6,8 @@ PJIT is part of [the Buffee Project](https://www.buffee.ca).
 
 This work is licensed under a <a rel="license" href="http://creativecommons.org/licenses/by-nc-sa/4.0/">Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License</a>. No part of this shall be used for any commercial gains without express and written permission from The Buffee Project.
 
+Please visit [the Wiki](https://github.com/nonarkitten/pseudo-jit/wiki) for more information.
+
 ## Building
 
 Download a copy of Code Composer Studio 10 (this might be buildable with GCC directly, but I'm not bothering with that right now). Git clone this into your workspace and then import it. You should be able to compile and debug from there.
