@@ -1,10 +1,12 @@
-<a rel="license" href="http://creativecommons.org/licenses/by-nc-sa/4.0/"><img alt="Creative Commons Licence" style="border-width:0" src="https://i.creativecommons.org/l/by-nc-sa/4.0/88x31.png" /></a>
-
-This work is licensed under a <a rel="license" href="http://creativecommons.org/licenses/by-nc-sa/4.0/">Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License</a>.
-
 # The Buffee Accelerator
 
-PJIT is part of [the Buffee Project](https://www.buffee.ca). The hardware can be viewed [here](https://oshwlab.com/Renee/buffee-accelerator).
+PJIT is part of [the Buffee Project](https://www.buffee.ca).
+
+<a rel="license" href="http://creativecommons.org/licenses/by-nc-sa/4.0/"><img alt="Creative Commons Licence" style="border-width:0" src="https://i.creativecommons.org/l/by-nc-sa/4.0/88x31.png" /></a>
+
+This work is licensed under a <a rel="license" href="http://creativecommons.org/licenses/by-nc-sa/4.0/">Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License</a>. No part of this shall be used for any commercial gains without express and written permission from The Buffee Project.
+
+Please visit [the Wiki](https://github.com/nonarkitten/pseudo-jit/wiki) for more information.
 
 ## Building
 
@@ -25,7 +27,3 @@ This is how I did it -- there are many different paths to Nirvana here.
 ## Building PJIT
 
 Once the opcodes are generated, then you'll be able to build PJIT and run it on Buffee.
-
-## Building the Flash Loader
-
-TBD
