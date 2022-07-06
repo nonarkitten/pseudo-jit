@@ -20,22 +20,25 @@ OC := arm-none-eabi-objcopy
 
 export COMMON_FLAGS DEFINES CFLAGS CXXFLAGS AS AR SZ CC SUBMAKE
 
+OUTPUT  := pjit.elf
+BINARY  := $(patsubst %.elf,%.bin,$(OUTPUT))
+MAPFILE := $(patsubst %.elf,%.map,$(OUTPUT))
+
 LDFLAGS := -static -nostdlib -nostartfiles -T linker.lds \
 	-flto-compression-level=9 \
 	-Wl,--gc-sections \
-	-Wl,--Map=$(OUTPUT).map \
+	-Wl,--Map=$(MAPFILE) \
 	-Wl,--build-id \
 	-Wl,--be8 \
 	-Wl,--format=elf32-bigarm
 
-OUTPUT  := pjit.elf
-BINARY  := $(patsubst %.elf,%.bin,$(OUTPUT))
 SOURCES := $(wildcard *.s) $(wildcard *.c) 
 OBJECTS := \
 	$(patsubst %.s,obj/%.o, \
 	$(patsubst %.c,obj/%.o, \
 	$(SOURCES) \
 	))
+
 ALLLIBS = -Lobj -lsupport -lpjit
 
 .PHONY: all
@@ -69,3 +72,6 @@ clean:
 	@make -C support clean
 	@rm -rf obj/* 2>/dev/null || true
 	@rm $(OUTPUT) 2>/dev/null || true
+	@rm $(BINARY) 2>/dev/null || true
+	@rm $(MAPFILE) 2>/dev/null || true
+	
