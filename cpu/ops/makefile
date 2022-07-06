@@ -18,7 +18,7 @@ $(OUTPUT): $(OBJECTS)
 	@echo !!!!!!!! Building opcodes...
 	@echo
 	$(CXX) $(CFLAGS) $(OBJECTS) -o $@
-	./$(OUTPUT)
+#	./$(OUTPUT)
 	
 .PHONY: premake
 premake:

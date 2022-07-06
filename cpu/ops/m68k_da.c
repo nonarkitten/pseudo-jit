@@ -587,9 +587,9 @@ const char* opcodes[] = {
     "1100xxx100000xxx ABCD D%R, D%N",
     "1100xxx100001xxx ABCD -(A%R),-(A%N)",
     
-    "1100xxx101000xxx EXG D%R,D%N",
-    "1100xxx101001xxx EXG A%R,A%N",
-    "1100xxx110001xxx EXG D%R,A%N",
+    "1100xxx101000xxx EXG D%N,D%R",
+    "1100xxx101001xxx EXG A%N,A%R",
+    "1100xxx110001xxx EXG D%N,A%R",
     
     "1101xxx00x000xxx ADD.BW %E,D%N",		// 0 = reg dest, ea source, all ea modes
     "1101xxx00x01xxxx ADD.BW %E,D%N",

@@ -133,7 +133,6 @@ int emit_EXG(char *buffer, uint16_t opcode) {
 
 	uint8_t ry = (opcode & 0x0007) >> 0;
 	uint8_t rx = (opcode & 0x0E00) >> 9;
-	if(rx == ry) return 0;
 
 	switch(opcode & 0x00F8) {
 	case 0x0048: // Ax <-> Ay
@@ -145,34 +144,63 @@ int emit_EXG(char *buffer, uint16_t opcode) {
 	default:
 		return -1;
 	}
+
+	if(rx == ry) return 0;
 	
+	//printf("Rx: %02x  Ry: %02x  (Opcode %04x)\n", rx, ry, opcode);
+
 	// memory <-> cpu reg? use SWP
 	// SWP only allows simple direct addressing
-	if(reg_raw(rx) == 0xFF && reg_raw(ry) != 0xFF) {
-		// rx is memory
-		uint8_t dRR = reg_raw(ry);
-		if(rx) emit("\tadd     r0, " CPU ", #%d\n", rx * 4);
-		emit("\tswp     r%d, r%d, [r0]\n", dRR, dRR);
+	if((reg_raw(rx) == 0xFF) && (reg_raw(ry) == 0xFF)) {
+		// both in memory
+		emit("\tldr     r0, [" CPU ", #%d]\n", rx * 4);
+		emit("\tldr     r1, [" CPU ", #%d]\n", ry * 4);
+		emit("\tstr     r1, [" CPU ", #%d]\n", rx * 4);
+		emit("\tstr     r0, [" CPU ", #%d]\n", ry * 4);
 
-	} else if(reg_raw(rx) != 0xFF && reg_raw(ry) == 0xFF) {
-		// ry is memory
+	} else if((reg_raw(rx) == 0xFF) && (reg_raw(ry) != 0xFF)) {
+		// rx is memory, ry is in ARM
+		uint8_t dRR = reg_raw(ry);
+		uint8_t tmp; 
+		reg_alloc_temp(&tmp);
+		emit("\tldr     r%d, [" CPU ", #%d]\n", tmp, rx * 4);
+		emit("\tstr     r%d, [" CPU ", #%d]\n", dRR, rx * 4);
+		emit("\tmov     r%d, r%d\n", dRR, tmp);
+		reg_free(tmp);
+
+
+		//if(rx) emit("\tadd     r0, " CPU ", #%d\n", rx * 4);
+		//emit("\tswp     r%d, r%d, [r0]\n", dRR, dRR);
+
+	} else if((reg_raw(rx) != 0xFF) && (reg_raw(ry) == 0xFF)) {
+		// ry is memory, rx is in arm
 		uint8_t dRR = reg_raw(rx);
-		if(ry) emit("\tadd     r0, " CPU ", #%d\n", ry * 4);
-		emit("\tswp     r%d, r%d, [r0]\n", dRR, dRR);
+		uint8_t tmp; 
+		reg_alloc_temp(&tmp);
+		emit("\tldr     r%d, [" CPU ", #%d]\n", tmp, ry * 4);
+		emit("\tstr     r%d, [" CPU ", #%d]\n", dRR, ry * 4);
+		emit("\tmov     r%d, r%d\n", dRR, tmp);
+		reg_free(tmp);
+
+
+		// if(ry) emit("\tadd     r0, " CPU ", #%d\n", ry * 4);
+		// emit("\tswp     r%d, r%d, [r0]\n", dRR, dRR);
 
 	} else {
-		uint8_t rry, rrx, tRR;
+		// both in ARM registers
+
+		uint8_t rry, rrx;
 		reg_alloc_68k( &rry, ry, 4 );
 		reg_alloc_68k( &rrx, rx, 4 );
-		reg_alloc_temp( &tRR );
-		emit("\tmov     r%d, r%d\n", tRR, rry);
+
+		emit("\tmov     r0, r%d\n", rry);
 		emit("\tmov     r%d, r%d\n", rry, rrx);
-		emit("\tmov     r%d, r%d\n", rrx, tRR);
+		emit("\tmov     r%d, r0\n", rrx);
 
 		reg_modified(rry);
 		reg_modified(rrx);
-		reg_flush();
 	}
+	reg_flush();
 	
 	return lines;	
 		

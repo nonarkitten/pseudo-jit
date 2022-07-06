@@ -20,7 +20,7 @@ OC := arm-none-eabi-objcopy
 
 export COMMON_FLAGS DEFINES CFLAGS CXXFLAGS AS AR SZ CC SUBMAKE
 
-OUTPUT  := pjit.elf
+OUTPUT  := binaries/pjit.elf
 BINARY  := $(patsubst %.elf,%.bin,$(OUTPUT))
 MAPFILE := $(patsubst %.elf,%.map,$(OUTPUT))
 
