@@ -155,13 +155,13 @@ static int print(char **out, int *varg) {
 }
 
 int printf(const char *format, ...) {
-    int r = print(0, (char *)(&format));
+    int r = print(0, (int *)(&format));
     flushUART();
     return r;
 }
 
 int sprintf(char *out, const char *format, ...) {
-    return print(&out, (char *)(&format));
+    return print(&out, (int *)(&format));
 }
 
 int puts ( const char * str ) {

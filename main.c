@@ -1,9 +1,9 @@
 #include "main.h"
-#include "init_hw.h"
-#include "am335x_pru.h"
-#include "am335x_gpio.h"
-#include "pinmux.h"
-
+// #include "init_hw.h"
+// #include "am335x_pru.h"
+// #include "am335x_gpio.h"
+// #include "pinmux.h"
+ 
 __attribute__ ((used, aligned (MMU_PAGETABLE_ALIGN_SIZE)))
 static volatile uint32_t pageTable[MMU_PAGETABLE_NUM_ENTRY] = { 0 };
 
@@ -81,6 +81,8 @@ static const MMU_Config_t mmu_config[] = {
     { 0, 0, 0 }
 };
 
+static uint32_t cache[PJIT_CACHE_SIZE + PJIT_TAG_SIZE];
+
 int QueryIRQ(int level) {
 	// check GPIO and return real levels
 	return 7;
@@ -91,23 +93,23 @@ int QueryIRQ(int level) {
 
 
 int main(void) {
-	CP15MMUDisable();
-	CP15DCacheDisable();
-	CP15ICacheDisable();
+	// CP15MMUDisable();
+	// CP15DCacheDisable();
+	// CP15ICacheDisable();
 
-    printf("[BOOT] PJIT Built on %s at %s\n", __DATE__, __TIME__);
+    // printf("[BOOT] PJIT Built on %s at %s\n", __DATE__, __TIME__);
 
-    InitializeMMU(pageTable);
-    ConfigureMMU(pageTable, mmu_config);
-    EnableMMU(pageTable);
-    CacheEnable(CACHE_ALL);
+    // InitializeMMU(pageTable);
+    // ConfigureMMU(pageTable, mmu_config);
+    // EnableMMU(pageTable);
+    // CacheEnable(CACHE_ALL);
 
 //    printf("[BOOT] Resetting emulation\n");
 //    HWReset();
 //    printf("[BOOT] Starting emulation\n");
 //    CPURun();
 
-    //test_native_bogomips();
+    test_native_bogomips();
     test_pjit_bogomips();
 
     // PJIT: 249.99 BogoMIPS no inline, register in SRAM
@@ -116,4 +118,26 @@ int main(void) {
     // PJIT: 666.67 BogoMIPS with inline, register variables
 
 	while(1); // die
+
+//	if(!cache) {
+//		fprintf( stderr, "Fatal allocation error.\n" );
+//		exit(1);
+//	}	
+//	debug("Cache allocated %d bytes\n", size);
+	// cache_init((uint32_t)&cache);
+	// debug("Cache initialized.\n");
+	// cpu = &cpu_state;
+	// cpu_dump_state();
+	// debug("Starting CPU.\n");
+	// cpu_start(bogomips);
+	// cpu_dump_state();
 }
+
+// void _sbrk(void) { }
+// void _exit(void) { }
+// void _write(void) { }
+// void _read(void) { }
+// void _close(void) { }
+// void _fstat(void) { }
+// void _isatty(void) { }
+// void _lseek(void) { }

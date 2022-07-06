@@ -21,7 +21,7 @@ int emit_store_EA(char *buffer, uint16_t opcode, int is_pea) {
 	if(!is_pea && (sEA == EA_ADDR)) {
 		return -((opcode & 0x0E07) | 0x2048);
 	}
-
+ 
 	lines = 0;
 	emit_reset( buffer );	
 
