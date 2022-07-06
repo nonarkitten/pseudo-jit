@@ -1,4 +1,5 @@
 #include "main.h"
+//#include "support/cp15.h"
 // #include "init_hw.h"
 // #include "am335x_pru.h"
 // #include "am335x_gpio.h"
@@ -6,7 +7,7 @@
  
 __attribute__ ((used, aligned (MMU_PAGETABLE_ALIGN_SIZE)))
 static volatile uint32_t pageTable[MMU_PAGETABLE_NUM_ENTRY] = { 0 };
-
+ 
 /* Section Flags
  *
  * 31~20	High 12-bits of base address
@@ -134,7 +135,7 @@ int main(void) {
 }
 
 // void _sbrk(void) { }
-// void _exit(void) { }
+extern void _exit(int nada) { (void)nada; }
 // void _write(void) { }
 // void _read(void) { }
 // void _close(void) { }

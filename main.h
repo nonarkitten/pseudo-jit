@@ -11,6 +11,11 @@
 #include <stdbool.h>
 #include <string.h>
 
+#include "cpu/pjit.h"
+
+#include "support/init_hw.h"
+#include "support/cp15.h"
+
 #ifndef MAIN_H_
 #define MAIN_H_
 
@@ -40,5 +45,5 @@ extern void test_pjit_bogomips(void);
 #ifndef DEBUG
 #define printf(...)
 #endif
-
+ 
 #endif /* MAIN_H_ */

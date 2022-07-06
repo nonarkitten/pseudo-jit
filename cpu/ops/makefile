@@ -1,3 +1,5 @@
+unexport 
+
 OUTPUT  := make_m68k
 SOURCES := $(wildcard *.c)
 OBJECTS := $(patsubst %.c,obj/%.o, $(SOURCES))
@@ -7,24 +9,26 @@ CFLAGS  := \
 	-Wno-format-security -Wuninitialized
 
 CC      := gcc
-CXX     := g++
 
 .PHONY: all
 all: premake $(OUTPUT)
 
 $(OUTPUT): $(OBJECTS)
-	$(CXX) $(CFLAGS) $(CXXFLAGS) $(INCLUDE) $(OBJECTS) -o $@
+	$(CXX) $(CFLAGS) $(OBJECTS) -o $@
 	./$(OUTPUT)
 	
 .PHONY: premake
 premake:
+	@echo
+	@echo !!!!!!!! Building opcodes...
+	@echo
 	@mkdir -p obj
 
 obj/%.o: %.c
-	$(CC) $(CFLAGS) $(CCFLAGS) $(INCLUDE) -c $< -o $@
+	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:
-	rm -rf *.s
-	rm -rf obj/*.o
-	rm -f $(OUTPUT)
-	rmdir obj
+	@rm -rf *.s 2>/dev/null || true
+	@rm -rf obj/*.o 2>/dev/null || true
+	@rm -f $(OUTPUT) 2>/dev/null || true
+	@rmdir obj 2>/dev/null || true

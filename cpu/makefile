@@ -1,3 +1,7 @@
+ifndef SUBMAKE
+$(error SUBMAKE not set, run make from root folder)
+endif
+
 OUTPUT  := ../obj/pjit_core.o
 SOURCES  := $(wildcard ops/*.s) $(wildcard *.c) pjit_support.s ops/m68k_da.c
 OBJECTS  := \
@@ -8,55 +12,34 @@ OBJECTS  := \
 	$(SOURCES) \
 	))))
 
-AS = arm-none-eabi-gcc -ggdb \
-	-mfloat-abi=hard -mcpu=cortex-a8 -march=armv7-a -mfpu=vfpv3
-SZ = arm-none-eabi-size
-CC = arm-none-eabi-gcc -ggdb -I . -I ops -Os \
-	-flto-compression-level=9 \
-	-mfloat-abi=hard -march=armv7-a -marm -mfpu=vfpv3 -mtune=cortex-a8 \
-	-ffunction-sections \
-	-fdata-sections \
-	-fno-exceptions \
-	-fomit-frame-pointer \
-	-ffast-math \
-	-fno-common \
-	-ffixed-r4 \
-	-ffixed-r5 \
-	-ffixed-r6 \
-	-ffixed-r7 \
-	-ffixed-r8 \
-	-ffixed-r9 \
-	-ffixed-r10 \
-	-ffixed-r11 \
-	-ffixed-r12
-
-LIBS = 
-
 .PHONY: all
 all: premake $(OUTPUT)
 
 $(OUTPUT): $(OBJECTS)
-	$(CC) -Wl,--relocatable $(OBJECTS) $(LIBPATH) $(LIBS) -o $@
+	$(CC) -Wl,--relocatable $(OBJECTS) -o $@
 	$(SZ) $@
 
 obj/%.o: %.c
-	$(CC) -c $< -o $@
+	$(CC) $(CFLAGS) -c $< -o $@
 
 obj/%.o: ops/%.c
-	$(CC) -c $< -o $@
+	$(CC) $(CFLAGS) -c $< -o $@
 
 obj/%.o: %.s
-	$(AS) -c $< -o $@
+	$(AS) $(CFLAGS) -c $< -o $@
 
 obj/%.o: ops/%.s
-	$(AS) -c $< -o $@
+	$(AS) $(CFLAGS) -c $< -o $@
 
 .PHONY: premake
 premake:
-	@make -C ops
+	@echo
+	@echo !!!!!!!! Building PJIT core...
+	@echo
 	@mkdir -p obj
 	
 .PHONY: clean
 clean:
-	rm -rf obj/*
-	rm $(OUTPUT)
+	@make -C ops clean 2>/dev/null || true
+	@rm -rf obj/* 2>/dev/null || true
+	@rm $(OUTPUT) 2>/dev/null || true
