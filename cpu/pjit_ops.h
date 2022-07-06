@@ -27,6 +27,8 @@ extern void cpu_lookup_safe(void);
 // the branch to it and then execute it
 extern void cpu_lookup_inline(void);
 
+extern void cpu_dump_state(void);
+
 // start may either point to the PJIT cache or the interpreter function
 // if we enter the PJIT cache, we'll only return here through the setjmp
 // when the system hits another interpreter command; that is, this is a

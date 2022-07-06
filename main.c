@@ -82,7 +82,7 @@ static const MMU_Config_t mmu_config[] = {
     { 0, 0, 0, 0 }
 };
 
-//static uint32_t cache[PJIT_CACHE_SIZE + PJIT_TAG_SIZE];
+static uint32_t cache[PJIT_CACHE_SIZE + PJIT_TAG_SIZE];
 
 int QueryIRQ(int level) {
 	// check GPIO and return real levels
@@ -93,8 +93,30 @@ int QueryIRQ(int level) {
 //static volatile uint8_t test[] = { 0x01, 0x02, 0x03, 0x04 };
 // 0 is 0x11 0x11 0x4F 0xF9
 
+cpu_t cpu_state;
 
-int main(void) {
+static uint16_t bogomips[] = {
+	// 		TST.L	D0
+	0x4A80,
+	// 		BEQ.S	EXIT
+	0x6704,
+	// LOOP:
+	//		SUBQ	D0, #1
+	0x5380,
+	//		BNE.S	LOOP
+	0x66FC,
+	// EXIT:
+	//		RTS
+	0x4E75,
+
+	// INVALID
+	0xFFFF
+};
+
+#define debug(...) printf(__VA_ARGS__)
+
+__attribute__((naked)) 
+void main(void) {
 	CP15MMUDisable();
 	CP15DCacheDisable();
 	CP15ICacheDisable();
@@ -119,20 +141,21 @@ int main(void) {
     // PJIT: 333.33 BogoMIPS no inline, register variables
     // PJIT: 666.67 BogoMIPS with inline, register variables
 
-	while(1); // die
-
 //	if(!cache) {
 //		fprintf( stderr, "Fatal allocation error.\n" );
 //		exit(1);
 //	}	
-//	debug("Cache allocated %d bytes\n", size);
-	// cache_init((uint32_t)&cache);
-	// debug("Cache initialized.\n");
-	// cpu = &cpu_state;
-	// cpu_dump_state();
-	// debug("Starting CPU.\n");
-	// cpu_start(bogomips);
-	// cpu_dump_state();
+	debug("Cache allocated %d bytes\n", sizeof(cache));
+	cache_init((uint8_t*)&cache);
+	debug("Cache initialized.\n");
+	cpu = &cpu_state;
+	cpu_dump_state();
+	debug("Starting CPU.\n");
+	cpu_start((uint32_t)bogomips);
+	cpu_dump_state();
+
+	while(1); // die
+
 }
 
 // void _sbrk(void) { }

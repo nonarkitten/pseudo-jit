@@ -177,7 +177,7 @@ static inline void clear_cache(uint32_t *start) {
 }
 
 void wrap_pjit(int jumpto) {
-	extern cpu_t cpu_state;
+	//extern cpu_t cpu_state;
 	cpu = &cpu_state;
 	asm volatile("ldr r3, [ip, #0x84]");
 	asm volatile("msr CPSR_fc, r3");

@@ -64,8 +64,8 @@ register uint32_t A7 asm("r13");
 #include "pjit_cache.h"
 #include "pjit_ops.h"
 
-extern uint16_t oplen[65536];
-extern uint32_t optab[65536];
+extern volatile uint16_t oplen[65536];
+extern volatile uint32_t optab[65536];
 
 
 #define dmb(option) __asm__ __volatile__ ("dmb\t" #option : : : "memory")

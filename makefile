@@ -25,7 +25,6 @@ BINARY  := $(patsubst %.elf,%.bin,$(OUTPUT))
 MAPFILE := $(patsubst %.elf,%.map,$(OUTPUT))
 
 LDFLAGS := -static -nostdlib -nostartfiles -T linker.lds \
-	-flto-compression-level=9 \
 	-Wl,--gc-sections \
 	-Wl,--Map=$(MAPFILE) \
 	-Wl,--build-id \
@@ -39,7 +38,7 @@ OBJECTS := \
 	$(SOURCES) \
 	))
 
-ALLLIBS = -Lobj -lsupport -lpjit
+ALLLIBS = -Lobj -lpjit -lsupport
 
 .PHONY: all
 all: premake $(OUTPUT)

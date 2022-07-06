@@ -6,10 +6,9 @@ SECTIONS
 	. = 0x98000000;
 		
 	. = ALIGN(32);
-	.text : { 
-		*(.startup)
-        *(.rodata)
-		*(.text)        
+	.text : {
+		*(.text*)
+        *(.rodata*)
 	}
 	
 	/* non-zero global and static variables initialized by the application code */
