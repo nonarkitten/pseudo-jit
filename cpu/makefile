@@ -2,7 +2,7 @@ ifndef SUBMAKE
 $(error SUBMAKE not set, run make from root folder)
 endif
 
-OUTPUT  := ../obj/pjit_core.o
+OUTPUT  := ../obj/libpjit.a
 SOURCES  := $(wildcard ops/*.s) $(wildcard *.c) pjit_support.s ops/m68k_da.c
 OBJECTS  := \
 	$(patsubst %.s,obj/%.o, \
@@ -19,7 +19,7 @@ $(OUTPUT): $(OBJECTS)
 	@echo
 	@echo !!!!!!!! Building PJIT core...
 	@echo
-	$(CC) -Wl,--relocatable $(OBJECTS) -o $@
+	$(AR) rcs $@ $(OBJECTS)
 	$(SZ) $@
 
 obj/%.o: %.c

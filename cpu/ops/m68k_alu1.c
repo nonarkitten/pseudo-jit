@@ -156,11 +156,11 @@ static int emit_ea(char *buffer, uint16_t opcode, ALU_OP_t alu_op) {
  			if((opcode & 0xF100) == 0xB000) 
  				opcode = ((opcode & 0xC0) | ((opcode & 0xE00) >> 9) | 0x0C00);
  			
- 			if(debug) printf("@ new opcode %04X\n", opcode);
+ 			if(debug) printf("@ new opcode %04hX\n", opcode);
  			return -opcode;
  		}
 		
-		if(debug) printf("@ R = R op EA (%04X)\n", (opcode & 0x0100));
+		if(debug) printf("@ R = R op EA (%04hX)\n", (uint16_t)(opcode & 0x0100));
 	} else {
 		sEA = (opcode & 0x0E00) >> 9;	
 		dEA = (opcode & 0x003F) >> 0;
@@ -171,7 +171,7 @@ static int emit_ea(char *buffer, uint16_t opcode, ALU_OP_t alu_op) {
 		if(dEA == 0x39) return -(opcode & 0xFFF8); // change EA_ABSL to EA_ABSW
 		if((dEA & 0x38) == 0x28) return -(opcode ^ 0x0018); // change to EA_AIDX
 			
-		if(debug) printf("@ EA = EA op R (%04X)\n", (opcode & 0x0100));
+		if(debug) printf("@ EA = EA op R (%04hX)\n", (uint16_t)(opcode & 0x0100));
 	}
 	return emit_alu(buffer, size, sEA, dEA, alu_op);
 }

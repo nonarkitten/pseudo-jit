@@ -178,7 +178,7 @@ static int emit_move_to(char *buffer, uint16_t opcode, int whole_sr) {
 	}
 	
 	if(get_source_data( &sRR, sEA, sR, size ) == 0) {
-		printf("@ problem opcode %04X\n", opcode);
+		printf("@ problem opcode %04hX\n", opcode);
 	}
 	
 	emit("\tbfi     r2, r%d, #0, #%d\n", sRR, (whole_sr ? 16 : 8));

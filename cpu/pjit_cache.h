@@ -86,7 +86,7 @@ typedef uint32_t (*pjit_tag_cache_t)[1 << PAGE_COUNT];
 #endif
 
 // wipe out the entire cache
-extern void cache_init(void* base);
+extern void cache_init(uint8_t* base);
 
 // give a 68K address return the exact instruction to enter
 // if the tags don't match, clear the cache first

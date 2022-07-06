@@ -79,13 +79,14 @@ static const MMU_Config_t mmu_config[] = {
     /* SDRAM */
     { 0x800, 0x9FF, 0x000, MMU_CACHE_WRITE_THRU },
     /* End of config */
-    { 0, 0, 0 }
+    { 0, 0, 0, 0 }
 };
 
-static uint32_t cache[PJIT_CACHE_SIZE + PJIT_TAG_SIZE];
+//static uint32_t cache[PJIT_CACHE_SIZE + PJIT_TAG_SIZE];
 
 int QueryIRQ(int level) {
 	// check GPIO and return real levels
+    (void)level;
 	return 7;
 }
 
@@ -94,24 +95,24 @@ int QueryIRQ(int level) {
 
 
 int main(void) {
-	// CP15MMUDisable();
-	// CP15DCacheDisable();
-	// CP15ICacheDisable();
+	CP15MMUDisable();
+	CP15DCacheDisable();
+	CP15ICacheDisable();
 
     // printf("[BOOT] PJIT Built on %s at %s\n", __DATE__, __TIME__);
 
-    // InitializeMMU(pageTable);
-    // ConfigureMMU(pageTable, mmu_config);
-    // EnableMMU(pageTable);
-    // CacheEnable(CACHE_ALL);
+    InitializeMMU(pageTable);
+    ConfigureMMU(pageTable, mmu_config);
+    EnableMMU(pageTable);
+    CacheEnable(CACHE_ALL);
 
 //    printf("[BOOT] Resetting emulation\n");
 //    HWReset();
 //    printf("[BOOT] Starting emulation\n");
 //    CPURun();
 
-    test_native_bogomips();
-    test_pjit_bogomips();
+    // test_native_bogomips();
+    // test_pjit_bogomips();
 
     // PJIT: 249.99 BogoMIPS no inline, register in SRAM
     // PJIT: 285.71 BogoMIPS no inline, register in SRAM, Os
@@ -135,7 +136,7 @@ int main(void) {
 }
 
 // void _sbrk(void) { }
-extern void _exit(int nada) { (void)nada; }
+// extern void _exit(int nada) { (void)nada; }
 // void _write(void) { }
 // void _read(void) { }
 // void _close(void) { }

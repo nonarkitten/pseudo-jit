@@ -10,7 +10,7 @@ int avoid_register_saving = 0;
 
 int lines;
 int debug;
-int last_opcode;
+uint16_t last_opcode;
 
 static char* opcodes[65536] = { 0 };
 static int opcode_len[65536] = { 0 };
@@ -308,7 +308,7 @@ try_again:
 				else if(n == 0) {
 					printf("@ Opcode is NOP\n");
 				} else if(n < 0) {
-					printf("@ Opcode %04X is alias of %04X\n", opcode, -n);
+					printf("@ Opcode %04hX is alias of %04hX\n", opcode, (uint16_t)-n);
 					opcode = -n;
 					//n = optab[i].emit(buffer, -n);
 					goto try_again;
@@ -317,11 +317,11 @@ try_again:
 					emit("\tbx      lr\n");
 					n++;
 				}
-				printf("%s\n@ Lines: %d (flags %04X)\n", buffer, n & 0xFF, n & 0xFF00);
+				printf("%s\n@ Lines: %d (flags %04hX)\n", buffer, n & 0xFF, (uint16_t)(n & 0xFF00));
 				return 0;
 			}
 		}
-		printf("@ Opcode %04X appears invalid.\n", opcode);
+		printf("@ Opcode %04hX appears invalid.\n", opcode);
 		return -1;
 	}
 
@@ -359,7 +359,7 @@ try_again:
 		int len = opcode_len[opcode];
 		
 		if(len == 0) { 
-			fprintf(stderr, "Failure at opcode 0x%04X\n", i); 
+			fprintf(stderr, "Failure at opcode 0x%04hX\n", (uint16_t)i); 
 			exit(1);
 		}
 		else if(len > 0) {
@@ -382,7 +382,7 @@ try_again:
 	// Emit the opcode functions in sixteen files
 	for(int i=0; i<0x10000; i+=0x1000) {
 		char filename[16];		
-		sprintf(filename, "pjit_ops_%04x.s", i);
+		sprintf(filename, "pjit_ops_%04hX.s", (uint16_t)i);
 		FILE * file = fopen( filename, "w" );
 
 		fprintf(stderr, "Generating file '%s'...\n", filename); 
@@ -409,20 +409,20 @@ try_again:
 				int len = opcode_len[opcode] & 0xFF;
 				if(len > 0) op = opcodes[opcode];
 
-				fprintf(file, "\t.global opcode_%04x\n", opcode);
+				fprintf(file, "\t.global opcode_%04hX\n", opcode);
 				fprintf(file, "\t.syntax unified\n");
 				fprintf(file, "\t@ %s\n", m68k_op);
-				fprintf(file, "opcode_%04x:\n%s", opcode, op);
+				fprintf(file, "opcode_%04hX:\n%s", opcode, op);
 				
 				if((opcode_len[opcode] & NO_BX_LR) != NO_BX_LR)
 					fprintf(file, "\tbx      lr\n");
 				fprintf(file, "\n");
 				if(!valid) {
-					fprintf(stderr, "ERR: opcode emitted for invalid pattern %04X\n", opcode);
+					fprintf(stderr, "ERR: opcode emitted for invalid pattern %04hX\n", opcode);
 				}
 			} else if(opcode_len[opcode] == 0) {
 				if(valid) {
-					fprintf(stderr, "ERR: opcode skipped for valid pattern %04X: %s", opcode, m68k_op);
+					fprintf(stderr, "ERR: opcode skipped for valid pattern %04hX: %s", opcode, m68k_op);
 				}
 			}
 		}
@@ -444,14 +444,14 @@ try_again:
 		fprintf(file, "oplen:");
 		
 		for(int i=0; i<0x10000; i++) {
-			if((i & 4095) == 0) fprintf(file, "\n;// 0x%04X\n\t.hword ", i);
-			else if((i & 7) == 0) fprintf(file, "\t;// 0x%04X\n\t.hword ", i - 8);
+			if((i & 4095) == 0) fprintf(file, "\n;// 0x%04hX\n\t.hword ", (uint16_t)i);
+			else if((i & 7) == 0) fprintf(file, "\t;// 0x%04hX\n\t.hword ", (uint16_t)(i - 8));
 			
 			char sepr = (i & 7) ? ',' : ' ';
 			
 			int len = opcode_len[i];
 			if (len < 0) len = opcode_len[-len];
-			fprintf(file, "%c 0x%04X", sepr, (uint16_t)len);
+			fprintf(file, "%c 0x%04hX", sepr, (uint16_t)len);
 		}
 		
 		fprintf(file, "\n\n");
@@ -483,7 +483,7 @@ try_again:
 			bool match = false;
 			for(int j=0; j<i; j+=8) {
 				if(0 == memcmp(&real_opcode[i], &real_opcode[j], 16)) {
-					// fprintf(stderr, "Fragment match: %04x & %04x\n", i, j);
+					// fprintf(stderr, "Fragment match: %04hX & %04hX\n", i, j);
 					compressed_opcodes_index[i / 8] =
 						compressed_opcodes_index[j / 8];
 					matches ++;
@@ -492,7 +492,7 @@ try_again:
 				}
 			}
 			if(!match) {
-				// fprintf(stderr, "Fragment miss: %04x\n", i);
+				// fprintf(stderr, "Fragment miss: %04hX\n", i);
 				compressed_opcodes_index[i / 8] = 
 					compressed_opcodes_count;
 				memcpy(&compressed_opcodes[compressed_opcodes_count],
@@ -511,10 +511,9 @@ try_again:
 		fprintf(file, "\t.text\n\t.global optab\n");
 		fprintf(file, "optab:\n\t.word ");
 		for(int i=0; i<compressed_opcodes_count; i++) {
-			//if((i & 4095) == 0) fprintf(file, "\n// %04X\n\t.word ", i);
-			if(i && ((i & 3) == 0)) fprintf(file, "\t// %04X\n\t.word ", i - 4);
+			if(i && ((i & 3) == 0)) fprintf(file, "\t// %04hX\n\t.word ", (uint16_t)(i - 4));
 			char sepr = (i & 3) ? ',' : ' ';
-			fprintf(file, "%c opcode_%04x", sepr, compressed_opcodes[i]);
+			fprintf(file, "%c opcode_%04hX", sepr, compressed_opcodes[i]);
 		}
 
         fprintf(file, "\n\n\t// This table requires 16KB (8192 16-bit words)\n");
@@ -524,9 +523,9 @@ try_again:
 		fprintf(file, "optab_idx:\n\t.word ");
 		for(int op=0; op<0x10000; op+=8) {
 			int i = op / 8;
-			if(i && ((i & 3) == 0)) fprintf(file, "\t// %04X\n\t.hword ", op - 32);
+			if(i && ((i & 3) == 0)) fprintf(file, "\t// %04hX\n\t.hword ", (uint16_t)(op - 32));
 			char sepr = (i & 3) ? ',' : ' ';
-			fprintf(file, "%c 0x%04x", sepr, compressed_opcodes_index[i]);
+			fprintf(file, "%c 0x%04hX", sepr, compressed_opcodes_index[i]);
 		}
 
 

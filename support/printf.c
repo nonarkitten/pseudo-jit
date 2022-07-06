@@ -177,6 +177,7 @@ int putchar ( int c ) {
 }
 
 void exit(int status) {
+    (void)status;
 	while(1) ;
 }
 

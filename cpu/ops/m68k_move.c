@@ -303,7 +303,7 @@ int emit_MOVEM(char *buffer, uint16_t opcode) {
 		// memory to register-list, normal reg list D0-D7, A0-A7
 		// address register should point to the next long address
 		for(uint16_t mask = 0x8000, reg = 0; mask; mask >>= 1, reg++) {
-			emit("\ttst     r1, #0x%04x\n", mask);
+			emit("\ttst     r1, #0x%04hX\n", mask);
 			uint8_t rreg = reg_raw(reg);
 			if(reg == sR) {
 				emit("\tadd     r%d, #%d @ skip same reg\n", reg, size);
@@ -318,7 +318,7 @@ int emit_MOVEM(char *buffer, uint16_t opcode) {
 		// register-list to memory, reverse reg list A7-A0, D7-D0
 		// address register should point to the last long address written
 		for(uint16_t mask = 0x8000, reg = 15; mask; mask >>= 1, reg--) {
-			emit("\ttst     r1, #0x%04x\n", mask);
+			emit("\ttst     r1, #0x%04hX\n", mask);
 			uint8_t rreg = reg_raw(reg);
 			if(reg == sR) {
 				emit("\tsub     r%d, #%d @ skip same reg\n", reg, size);
@@ -341,7 +341,7 @@ int emit_MOVEM(char *buffer, uint16_t opcode) {
 		} else {
 			emit("movem_m2r_%s:\n", (size == 2) ? "word" : "long");
 			for(uint16_t mask = 0x8000, reg = 0; mask; mask >>= 1, reg++) {
-				emit("\ttst     r1, #0x%04x\n", mask);
+				emit("\ttst     r1, #0x%04hX\n", mask);
 				uint8_t rreg = reg_raw(reg);
 				if(reg == sR) {
 					emit("\tadd     r%d, #%d @ skip same reg\n", reg, size);
@@ -367,7 +367,7 @@ int emit_MOVEM(char *buffer, uint16_t opcode) {
 		} else {
 			emit("movem_r2m_%s:\n", (size == 2) ? "word" : "long");
 			for(uint16_t mask = 0x8000, reg = 0; mask; mask >>= 1, reg++) {
-				emit("\ttst     r1, #0x%04x\n", mask);
+				emit("\ttst     r1, #0x%04hX\n", mask);
 				uint8_t rreg = reg_raw(reg);
 				if(reg == sR) {
 					emit("\tadd     r%d, #%d @ skip same reg\n", reg, size);

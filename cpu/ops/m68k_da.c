@@ -726,7 +726,7 @@ const char* m68k_disasm(uint16_t op) {
 	if(!inited) {
 		int total_ops = 0;
 		inited = true;
-		for(int i=0; i<OPCODE_COUNT; i++) {
+		for(uint32_t i=0; i<OPCODE_COUNT; i++) {
 			uint16_t match = 0, equal = 0, count = 0;
 			for(int b=0; b<16; b++) {
 				uint16_t bit = 0x8000 >> b;
@@ -747,12 +747,12 @@ const char* m68k_disasm(uint16_t op) {
 
 	//extern int debug;
 	
-	for(int i=0; i<OPCODE_COUNT; i++) {
+	for(uint32_t i=0; i<OPCODE_COUNT; i++) {
 		if((op & ops[i].match) == ops[i].equal) {
 			sprintf( buffer, "%s", &opcodes[i][17] );
 
 			//int x = strlen(ops[i].op) - 5; // back up over \n
-			//if(debug) printf("@ Disassembling opcode %04X\n", op);
+			//if(debug) printf("@ Disassembling opcode %04hX\n", op);
 			char* ea1 = strstr(buffer, "%E");
 			char* ea2 = ea1 ? strstr(ea1 + 1, "%E") : 0;
 			char* imm = strstr(buffer, "%N");

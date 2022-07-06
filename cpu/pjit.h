@@ -58,7 +58,7 @@ register uint32_t A5 asm("r11");
 register uint32_t A6 asm("r12");
 register uint32_t A7 asm("r13");
 
-register uint32_t lr asm("r14");
+//register uint32_t lr asm("r14");
 #pragma GCC diagnostic pop
 
 #include "pjit_cache.h"

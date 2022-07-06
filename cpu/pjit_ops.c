@@ -29,57 +29,57 @@ static uint32_t exec_temp[16] __attribute__ ((aligned (16))) = { 0 };
 // return the ARM32 opcode for an unconditional branch to the target
 static uint32_t emit_branch_link(uint32_t target, uint32_t current) {
 	int32_t offset = target - current - 8;
-	if(offset > 0x03FFFFFC || offset < 0xFC000004) {
-		printf("\n*** Branch out of range (%08x).\n", offset);
+	if(offset > (int32_t)0x03FFFFFC || offset < (int32_t)0xFC000004) {
+		printf("\n*** Branch out of range (%08lX).\n", offset);
 		__asm__("BKPT 0");
 		//exit(1);
 	}
 	uint32_t op = 0xEB000000 | (0x00FFFFFF & (offset >> 2));
-	debug("EMIT ARM %08X (BL %+d)\n", op, offset);
+	debug("EMIT ARM %08lX (BL %+ld)\n", op, offset);
 	return op;
 }
 static uint32_t emit_branch(uint32_t target, uint32_t current) {
 	int32_t offset = target - current - 8;
-	if(offset > 0x03FFFFFC || offset < 0xFC000004) {
-		printf("\n*** Branch out of range (%08x).\n", offset);
+	if(offset > (int32_t)0x03FFFFFC || offset < (int32_t)0xFC000004) {
+		printf("\n*** Branch out of range (%08lX).\n", offset);
 		__asm__("BKPT 0");
 		//exit(1);
 	}
 	uint32_t op = 0xEA000000 | (0x00FFFFFF & (offset >> 2));
-	debug("EMIT ARM %08X (BL %+d)\n", op, offset);
+	debug("EMIT ARM %08lX (BL %+ld)\n", op, offset);
 	return op;
 }
 static uint32_t emit_movw(uint32_t reg, uint16_t value) {
 	uint32_t op = 0xE3000000 | ((value & 0xF000) << 4) | ((reg & 0xF) << 12) | (value & 0xFFF);
-	debug("EMIT ARM %08X (MOVW R%d, #%04X)\n", op, reg, value);
+	debug("EMIT ARM %08lX (MOVW R%ld, #%04hX)\n", op, reg, value);
 	return op;
 }
 static uint32_t emit_movt(uint32_t reg, uint16_t value) {
 	uint32_t op = 0xE3400000 | ((value & 0xF000) << 4) | ((reg & 0xF) << 12) | (value & 0xFFF);
-	debug("EMIT ARM %08x (MOVT R%d, #%04X)\n", op, reg, value);
+	debug("EMIT ARM %08lX (MOVT R%ld, #%04hX)\n", op, reg, value);
 	return op;
 }
-static void emit_restore_cpsr(uint32_t **arm) {
-	// mrs	r3, CPSR				0xE10F3000
-	debug("EMIT ARM E10F3000 (MRS R3, CPSR)\n");
-	*(*arm)++ = 0xE10F3000;
-	// str	r3, [ip, #0x84]			0xE58C3084
-	debug("EMIT ARM E58C3084 (STR R3, [IP, #0x84])\n");
-	*(*arm)++ = 0xE58C3000 | offsetof(cpu_t, cpsr);
-}
-static void emit_save_cpsr(uint32_t **arm) {
-	// ldr	r3, [ip, #0x84]			0xE59C3084
-	debug("EMIT ARM E59C3000 (LDR R3, [IP, #0x84])\n");
-	*(*arm)++ = 0xE59C3000 | offsetof(cpu_t, cpsr);
-	// msr	CPSR_fc, r3				0xE129F003
-	debug("EMIT ARM E10F3000 (MRS CPSR, R3)\n");
-	*(*arm)++ = 0xE129F003;
-}
-static void emit_return(uint32_t **arm) {
-	// bx	lr						0xE12FFF1E
-	debug("EMIT ARM E12FFF1E (BX LR)\n");
-	*(*arm)++ = 0xE12FFF1E;
-}
+// static void emit_restore_cpsr(uint32_t **arm) {
+// 	// mrs	r3, CPSR				0xE10F3000
+// 	debug("EMIT ARM E10F3000 (MRS R3, CPSR)\n");
+// 	*(*arm)++ = 0xE10F3000;
+// 	// str	r3, [ip, #0x84]			0xE58C3084
+// 	debug("EMIT ARM E58C3084 (STR R3, [IP, #0x84])\n");
+// 	*(*arm)++ = 0xE58C3000 | offsetof(cpu_t, cpsr);
+// }
+// static void emit_save_cpsr(uint32_t **arm) {
+// 	// ldr	r3, [ip, #0x84]			0xE59C3084
+// 	debug("EMIT ARM E59C3000 (LDR R3, [IP, #0x84])\n");
+// 	*(*arm)++ = 0xE59C3000 | offsetof(cpu_t, cpsr);
+// 	// msr	CPSR_fc, r3				0xE129F003
+// 	debug("EMIT ARM E10F3000 (MRS CPSR, R3)\n");
+// 	*(*arm)++ = 0xE129F003;
+// }
+// static void emit_return(uint32_t **arm) {
+// 	// bx	lr						0xE12FFF1E
+// 	debug("EMIT ARM E12FFF1E (BX LR)\n");
+// 	*(*arm)++ = 0xE12FFF1E;
+// }
 
 static uint32_t emit_src_ext(uint32_t current, uint16_t opcode) {
 	uint32_t ext_handler[32] = {
@@ -111,14 +111,15 @@ static uint32_t emit_dst_ext(uint32_t current, uint16_t opcode) {
 // given an opcode, write out the necessary steps to execute it, assuming
 // we're writing directly to the PJIT cache
 static uint16_t copy_opcode(uint32_t** out, uint16_t *pc, bool link) {
+	extern const char* m68k_disasm(uint16_t op);
 	// TODO fix up for 32-bit memory
 	// TODO fix up for page boundary crossing
 	uint16_t i = 0;
 	uint16_t opcode = pc[i++];
 	uint32_t opaddr = optab[opcode];
 	uint16_t opea = oplen[opcode];
-		
-	debug("In copy_opcode, opcode=0x%04x (%s), opaddr=0x%04x, opea=0x%04x\n", opcode, m68k_disasm(opcode), opaddr, opea);
+
+	debug("In copy_opcode, opcode=0x%04hX (%s), opaddr=0x%08lX, opea=0x%04hX\n", opcode, m68k_disasm(opcode), opaddr, opea);
 	if(opcode == 0xFFFF) longjmp( jump_buffer, PJIT_EXIT );
 	
 	switch(opea & 0x0F00) {
@@ -153,14 +154,20 @@ static uint16_t copy_opcode(uint32_t** out, uint16_t *pc, bool link) {
 		break;
 	}
 	
-	if(!link) *(*out)++ = emit_branch(opaddr, (uint32_t)*out);
-	else if((opea & 0xFF) == 1) *(*out)++ = *(uint32_t*)opaddr;
-	else *(*out)++ = emit_branch_link(opaddr, (uint32_t)*out);
+	if(!link) {
+		uint32_t x = (uint32_t)*out;
+		*(*out)++ = emit_branch(opaddr, x);
+	} else if((opea & 0xFF) == 1) {
+		*(*out)++ = *(uint32_t*)opaddr;
+	} else {
+		uint32_t x = (uint32_t)*out;
+		*(*out)++ = emit_branch_link(opaddr, x);
+	}
 	
 	return i;
 }
 
-static inline clear_cache(uint32_t *start) {
+static inline void clear_cache(uint32_t *start) {
 	#if __unix__
 	__clear_cache(start, start+16);
 	#else
@@ -182,9 +189,14 @@ void wrap_pjit(int jumpto) {
 
 // look up opcode and execute it, but never replace it
 void cpu_lookup_nojit(void) {
-	uint32_t entry = lr - 4;
-	uint16_t *pc = cache_reverse(lr - 4);
-	uint32_t *out = (uint32_t*)exec_temp;
+	uint32_t entry;// = lr - 4;
+	uint16_t *pc;// = cache_reverse(lr - 4);
+	uint32_t *out;// = (uint32_t*)exec_temp;
+
+	asm("\tmov %0, lr" : "=r"(entry));
+	entry -= 4;
+	pc = (uint16_t*)cache_reverse(entry);
+	out = (uint32_t*)exec_temp;
 
 	//debug("In cpu_lookup_nojit\n");
 
@@ -198,21 +210,29 @@ void cpu_lookup_nojit(void) {
 	
 	debug("Executing single op\n");	
 	clear_cache(exec_temp);
-	wrap_pjit(exec_temp);
+	wrap_pjit((int)exec_temp);
 	
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wpedantic"
 	goto *(void*)(entry + len * 4);
+#pragma GCC diagnostic pop
 }
 
 // look up opcode and replace our call with the opcode
 // and then also execute it
 void cpu_lookup_safe(void) {
-	uint32_t* entry = (uint32_t*)(lr -= 4);
-	uint16_t *pc = cache_reverse( entry );
-	uint32_t reg = 0;
+	uint32_t entry;// = lr - 4;
+	uint16_t *pc;// = cache_reverse(lr - 4);
+	//uint32_t reg = 0;
 
-	debug("In cpu_lookup_safe, entry %p (pc=%p)\n", entry, pc);
+	asm("\tmov %0, lr" : "=r"(entry));
+	entry -= 4;
+	pc = (uint16_t*)cache_reverse(entry);
 
-	uint32_t* end = copy_opcode(&entry, pc, true);
+	debug("In cpu_lookup_safe, entry %08lX (pc=%08lX)\n", entry, (uint32_t)pc);
+
+	// TODO this smells...
+	(void)copy_opcode((uint32_t**)&entry, pc, true);
 
 	// L1 Instruction and Data Cache of 32KB, 4-way, 16-word line, 128 sets
 	// L2 Unified cache of 256 KB, 8-way, 16 word line, 512 sets
@@ -250,20 +270,25 @@ void cpu_lookup_inline(void) {
 		0xDB, // 1111 LE Lesser/Equal   1101
 	};
 
-	uint32_t* entry = (uint32_t*)(lr - 4);
-	uint16_t* pc = cache_reverse(lr);
-	uint16_t inst = *pc;
+	uint32_t *entry;
+	uint16_t *pc;
+	uint16_t inst;
+
+	asm("\tmov %0, lr" : "=r"(entry));
+	pc = (uint16_t*)cache_reverse((uint32_t)entry);
+	entry--;
+	inst = *pc;
 
 	debug("In cpu_lookup_inline\n");
 
 	// Handle in-line Bcc
-	if((inst & 0xF001 == 0x6000) && (inst & 0xFF != 0xFF)) {
+	if(((inst & 0xF001) == 0x6000) && ((inst & 0xFF) != 0xFF)) {
 		// TODO fold flags back into ARM status register
 		// TODO change this to allow conditional expressions
 		uint32_t o = arm_bcc[(inst & 0x0F00) >> 8];
 		if(o != 0xFF) {
 			uint32_t emit = (o << 24) | ((((uint8_t)inst) << 2) - 4);
-			debug("EMIT ARM %08X (Inlined branch)\n", emit);
+			debug("EMIT ARM %08lX (Inlined branch)\n", emit);
 			*entry = emit;
 			//ICacheFlush(entry, entry + 1);
 			//asm volatile("mcr p15, 0,%0,c7,c5,#1" :: "r"(entry));
@@ -274,10 +299,13 @@ void cpu_lookup_inline(void) {
 			isb(); // flush the pipeline
 			#endif
 		}
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wpedantic"
 		goto *optab[inst];
+#pragma GCC diagnostic pop
 		
 	} else {
-		uint32_t* end = copy_opcode(entry, cache_reverse(entry), true);
+		(void)copy_opcode(&entry, (uint16_t*)cache_reverse((uint32_t)entry), true);
 		//ICacheFlush(entry, end);
 		#if __unix__
 		__clear_cache(entry, entry+1);
@@ -294,8 +322,8 @@ uint32_t cpu_branch_offset(void* target, void* current) {
 	int32_t _c = (int32_t)current;
 	// offset=(target-bra_addr-8)>>2
 	int32_t offset = (_t - _c - 8) >> 2;
-	if(offset > 0x00FFFFFF || offset < 0xFF000001) {
-		printf("\n*** Branch out of range (%08x).\n", offset);
+	if(offset > (int32_t)0x00FFFFFF || offset < (int32_t)0xFF000001) {
+		printf("\n*** Branch out of range (%08lX).\n", offset);
 		exit(1);
 		
 	} else {
@@ -307,38 +335,38 @@ uint32_t cpu_branch_offset(void* target, void* current) {
 
 void cpu_dump_state(void) {
 	cpu = &cpu_state;
-	printf("D%d: %08X  ", 0, D0);
+	printf("D%d: %08lX  ", 0, D0);
 	cpu = &cpu_state;
-	printf("D%d: %08X  ", 1, D1);
+	printf("D%d: %08lX  ", 1, D1);
 	cpu = &cpu_state;
-	printf("D%d: %08X  ", 2, D2);
+	printf("D%d: %08lX  ", 2, D2);
 	cpu = &cpu_state;
-	printf("D%d: %08X\n", 3, D3);
+	printf("D%d: %08lX\n", 3, D3);
 	cpu = &cpu_state;
-	printf("D%d: %08X  ", 4, D4);
+	printf("D%d: %08lX  ", 4, D4);
 	cpu = &cpu_state;
-	printf("D%d: %08X  ", 5, D5);
+	printf("D%d: %08lX  ", 5, D5);
 	cpu = &cpu_state;
-	printf("D%d: %08X  ", 6, D6);
+	printf("D%d: %08lX  ", 6, D6);
 	cpu = &cpu_state;
-	printf("D%d: %08X\n", 7, D7);
+	printf("D%d: %08lX\n", 7, D7);
 	
 	cpu = &cpu_state;
-	printf("A%d: %08X  ", 0, A0);
+	printf("A%d: %08lX  ", 0, A0);
 	cpu = &cpu_state;
-	printf("A%d: %08X  ", 1, A1);
+	printf("A%d: %08lX  ", 1, A1);
 	cpu = &cpu_state;
-	printf("A%d: %08X  ", 2, A2);
+	printf("A%d: %08lX  ", 2, A2);
 	cpu = &cpu_state;
-	printf("A%d: %08X\n", 3, A3);
+	printf("A%d: %08lX\n", 3, A3);
 	cpu = &cpu_state;
-	printf("A%d: %08X  ", 4, A4);
+	printf("A%d: %08lX  ", 4, A4);
 	cpu = &cpu_state;
-	printf("A%d: %08X  ", 5, A5);
+	printf("A%d: %08lX  ", 5, A5);
 	cpu = &cpu_state;
-	printf("A%d: %08X  ", 6, A6);
+	printf("A%d: %08lX  ", 6, A6);
 	cpu = &cpu_state;
-	printf("A%d: %08X\n", 7, A7);
+	printf("A%d: %08lX\n", 7, A7);
 	cpu = &cpu_state;
 }
 
@@ -347,18 +375,27 @@ void cpu_exit(void) {
 }
 
 void cpu_jump(uint32_t m68k_pc) {
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wpedantic"
 	goto *cache_find_entry(m68k_pc);
+#pragma GCC diagnostic pop
 }
 
 void cpu_subroutine(uint32_t _lr, uint32_t new_m68k_pc) {
 	//cpu = &cpu_state; // fuck Linux
 	A7 -= 4; *(uint32_t*)A7 =cache_reverse(_lr);
 	//m68k_pc += offset;
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wpedantic"
 	goto *cache_find_entry(new_m68k_pc);
+#pragma GCC diagnostic pop
 }
 
 void relative_branch(uint32_t _lr, int32_t offset) {
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wpedantic"
 	goto *cache_find_entry(cache_reverse(_lr) + offset);
+#pragma GCC diagnostic pop
 }
 
 void branch_subroutine(uint32_t _lr, int32_t offset) {
@@ -366,7 +403,10 @@ void branch_subroutine(uint32_t _lr, int32_t offset) {
 	uint32_t m68k_pc = cache_reverse(_lr);
 	A7 -= 4; *(uint32_t*)A7 = m68k_pc;
 	m68k_pc += offset;
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wpedantic"
 	goto *cache_find_entry(m68k_pc);
+#pragma GCC diagnostic pop
 }
 
 // start may either point to the PJIT cache or the interpreter function
@@ -376,7 +416,7 @@ void branch_subroutine(uint32_t _lr, int32_t offset) {
 void cpu_start(uint32_t m68k_pc) {
 	//m68k_disasm(0);
 	
-	while(setjmp(jump_buffer) != PJIT_EXIT) {
+	while((uint32_t)setjmp(jump_buffer) != PJIT_EXIT) {
 		//static uint32_t m68k_jump_to;
 		
 		bzero(&cpu_state, sizeof(cpu_t));
@@ -385,9 +425,38 @@ void cpu_start(uint32_t m68k_pc) {
 		D0 = D1 = D2 = D3 = D4 = D5 = D6 = D7 = 0;
 		A0 = A1 = A2 = A3 = A4 = A5 = A6 = A7 = 0;
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wpedantic"
 		goto *cache_find_entry(m68k_pc);
+#pragma GCC diagnostic pop
 	}
 }
+
+#if 0
+// All memory above 24bit is cacheable; memory below this is split into
+// 64KB chunks where we can define if it's cacheable
+static struct pjit_page_ctrl_t {
+    uint8_t cacheable : 1;
+} pjit_ctrl[256] = { 0 };
+
+register cpu_t cpu asm(CPU);
+
+/*
+    PJIT can run in one of two basic operating modes; interpreter and JIT.
+    In interpreter mode, we'll fetch and handle each instruction one-at-a-time.
+    This is really slow, but gaurantees execution in DMA-able memory where it's
+    possible to have code modified during execution. For example, on the Amiga,
+    all chip RAM is DMA-able by the chipset and all 24-bit fast RAM is DMA-able
+    from storage devices, so we have to stick with interpreted mode for these.
+    However, the ROMs are always safe to cache. 
+*/
+void pjit_run(void) {
+    
+    cpu->a7 = *(uint32_t*)0;
+    cpu->pc = *(uint32_t*)4;
+    
+}
+#endif
 
 #undef EXIT_PJIT
 

@@ -25,8 +25,8 @@ void emit(char * format, ...) {
 	len = vsprintf(_stream, format, args);
 	if(debug) printf("@ %s", _stream);
 	if(_stream[len - 1] != '\n') {
-		extern int last_opcode;
-	 	printf("@ warning, missing carriage return in opcode %04X.\n", last_opcode);
+		extern uint16_t last_opcode;
+	 	printf("@ warning, missing carriage return in opcode %04hX.\n", (uint16_t)last_opcode);
 	 	if(!debug) printf("@ %s\n", _stream);
 		exit(1);
 	}

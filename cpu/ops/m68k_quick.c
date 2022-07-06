@@ -33,7 +33,7 @@ int emit_ADDQ(char *buffer, uint16_t opcode) {
 	uint8_t dR = ((opcode & 0x0007) >> 0) | (dEA ? 0x8 : 0x0);
 	uint8_t dRR, tRR;
 	
-	//fprintf( stderr, "%04X ", opcode );
+	//fprintf( stderr, "%04hX ", opcode );
 	lines = 0;
 	emit_reset( buffer );
 	

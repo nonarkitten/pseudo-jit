@@ -18,6 +18,8 @@ static pjit_tag_cache_t pjit_tag_cache;
 static uint8_t cache_lru[1 << PAGE_COUNT] = { 0 };
 #endif
 
+#define FN_PTR(X) ((void*)(int)X)
+
 // wipe out a single cache page
 #ifdef SET_ASSOCIATIVE
 static void cache_clear(uint32_t set, uint32_t page) {
@@ -28,7 +30,7 @@ static void cache_clear(uint32_t page) {
 #endif
 	uint32_t opcode;
 	for(int i=0; i<(1 << PAGE_SIZE); i++) {
-		opcode = cpu_branch_offset(cpu_lookup_nojit, mem);
+		opcode = cpu_branch_offset(FN_PTR(cpu_lookup_nojit), mem);
 //		if((i < 128) || (i >= ((1 << PAGE_SIZE)-128))) {
 //			opcode = cpu_branch_offset(cpu_lookup_safe, mem);
 //		} else {
@@ -39,13 +41,13 @@ static void cache_clear(uint32_t page) {
 }
 
 // wipe out the entire cache
-void cache_init(void* base) {
+void cache_init(uint8_t* base) {
 	pjit_cache = (pjit_cache_t)base;
 	pjit_tag_cache = (pjit_tag_cache_t)(base + sizeof(*pjit_cache));
 
 	debug("In cache_init.\n");
-	debug("  cpu_lookup_safe at %p\n", cpu_lookup_safe);
-	debug("  cpu_lookup_inline at %p\n", cpu_lookup_inline);
+	debug("  cpu_lookup_safe at %p\n", FN_PTR(cpu_lookup_safe));
+	debug("  cpu_lookup_inline at %p\n", FN_PTR(cpu_lookup_inline));
 	debug("  clearing pages at %p:", base);
 	for(int p = 0; p < (1 << PAGE_COUNT); p++) {
 		//debug(" %d", p);
@@ -66,7 +68,7 @@ uint32_t* cache_find_entry(uint32_t m68k_addr) {
 	uint16_t page = cache_get_page_select(m68k_addr);
 	uint32_t tag = cache_get_tag(m68k_addr);
 	
-	debug("In cache_find_entry; m68k_addr=0x%04x, index=%d, page=%d, tag=0x%04x\n", m68k_addr, index, page, tag);
+	debug("In cache_find_entry; m68k_addr=0x%04hX, index=%d, page=%d, tag=0x%04hX\n", (uint16_t)m68k_addr, index, page, (uint16_t)tag);
 	
 #ifdef SET_ASSOCIATIVE
 	uint32_t set;
@@ -86,8 +88,8 @@ uint32_t* cache_find_entry(uint32_t m68k_addr) {
 		cache_clear(page);
 	}
 	uint32_t *addr = &(*pjit_cache)[page][index];
-	debug("Entering cache at %p", addr);
-	debug(" (ARM op %08X)\n", *addr);
+	debug("Entering cache at %p", (void*)addr);
+	debug(" (ARM op %08lX)\n", *addr);
 	return addr;
 #endif
 }
@@ -96,7 +98,7 @@ uint32_t* cache_find_entry(uint32_t m68k_addr) {
 // WARNING: this assumes that the cache_tag is valid and makes 
 // no attempt to verify that it is not
 uint32_t cache_reverse(uint32_t arm_addr) {
-	debug("In cache_reverse, arm_addr=0x%08X\n", arm_addr);
+	debug("In cache_reverse, arm_addr=0x%08lX\n", arm_addr);
 	
 	arm_addr -= (uint32_t)pjit_cache;
 	uint16_t index = (arm_addr >> 2) & ((1 << PAGE_SIZE) - 1);
@@ -109,9 +111,9 @@ uint32_t cache_reverse(uint32_t arm_addr) {
 	return (*pjit_tag_cache)[set][page] | (index << 1);
 #else
 	uint32_t tag = (*pjit_tag_cache)[page];
-	debug("  tag=%04x\n", tag);
-	void *addr = (tag << (1 + PAGE_SIZE)) | (index << 1);
-	debug("  addr=%p\n", addr);
+	debug("  tag=%04hX\n", (uint16_t)tag);
+	uint32_t addr = (tag << (1 + PAGE_SIZE)) | (index << 1);
+	debug("  addr=%08lX\n", addr);
 	return addr;
 #endif
 }

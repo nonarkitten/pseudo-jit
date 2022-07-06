@@ -125,7 +125,8 @@ unsigned handle_nbcd(uint8_t xx) {
 	return rr;
 }
 
-unsigned handle_roxl_immd(uint8_t tR2, uint16_t amt, uint8_t size) { }
-unsigned handle_roxr_immd(uint8_t tR2, uint16_t amt, uint8_t size) { }
-unsigned handle_roxl_reg(uint8_t tR2, uint16_t amt, uint8_t size) { }
-unsigned handle_roxr_reg(uint8_t tR2, uint16_t amt, uint8_t size) { }
+// TODO: Finish me!!
+unsigned handle_roxl_immd(uint8_t tR2, uint16_t amt, uint8_t size) { (void)tR2; (void)amt; (void)size; return 0; }
+unsigned handle_roxr_immd(uint8_t tR2, uint16_t amt, uint8_t size) { (void)tR2; (void)amt; (void)size; return 0; }
+unsigned handle_roxl_reg(uint8_t tR2, uint16_t amt, uint8_t size) {  (void)tR2; (void)amt; (void)size; return 0; }
+unsigned handle_roxr_reg(uint8_t tR2, uint16_t amt, uint8_t size) {  (void)tR2; (void)amt; (void)size; return 0; }
