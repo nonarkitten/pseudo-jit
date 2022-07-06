@@ -16,6 +16,9 @@ OBJECTS  := \
 all: premake $(OUTPUT)
 
 $(OUTPUT): $(OBJECTS)
+	@echo
+	@echo !!!!!!!! Building PJIT core...
+	@echo
 	$(CC) -Wl,--relocatable $(OBJECTS) -o $@
 	$(SZ) $@
 
@@ -33,9 +36,6 @@ obj/%.o: ops/%.s
 
 .PHONY: premake
 premake:
-	@echo
-	@echo !!!!!!!! Building PJIT core...
-	@echo
 	@mkdir -p obj
 	
 .PHONY: clean

@@ -14,14 +14,14 @@ CC      := gcc
 all: premake $(OUTPUT)
 
 $(OUTPUT): $(OBJECTS)
+	@echo
+	@echo !!!!!!!! Building opcodes...
+	@echo
 	$(CXX) $(CFLAGS) $(OBJECTS) -o $@
 	./$(OUTPUT)
 	
 .PHONY: premake
 premake:
-	@echo
-	@echo !!!!!!!! Building opcodes...
-	@echo
 	@mkdir -p obj
 
 obj/%.o: %.c
