@@ -19,7 +19,7 @@
 
 extern cpu_t cpu_state;
 
-static jmp_buf jump_buffer;
+// static jmp_buf jump_buffer;
 static uint32_t exec_temp[16] __attribute__ ((aligned (16))) = { 0 };
 
 //extern void __clear_cache(char* beg, char* end);
@@ -120,7 +120,7 @@ static uint16_t copy_opcode(uint32_t** out, uint16_t *pc, bool link) {
 	uint16_t opea = oplen[opcode];
 
 	debug("In copy_opcode, opcode=0x%04hX (%s), opaddr=0x%08lX, opea=0x%04hX\n", opcode, m68k_disasm(opcode), opaddr, opea);
-	if(opcode == 0xFFFF) longjmp( jump_buffer, PJIT_EXIT );
+	//if(opcode == 0xFFFF) longjmp( jump_buffer, PJIT_EXIT );
 	
 	switch(opea & 0x0F00) {
 	case EXT_WORD_SRC_EXT: 
@@ -371,7 +371,8 @@ void cpu_dump_state(void) {
 }
 
 void cpu_exit(void) {
-	longjmp(jump_buffer, PJIT_EXIT);
+//	longjmp(jump_buffer, PJIT_EXIT);
+	while(1);
 }
 
 void cpu_jump(uint32_t m68k_pc) {
@@ -416,20 +417,20 @@ void branch_subroutine(uint32_t _lr, int32_t offset) {
 void cpu_start(uint32_t m68k_pc) {
 	//m68k_disasm(0);
 	
-	while((uint32_t)setjmp(jump_buffer) != PJIT_EXIT) {
-		//static uint32_t m68k_jump_to;
-		
-		bzero(&cpu_state, sizeof(cpu_t));
-		cpu = &cpu_state; // fuck Linux
-		
-		D0 = D1 = D2 = D3 = D4 = D5 = D6 = D7 = 0;
-		A0 = A1 = A2 = A3 = A4 = A5 = A6 = A7 = 0;
+	//while((uint32_t)setjmp(jump_buffer) != PJIT_EXIT) {
+	//static uint32_t m68k_jump_to;
+	
+	bzero(&cpu_state, sizeof(cpu_t));
+	cpu = &cpu_state; // fuck Linux
+	
+	D0 = D1 = D2 = D3 = D4 = D5 = D6 = D7 = 0;
+	A0 = A1 = A2 = A3 = A4 = A5 = A6 = A7 = 0;
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wpedantic"
-		goto *cache_find_entry(m68k_pc);
+	goto *cache_find_entry(m68k_pc);
 #pragma GCC diagnostic pop
-	}
+	//}
 }
 
 #if 0
