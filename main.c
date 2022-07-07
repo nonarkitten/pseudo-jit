@@ -82,7 +82,7 @@ static const MMU_Config_t mmu_config[] = {
     { 0, 0, 0, 0 }
 };
 
-static uint32_t cache[PJIT_CACHE_SIZE + PJIT_TAG_SIZE];
+static uint32_t cache[16];//PJIT_CACHE_SIZE + PJIT_TAG_SIZE];
 
 int QueryIRQ(int level) {
 	// check GPIO and return real levels

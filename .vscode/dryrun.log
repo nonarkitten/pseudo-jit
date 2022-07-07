@@ -1,0 +1,9 @@
+make all --dry-run --keep-going --print-directory
+make: Entering directory `/Users/renee/Git/pseudo-jit'
+make -C cpu/ops
+make -C cpu
+make -C support
+mkdir -p obj
+ 
+make: Leaving directory `/Users/renee/Git/pseudo-jit'
+ 

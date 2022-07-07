@@ -1,9 +1,11 @@
-COMMON_FLAGS := $(EXTRA_FLAGS) -Iinc -mbig-endian -ffixed-r11 -marm -mcpu=cortex-a8 -Os \
-	-mfpu=vfpv3 -pedantic -pedantic-errors -fomit-frame-pointer -mfloat-abi=hard \
+COMMON_FLAGS := $(EXTRA_FLAGS) -Iinc -g -O0 \
+	-mbig-endian -marm -mcpu=cortex-a8 \
+	-mfpu=vfpv3 -mfloat-abi=hard  -ffast-math \
+	-pedantic -pedantic-errors -Wall -Wextra -Werror \
 	-ffixed-r3 -ffixed-r4 -ffixed-r5 -ffixed-r6 -ffixed-r7 \
 	-ffixed-r8 -ffixed-r9 -ffixed-r10 -ffixed-r11 -ffixed-r12 \
-	-ffunction-sections -fdata-sections -ffast-math -fno-exceptions \
-	-Wall -Wextra -Werror -nostdlib -ffreestanding -g -fmax-errors=5
+	-ffunction-sections -fdata-sections -fno-exceptions -fomit-frame-pointer \
+	-nostdlib -ffreestanding -g -fmax-errors=5
 
 DEFINES :=
 

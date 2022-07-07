@@ -5,24 +5,23 @@ SECTIONS
 {
 	. = 0x98000000;
 		
-	. = ALIGN(32);
 	.text : {
 		*(.text*)
         *(.rodata*)
 	}
 	
 	/* non-zero global and static variables initialized by the application code */
-	. = ALIGN(32);
+	. = ALIGN(4);
 	.data : { *(.data) }
 	
 	/* global and static variable that are not initialized by the application code. */
 	/* the compiler (hopefully) initialize this data to 0. */
-	. = ALIGN(32);
+	. = ALIGN(4);
 	_bss_start = .;
 	.bss :  { *(.bss) }
 	 
 	/* Put the stack inside the BSS to simplify clearing */
-	. = ALIGN(32);
+	. = ALIGN(4);
 	.stack :
 	{
 		_stack_end = .;  /* the danger zone! */
@@ -30,6 +29,6 @@ SECTIONS
 		_stack_top = .;  /* stack grows upwards */
 	}
 
-	. = ALIGN(32);
+	. = ALIGN(4);
 	_bss_end = .;
 }
