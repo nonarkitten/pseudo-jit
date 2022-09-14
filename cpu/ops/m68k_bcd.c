@@ -22,11 +22,26 @@ int emit_NBCD(char *buffer, uint16_t opcode) {
 	lines = 0;
 	emit_reset( buffer );	
 
-	emit("\tpush    {lr}\n");
+	// BCD modes need a subroutine call
+	// since we co-opt the stack pointer, we'll
+	// have to do this a different way; instead
+	// we'll free up D0 and D1 and restore them
+	// before we do the cleanup
+
+	emit("\tstr     r3, [" CPU ", %d]\n", offsetof(cpu_t, d0));
+//	emit("\tstr     r4, [" CPU ", %d]\n", offsetof(cpu_t, d1));
+	emit("\tstr     lr, [" CPU ", %d]\n", offsetof(cpu_t, lr));
+
 	get_destination_data( &dRR, &tRR, dEA, dR, size );
 	emit("\tbl      handle_nbcd\n");
+
+	// Reverse our temp store
+	emit("\tldr     r3, [" CPU ", %d]\n", offsetof(cpu_t, d0));
+//	emit("\tldr     r4, [" CPU ", %d]\n", offsetof(cpu_t, d1));
+	
 	set_destination_data( &dRR, &tRR, dEA, size );
-	emit("\tpop     {pc}\n");
+	emit("\tldr     pc, [" CPU ", %d]\n", offsetof(cpu_t, lr));
+//	emit("\tpop     {pc}\n");
 	return lines_ext(lines, 0, dEA, size ) | NO_BX_LR;
 }
 
@@ -39,15 +54,31 @@ static int emit_add_sub_bcd(char *buffer, uint16_t opcode, int is_sub) {
 	lines = 0;
 	emit_reset( buffer );	
 
-	emit("\tpush    {lr}\n");
+	// BCD modes need a subroutine call
+	// since we co-opt the stack pointer, we'll
+	// have to do this a different way; instead
+	// we'll free up D0 and D1 and restore them
+	// before we do the cleanup
+
+	emit("\tstr     r3, [" CPU ", %d]\n", offsetof(cpu_t, d0));
+//	emit("\tstr     r4, [" CPU ", %d]\n", offsetof(cpu_t, d1));
+	emit("\tstr     lr, [" CPU ", %d]\n", offsetof(cpu_t, lr));
+
 	uint8_t sR = opcode & 7;
 	get_source_data( &sRR, EA, sR, size );
 	uint8_t dR = (opcode >> 9) & 7;
 	get_destination_data( &dRR, &tRR, EA, dR, size );
 	if(is_sub) emit("\tbl      handle_sbcd\n");
 	else       emit("\tbl      handle_abcd\n");
-	set_destination_data( &dRR, &tRR, EA, size );
-	emit("\tpop     {pc}\n");
+
+	// Reverse our temp store
+	emit("\tldr     r3, [" CPU ", %d]\n", offsetof(cpu_t, d0));
+//	emit("\tldr     r4, [" CPU ", %d]\n", offsetof(cpu_t, d1));
+
+	set_destination_data( &dRR, &sRR, EA, size );
+
+	emit("\tldr     pc, [" CPU ", %d]\n", offsetof(cpu_t, lr));
+//	emit("\tpop     {pc}\n");
 	return lines_ext(lines, EA, EA, size ) | NO_BX_LR;
 }
 

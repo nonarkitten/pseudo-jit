@@ -18,6 +18,7 @@ int emit_store_EA(char *buffer, uint16_t opcode, int is_pea) {
 	uint8_t sR = (opcode & 0x0007) | 8;
 	uint8_t dR = ((opcode & 0x0E00) > 9) | 8;
 
+	// LEA (Ax), Ay -> MOVEA.L Ax, Ay
 	if(!is_pea && (sEA == EA_ADDR)) {
 		return -((opcode & 0x0E07) | 0x2048);
 	}
@@ -30,22 +31,29 @@ int emit_store_EA(char *buffer, uint16_t opcode, int is_pea) {
 	if(!emit_get_reg( &sRR, sR, 4 )) return -1;
 
 	if(!is_pea) reg_alloc_68k( &dRR, dR, 4 );
+	//else reg_alloc_temp(&dRR);
 
 	switch(sEA) {
 	case EA_ADDR:
-		if(is_pea) emit("\tstr     r%d, [" CPU ", #-4]!\n", sRR);
-		else emit("\tmov     r%d, r%d\n", dRR, sRR);
+		if(is_pea) 
+			emit("\tstr     r%d, [" CPU ", #-4]!\n", sRR);
+		else 
+			emit("\tmov     r%d, r%d\n", dRR, sRR);
 		break;
 	case EA_AIDX: case EA_ADIS:
-		if(dRR >= REG_MAP_COUNT) {
-			emit("\tadd     r%d, r1, r%d\n", dRR, sRR);
-			break;
-		} else {
+		if(is_pea) {
 			emit("\tadd     r1, r1, r%d\n", sRR);
+			emit("\tstr     r1, [" CPU ", #-4]!\n");
+		} else {
+			emit("\tadd     r%d, r1, r%d\n", dRR, sRR);
 		}
+		break;
+
 	case EA_ABSW: case EA_ABSL: case EA_PDIS: case EA_PIDX:
-		if(is_pea) emit("\tstr     r1, [" CPU ", #-4]!\n");
-		else emit("\tmov     r%d, r1\n", dRR);
+		if(is_pea)
+			emit("\tstr     r1, [" CPU ", #-4]!\n");
+		else
+			emit("\tmov     r%d, r1\n", dRR);
 		break;
 	}
 // mov

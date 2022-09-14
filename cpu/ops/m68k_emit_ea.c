@@ -52,26 +52,31 @@ static int emit_fetch_ea_data( uint8_t* dRR, uint8_t* sRR, uint16_t sEA, uint8_t
 	
 	case EA_DREG:
 		*dRR = reg_raw(sR);
-		return sRR ? emit_get_reg(sRR, sR, size) : 1;
+		if(sRR) emit_get_reg(sRR, sR, size);
+		return 1;
 
 	case EA_AREG:
 		if(size == 1) {
 			if(debug) printf("@ AREG invalid for byte mode\n");
 			return 0;
 		}
+		if(sRR) emit_get_reg(sRR, sR, size);
 		*dRR = reg_raw(sR);
-		return sRR ? emit_get_reg(sRR, sR, size) : 1;
+		return 1;
 
 	case EA_ADDR: case EA_AINC: // (Ax)+
+		if(sRR && (reg_alloc_temp( sRR ) == ALLOC_FAILED)) return 0;
 		if(emit_get_reg( dRR, sR, 4 ) == ALLOC_FAILED) return 0;
 		break;
 	
 	case EA_ADEC: // -(Ax)
+		if(sRR && (reg_alloc_temp( sRR ) == ALLOC_FAILED)) return 0;
 		if(emit_get_reg( dRR, sR, 4 ) == ALLOC_FAILED) return 0;
 		emit("\tsub     r%d , r%d, #%d @ pre-dec\n", *dRR, *dRR, size);
 		break;
 
 	case EA_ADIS: case EA_AIDX:
+		if(sRR && (reg_alloc_temp( sRR ) == ALLOC_FAILED)) return 0;
 		if(emit_get_reg( dRR, sR, 4 ) == ALLOC_FAILED) return 0;
 		emit("\tadd     r%d , r%d, r%d\n", (is_src ? 1 : 2), (is_src ? 1 : 2), *dRR);
 		reg_modified(*dRR); reg_free(*dRR);
@@ -86,6 +91,7 @@ static int emit_fetch_ea_data( uint8_t* dRR, uint8_t* sRR, uint16_t sEA, uint8_t
 			return 0;
 		}
 	case EA_ABSW: case EA_ABSL:
+		if(sRR && (reg_alloc_temp( sRR ) == ALLOC_FAILED)) return 0;
 		*dRR = is_src ? 1 : 2;
 		// assumpe PJIT clips to 24-bits when scanning
 		omit_bic = true;
@@ -111,6 +117,7 @@ static int emit_fetch_ea_data( uint8_t* dRR, uint8_t* sRR, uint16_t sEA, uint8_t
 
 	// swap upper/lower bytes
 	if(!omit_eor && (size == 1)) {
+#ifndef __PJIT_BIG_ENDIAN
 		if(*dRR < REG_MAP_COUNT) {
 			emit("\teor     r%d, r%d, #1\n", *dRR, *dRR);
 		} else {
@@ -118,6 +125,7 @@ static int emit_fetch_ea_data( uint8_t* dRR, uint8_t* sRR, uint16_t sEA, uint8_t
 			emit("\teor     r%d, r%d, #1\n", tRR, *dRR);
 			*dRR = tRR;
 		}
+#endif
 	}
 	
 	// clear out high 24-bits		
@@ -137,10 +145,12 @@ static int emit_fetch_ea_data( uint8_t* dRR, uint8_t* sRR, uint16_t sEA, uint8_t
 
 	// load the data
 	if(sRR) {
-		if(/*is_src &&*/ reg_alloc_temp( sRR ) == ALLOC_FAILED) return 0;
+		//if(/*is_src &&*/ reg_alloc_temp( sRR ) == ALLOC_FAILED) return 0;
 		emit("\t%s   r%d, [r%d]\n", ldx(size), *sRR, *dRR);
 		// if we're long, swap words
+#ifndef __PJIT_BIG_ENDIAN
 		if(size == 4) emit("\tror     r%d , r%d, #16\n", *sRR, *sRR);
+#endif
 	}
 	
 	if(is_src) reg_free(*dRR);
@@ -190,7 +200,9 @@ int set_destination_data( uint8_t* dRR, uint8_t* tRR, uint16_t dEA, uint16_t siz
 		err = ALLOC_FAILED;
 
 	} else {
+#ifndef __PJIT_BIG_ENDIAN
 		if(size == 4) emit("\tror     r%d, #16\n", *tRR);
+#endif
 		emit("\t%s    r%d, [r%d]\n", stx(size), *tRR, *dRR);
 
 	}

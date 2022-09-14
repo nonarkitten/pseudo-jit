@@ -3,9 +3,9 @@
 // PJIT Better Register Allocation
 // --ARM-- 68K USE
 // ------- --- ------
-// R0      T0  Src Ext Addr, temp
-// R1      T1  Dest Ext Addr, temp
-// R2      T2  Temp
+// R0      T0  Temp
+// R1      T1  Src Ext Addr, temp
+// R2      T2  Dest Ext Addr, temp
 
 // R3      D0  Data registers
 // R4      D1   "
@@ -28,7 +28,7 @@ static int used_regs = 0;
 
 // Table of 68k registers as they relate to ARM ones
 static const uint8_t reg68k_to_arm[16] = {
-	0x03, 0x04, 0xFF, 0xFF, 		// D0-D3 (fixed)
+	0x03, 0x04, 0xFF, 0xFF, 		// D0-D1 (fixed), D2-D3 (dynamic)
 	0xFF, 0xFF, 0xFF, 0xFF, 		// D4-D7 (dynamic)
 	0x06, 0x07, 0x08, 0x09,    		// A0-A4 (fixed)
 	0x0A, 0x0B, 0x0C, 0x0D			// A5-A7 (also fixed)
@@ -136,7 +136,19 @@ ALLOC_ERR_t reg_alloc_68k(uint8_t *reg_arm, uint8_t reg_68k, int size) {
 			r->size = size;
 			if(debug) printf("@ reg_alloc_68k r%d (new)\n", reg);
 			if(!suppress_load) {
-			emit("\t%s   r%d, [" CPU ", %d]\n", ldx(size), reg, reg_68k * 4);
+
+			// little-endian BB
+			//               WW WW
+			//               LL LL LL LL
+			// big endian             BB
+			//                     WW WW
+			//               LL LL LL LL
+#ifdef __PJIT_BIG_ENDIAN
+			int off = (size == 3) ? 0 : (size == 2) ? 2 : 3;
+#else
+			const int off = 0;
+#endif
+			emit("\t%s   r%d, [" CPU ", %d]\n", ldx(size), reg, reg_68k * 4 + off);
 			*reg_arm = reg;
 			}
 

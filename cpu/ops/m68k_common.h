@@ -12,6 +12,8 @@
 
 #define OFFSETOF(TYPE, ELEMENT) ((size_t)&(((TYPE *)0)->ELEMENT))
 
+#define __PJIT_BIG_ENDIAN
+
 #ifndef assert
 #define assert()
 #endif

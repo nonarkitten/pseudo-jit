@@ -191,6 +191,7 @@ typedef struct {
 	
 	// backup for ARM
 	uint32_t cpsr;
+	uint32_t lr;
 
 	// Program counter
 	uint32_t pc;
