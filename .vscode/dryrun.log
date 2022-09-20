@@ -1,9 +1,16 @@
-make all --dry-run --keep-going --print-directory
+make all --dry-run --always-make --keep-going --print-directory
 make: Entering directory `/Users/renee/Git/pseudo-jit'
 make -C cpu/ops
 make -C cpu
 make -C support
 mkdir -p obj
  
+arm-none-eabi-gcc  -Iinc -g -O0 -mbig-endian -marm -mcpu=cortex-a8 -mfpu=vfpv3 -mfloat-abi=hard  -ffast-math -pedantic -pedantic-errors -Wall -Wextra -Werror -ffixed-r3 -ffixed-r4 -ffixed-r5 -ffixed-r6 -ffixed-r7 -ffixed-r8 -ffixed-r9 -ffixed-r10 -ffixed-r11 -ffixed-r12 -ffunction-sections -fdata-sections -fno-exceptions -fomit-frame-pointer -nostdlib -ffreestanding -g -fmax-errors=5  -std=gnu11 -c main.c -o obj/main.o
+echo
+echo !!!!!!!! Building PJIT ...
+echo
+arm-none-eabi-gcc  -Iinc -g -O0 -mbig-endian -marm -mcpu=cortex-a8 -mfpu=vfpv3 -mfloat-abi=hard  -ffast-math -pedantic -pedantic-errors -Wall -Wextra -Werror -ffixed-r3 -ffixed-r4 -ffixed-r5 -ffixed-r6 -ffixed-r7 -ffixed-r8 -ffixed-r9 -ffixed-r10 -ffixed-r11 -ffixed-r12 -ffunction-sections -fdata-sections -fno-exceptions -fomit-frame-pointer -nostdlib -ffreestanding -g -fmax-errors=5  -std=gnu11 -static -nostdlib -nostartfiles -T linker.lds -Wl,--gc-sections -Wl,--Map=binaries/pjit.map -Wl,--build-id -Wl,--be8 -Wl,--format=elf32-bigarm obj/main.o -o binaries/pjit.elf -Lobj -lpjit -lsupport
+arm-none-eabi-objcopy --gap-fill=0xff -O binary binaries/pjit.elf binaries/pjit.bin
+arm-none-eabi-size binaries/pjit.elf
 make: Leaving directory `/Users/renee/Git/pseudo-jit'
  

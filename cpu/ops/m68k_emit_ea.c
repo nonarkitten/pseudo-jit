@@ -37,7 +37,8 @@ int emit_get_reg(uint8_t* reg_arm, uint8_t reg_68k, uint8_t size) {
 // \param is_src Set to true when this is a source EA mode and data will not be rewritten
 // \return If successful, returns 1
 static int emit_fetch_ea_data( uint8_t* dRR, uint8_t* sRR, uint16_t sEA, uint8_t sR, uint16_t size, uint8_t is_src ) {
-	uint8_t tRR, oRR;
+	uint8_t tRR;
+	uint8_t oRR;
 	uint8_t omit_bic = 0, omit_eor = 0;
 	
 	if(dRR == NULL) {
@@ -156,6 +157,21 @@ static int emit_fetch_ea_data( uint8_t* dRR, uint8_t* sRR, uint16_t sEA, uint8_t
 	if(is_src) reg_free(*dRR);
 	return 1;
 }
+// baseline
+// line average: 5.658190
+// adding OR to each 24-bit memory access:
+// line average: 6.430614 (13.65% slower)
+// removing 24-bit address filter entirely:
+// line average: 4.890251 (13.57% faster)
+// all registers in ARM registers:
+// line average: 4.648176 (4.95% faster)
+// no registers in ARM registers (except A7)
+// line average: 6.019260 (23.09% slower)
+// just data register in ARM registers
+// line average: 5.691180 (16.38% slower)
+// no endian handling
+// line average: 4.401896 (10% faster)
+
 
 int get_source_data( uint8_t* sRR, uint16_t sEA, uint8_t sR, uint16_t size ) {
 	uint8_t dRR; // scratch, don't care

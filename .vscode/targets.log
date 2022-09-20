@@ -8,7 +8,7 @@ make all --print-data-base --no-builtin-variables --no-builtin-rules --question
 # This program built for i386-apple-darwin11.3.0
  
 
-# Make data base, printed on Wed Jul  6 18:24:50 2022
+# Make data base, printed on Mon Sep 19 18:26:39 2022
 
 # Variables
 
@@ -16,15 +16,12 @@ make all --print-data-base --no-builtin-variables --no-builtin-rules --question
 <D = $(patsubst %/,%,$(dir $<))
 # automatic
 ?F = $(notdir $?)
-# environment
-VSCODE_LOG_NATIVE = false
 # automatic
 ?D = $(patsubst %/,%,$(dir $?))
 # automatic
 @D = $(patsubst %/,%,$(dir $@))
 # automatic
 @F = $(notdir $@)
- 
 # makefile
 CURDIR := /Users/renee/Git/pseudo-jit
 # makefile
@@ -43,8 +40,6 @@ MAKEFILE_LIST :=  makefile
 SOURCES :=  main.c 
 # makefile (from `makefile', line 13)
 CXXFLAGS :=  -Iinc -g -O0 -mbig-endian -marm -mcpu=cortex-a8 -mfpu=vfpv3 -mfloat-abi=hard  -ffast-math -pedantic -pedantic-errors -Wall -Wextra -Werror -ffixed-r3 -ffixed-r4 -ffixed-r5 -ffixed-r6 -ffixed-r7 -ffixed-r8 -ffixed-r9 -ffixed-r10 -ffixed-r11 -ffixed-r12 -ffunction-sections -fdata-sections -fno-exceptions -fomit-frame-pointer -nostdlib -ffreestanding -g -fmax-errors=5  -std=c++11
-# environment
-VSCODE_VERBOSE_LOGGING = true
 # makefile (from `makefile', line 20)
 CC := arm-none-eabi-gcc
 # environment
@@ -52,15 +47,11 @@ __CFBundleIdentifier = com.microsoft.VSCode
 # environment
 INFOPATH = /opt/homebrew/share/info:
 # environment
-VSCODE_IPC_HOOK_EXTHOST = /var/folders/qr/h44j2ys97tn9db201pnx33fw0000gq/T/vscode-ipc-0be235aa-8599-4c9c-b776-83fdcef5cfe3.sock
-# environment
 VSCODE_CWD = /
 # environment
-PATH = /opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/Applications/ARM/bin:/Applications/ARM/arm-none-eabi/bin:/Applications/VMware Fusion Tech Preview.app/Contents/Public:/Library/Apple/usr/bin
+PATH = /opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/Users/renee/Library/xPacks/@xpack-dev-tools/arm-none-eabi-gcc/10.3.1-2.3.1/.content/bin:/Users/renee/Library/xPacks/@xpack-dev-tools/arm-none-eabi-gcc/10.3.1-2.3.1/.content/arm-none-eabi/bin:/Applications/VMware Fusion Tech Preview.app/Contents/Public:/Library/Apple/usr/bin:/Library/Frameworks/Mono.framework/Versions/Current/Commands
 # makefile (from `makefile', line 18)
 AR := arm-none-eabi-ar
-# environment
-VSCODE_LOG_STACK = false
 # environment
 ELECTRON_RUN_AS_NODE = 1
 # makefile (from `makefile', line 29)
@@ -68,11 +59,9 @@ LDFLAGS := -static -nostdlib -nostartfiles -T linker.lds -Wl,--gc-sections -Wl,-
 # default
 .FEATURES := target-specific order-only second-expansion else-if archives jobserver check-symlink
 # environment
-SSH_AUTH_SOCK = /private/tmp/com.apple.launchd.3CxkRV4eqw/Listeners
+SSH_AUTH_SOCK = /private/tmp/com.apple.launchd.Eyvqj5FBFo/Listeners
 # automatic
 %F = $(notdir $%)
-# environment
-VSCODE_PIPE_LOGGING = true
 # environment
 PWD = /Users/renee/Git/pseudo-jit
 # environment
@@ -86,7 +75,7 @@ VSCODE_AMD_ENTRYPOINT = vs/workbench/api/node/extensionHostProcess
 # environment
 HOME = /Users/renee
 # makefile (from `makefile', line 15)
-SUBMAKE := 
+SUBMAKE := 1
 # default
 MAKEFILEPATH := /Applications/Xcode.app/Contents/Developer/Makefiles
 # makefile (from `makefile', line 26)
@@ -94,7 +83,7 @@ BINARY := binaries/pjit.bin
 # makefile (from `makefile', line 10)
 DEFINES := 
 # environment
-VSCODE_CODE_CACHE_PATH = /Users/renee/Library/Application Support/Code/CachedData/c3511e6c69bb39013c4a4b7b9566ec1ca73fc4d5
+VSCODE_CODE_CACHE_PATH = /Users/renee/Library/Application Support/Code/CachedData/74b1f979648cc44d385a2286793c226e611f59e7
 # environment
 LOGNAME = renee
 # environment
@@ -134,7 +123,9 @@ TMPDIR = /var/folders/qr/h44j2ys97tn9db201pnx33fw0000gq/T/
 # automatic
 *F = $(notdir $*)
 # environment
-VSCODE_IPC_HOOK = /Users/renee/Library/Application Support/Code/1.67.2-main.sock
+VSCODE_IPC_HOOK = /Users/renee/Library/Application Support/Code/1.71.2-main.sock
+# environment
+MallocNanoZone = 0
 # makefile
 MAKEFLAGS = Rrqp
 # environment
@@ -142,7 +133,7 @@ MFLAGS = -Rrqp
 # automatic
 *D = $(patsubst %/,%,$(dir $*))
 # environment
-XPC_SERVICE_NAME = application.com.microsoft.VSCode.7285854.7286058
+XPC_SERVICE_NAME = application.com.microsoft.VSCode.21525852.21525858
 # environment
 HOMEBREW_PREFIX = /opt/homebrew
 # automatic
@@ -178,9 +169,9 @@ OBJECTS := obj/main.o
 # environment
 LANG = C
 # environment
-VSCODE_PID = 68840
+VSCODE_PID = 13186
 # variable set hash-table stats:
-# Load=83/1024=8%, Rehash=0, Collisions=3/129=2%
+# Load=79/1024=8%, Rehash=0, Collisions=3/125=2%
 
 # Pattern-specific Variable Values
 
@@ -188,9 +179,9 @@ VSCODE_PID = 68840
 
 # Directories
 
-# . (device 16777229, inode 5883270): 17 files, no impossibilities.
+# . (device 16777229, inode 5883270): 18 files, no impossibilities.
 
-# 17 files, no impossibilities in 1 directories.
+# 18 files, no impossibilities in 1 directories.
 
 # Implicit Rules
 
@@ -204,7 +195,6 @@ obj/%.o: %.s
 	$(AS) $(CFLAGS) -c $< -o $@
 	
 
- 
 # 2 implicit rules, 0 (0.0%) terminal.
 
 # Files
@@ -239,7 +229,8 @@ obj/main.o:
 # Not a target:
 makefile:
 #  Implicit rule search has been done.
-#  Last modified 2022-07-06 18:24:40
+ 
+#  Last modified 2022-07-06 18:25:35
 #  File has been updated.
 #  Successfully updated.
 # variable set hash-table stats:
@@ -324,6 +315,6 @@ clean:
 # strcache size: total = 4096 / max = 4096 / min = 4096 / avg = 4096
 # strcache free: total = 4087 / max = 4087 / min = 4087 / avg = 4087
 
-# Finished Make data base on Wed Jul  6 18:24:50 2022
+# Finished Make data base on Mon Sep 19 18:26:39 2022
 
  

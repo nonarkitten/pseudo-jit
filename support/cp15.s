@@ -89,12 +89,12 @@ CP15ICacheDisable:
 @ This API disable the Data cache.
 @*****************************************************************************
 CP15DCacheDisable:
-    PUSH    {r4-r11, lr}
+    PUSH    {lr}
     MRC     p15, #0, r0, c1, c0, #0
     BIC     r0,  r0, #0x00000004
     MCR     p15, #0, r0, c1, c0, #0
     BL      CP15DCacheCleanFlush
-    POP     {r4-r11, lr}
+    POP     {lr}
     BX      lr
 
 @*****************************************************************************
