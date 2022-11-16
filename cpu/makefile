@@ -40,6 +40,7 @@ premake:
 	
 .PHONY: clean
 clean:
-	@make -C ops clean 2>/dev/null || true
-	@rm -rf obj/* 2>/dev/null || true
-	@rm $(OUTPUT) 2>/dev/null || true
+	-@make -C ops clean
+	-@rm -rf obj/*
+	-@rmdir obj
+	-@rm $(OUTPUT)

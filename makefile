@@ -52,10 +52,10 @@ ALLLIBS = -Lobj -lpjit -lsupport
 all: premake $(OUTPUT)
 
 premake:
+	@mkdir -p obj
 	@make -C cpu/ops
 	@make -C cpu
 	@make -C support
-	@mkdir -p obj
 
 $(OUTPUT): $(OBJECTS)
 	@echo
@@ -72,11 +72,12 @@ obj/%.o: %.S
 	$(AS) $(CCFLAGS) -c $< -o $@
 
 clean:
-	@make -C cpu/ops clean
-	@make -C cpu clean
-	@make -C support clean
-	@rm -rf $(OBJECTS)
-	@rm $(OUTPUT) 2>/dev/null || true
-	@rm $(BINARY) 2>/dev/null || true
-	@rm $(MAPFILE) 2>/dev/null || true
+	-@make -C cpu/ops clean
+	-@make -C cpu clean
+	-@make -C support clean
+	-@rm -rf $(OBJECTS)
+	-@rmdir obj
+	-@rm $(OUTPUT)
+	-@rm $(BINARY)
+	-@rm $(MAPFILE)
 	

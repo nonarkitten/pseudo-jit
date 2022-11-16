@@ -18,6 +18,6 @@ $(OUTPUT):
 	./$(OUTPUT)
 
 clean:
-	@rm -rf *.s 2>/dev/null || true
-	@rm -rf pjit_extword.h 2>/dev/null || true
-	@rm -f $(OUTPUT) 2>/dev/null || true
+	-@rm -rf *.s
+	-@rm -rf pjit_extword.h
+	-@rm -f $(OUTPUT)
