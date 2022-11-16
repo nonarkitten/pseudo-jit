@@ -35,7 +35,6 @@ MAPFILE := $(patsubst %.elf,%.map,$(OUTPUT))
 LDFLAGS := -static -nostdlib -nostartfiles -T linker.lds \
 	-Wl,--gc-sections \
 	-Wl,--Map=$(MAPFILE) \
-	-Wl,--build-id \
 	-Wl,--be8 \
 	-Wl,--format=elf32-bigarm
 
