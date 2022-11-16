@@ -82,8 +82,8 @@ static int prints(char **out, char *str, int width, int pad) {
 }
 
 static int printu(char **out, uint32_t x, uint32_t base, const char* base_chars, int width, int pad) {
-    static char buffer[33];
-    char *b = &buffer[32];
+    static char ubuffer[33];
+    char *b = &ubuffer[32];
 
     *b = 0;
     do {

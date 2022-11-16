@@ -3,17 +3,6 @@
 #include "m68k_emit_ea.h"
 #include "m68k_registers.h"
 
-//extern int emit_alu(char *buffer, uint16_t size, uint16_t sEA, uint16_t dEA);
-
-static void fixup_rors(char *buffer, uint8_t sRR, uint16_t size) {
-	char *ror = strstr(buffer, "ror");
-	if((size == 4) && ror) {
-		if(debug) printf("@ fixup ror -> rors\n");
-		memcpy(ror, "rors", 4);
-	} else {
-		emit("\tcmp     r%d, #0\n", sRR);	
-	}
-}
 
 int emit_move(char *buffer, uint16_t size, uint16_t opcode) {
 	uint16_t dEA = ((opcode & 0xE00) >> 9) | ((opcode & 0x1C0) >> 3);
@@ -29,7 +18,7 @@ int emit_move(char *buffer, uint16_t size, uint16_t opcode) {
 	sR = sEA & 7; sEA = (sEA >> 3) & 7; if(sEA == 7) sEA += sR; if(sEA) sR += 8;
 	dR = dEA & 7; dEA = (dEA >> 3) & 7; if(dEA == 7) dEA += dR; if(dEA) dR += 8;
 	
-	// Universal EA exceptions
+	// EA exceptions for MOVE
 	// Cannot be byte and an address register
 	if((size == 1) && (sEA == EA_AREG)) return -1;
 	if((size == 1) && (dEA == EA_AREG)) return -1;
@@ -37,19 +26,20 @@ int emit_move(char *buffer, uint16_t size, uint16_t opcode) {
 	if((dEA == EA_PDIS) || (dEA == EA_PIDX) || (dEA == EA_IMMD)) return -1;
 	// Exclude obvious not-real addressing modes above immediate
 	if((sEA > EA_IMMD) || (dEA > EA_IMMD)) return -1;
-	
-	// Guard standard aliasing of addressing modes -- this is an error
-	// Source PC-Relative should be in R1 as an absolute
-	// Both ABS.W and ABS.L should also be in R1 as an absolute
-	// And finally, indexed and displacement are the same modes
-	//if((sEA == EA_ABSW) || (sEA == EA_ADIS) || (sEA == EA_PDIS) || (sEA == EA_PIDX)) return -1;
-	//printf("@ %d\n", __LINE__);
-	// Destination PC modes are already illegal, but R2
-	//if((dEA == EA_ABSW) || (dEA == EA_ADIS)) return -1;
-	//printf("@ %d\n", __LINE__);
-	
-	//
+
+	// EA Duplicates
+	// Both absolute opcodes are the same with destination
+	if (dEA == EA_ABSL) return -(opcode & 0xFF3F);
+	// Absolute and PC-relative modes are all the same with source
+	if((sEA == EA_ABSL) || (sEA == EA_PDIS) || (sEA == EA_PIDX)) return -(opcode & 0xFFF8);
+	// Source Absolute, Indexed and Displacement are the same modes
+	if (dEA == EA_ADIS) return -(opcode ^ 0x00C0);
+	if (sEA == EA_ADIS) return -(opcode ^ 0x0018);
+	// Source and destination are the same, change to TST
 	if(sR == dR) {
+		if(sEA == EA_AREG && dEA == EA_AREG && size == 4) {
+			return 0; // NOP
+		}
 		if(sEA == EA_DREG && dEA == EA_DREG) {
 			// move.bwl	dn,dn		tst.bwl		dn
 			return -(0x4A00 | ((size / 2) << 6) | org_sEA);
@@ -76,9 +66,7 @@ int emit_move(char *buffer, uint16_t size, uint16_t opcode) {
 	emit_reset( buffer );
 
 	// hyper-optimize register-to-register conditions
-	if((sEA <= EA_AREG) && (dEA <= EA_AREG)) { // move reg to reg
-		if((dEA == EA_AREG) && (size == 4) && (dR == sR)) return 0; // NOP
-		
+	if((sEA <= EA_AREG) && (dEA <= EA_AREG)) { // move reg to reg		
 		if((reg_raw(sR) == 0xFF) && (reg_raw(dR) == 0xFF)) {
 			// dynamic to dynamic
 			if(debug) printf("@ dyn->dyn optimization\n");
@@ -86,7 +74,7 @@ int emit_move(char *buffer, uint16_t size, uint16_t opcode) {
 			emit("\t%s   r%d, [" CPU ", #%d]\n", ldx(size), tRR, sR * 4);
 			if(dEA == EA_AREG) size = 4;
 			else emit("\tcmp     r%d, #0\n", tRR);
-			if(sR != dR) emit("\t%s    r%d, [" CPU ", #%d]\n", stx(size), tRR, dR * 4);
+			emit("\t%s    r%d, [" CPU ", #%d]\n", stx(size), tRR, dR * 4);
 			
 		} else if(reg_raw(sR) == 0xFF) {
 			// dynamic into fixed
@@ -94,13 +82,13 @@ int emit_move(char *buffer, uint16_t size, uint16_t opcode) {
 			reg_alloc_68k(&dRR, dR, 4);
 
 			if((size == 4) || (dEA == EA_AREG)) {
-				if(sR != dR) emit("\t%s   r%d, [" CPU ", #%d]\n", ldx(size), dRR, sR * 4);
+				emit("\t%s   r%d, [" CPU ", #%d]\n", ldx(size), dRR, sR * 4);
 				if(dEA != EA_AREG) emit("\tcmp     r%d, #0\n", dRR);
 			} else {
 				reg_alloc_temp(&tRR);
 				emit("\t%s   r%d, [" CPU ", #%d]\n", ldx(size), tRR, sR * 4);
 				emit("\tcmp     r%d, #0\n", tRR);
-				if(sR != dR) emit("\tbfi     r%d, r%d, $0, #%d\n", dRR, tRR, size * 8);
+				emit("\tbfi     r%d, r%d, $0, #%d\n", dRR, tRR, size * 8);
 			}
 
 		} else if(reg_raw(dR) == 0xFF) {
@@ -111,7 +99,7 @@ int emit_move(char *buffer, uint16_t size, uint16_t opcode) {
 			if(dEA == EA_AREG) size = 4;
 			else emit("\tcmp     r%d, #0\n", sRR);
 
-			if(sR != dR) emit("\t%s    r%d, [" CPU ", #%d]\n", stx(size), sRR, dR * 4);
+			emit("\t%s    r%d, [" CPU ", #%d]\n", stx(size), sRR, dR * 4);
 
 		} else {
 			// fixed into fixed
@@ -122,12 +110,13 @@ int emit_move(char *buffer, uint16_t size, uint16_t opcode) {
 				if(size == 4) emit("\tmov     r%d, r%d\n", dRR, sRR);
 				else emit("\tsxth    r%d, r%d\n", dRR, sRR);
 			} else {
-				if(size == 4) emit("\tmovs    r%d, r%d\n", dRR, sRR);
-				else {
+				if(size == 4) {
+					emit("\tmovs    r%d, r%d\n", dRR, sRR);
+				} else {
 					reg_alloc_temp(&tRR);
 					emit("\tsxt%c    r%d, r%d\n", (size == 1) ? 'b' : 'h', tRR, sRR);
 					emit("\tcmp     r%d, #0\n", tRR);
-					if(sR != dR) emit("\tbfi     r%d, r%d, $0, #%d\n", dRR, tRR, size * 8);
+					emit("\tbfi     r%d, r%d, $0, #%d\n", dRR, tRR, size * 8);
 				}
 			}
 		}
@@ -144,36 +133,49 @@ int emit_move(char *buffer, uint16_t size, uint16_t opcode) {
 	} 
 	else if(dEA <= EA_AREG) { // mem -> reg
 		if(debug) printf("@ mem->reg optimization\n");
-		get_source_data(&sRR, sEA, sR, size);
-		
-		if(dEA == EA_AREG) size = 4;
-		else fixup_rors(buffer, sRR, size);
-		
-		if(reg_raw(dR) == 0xFF) emit("\t%s    r%d, [" CPU ", #%d]\n", stx(size), sRR, dR * 4); // dynamic
-		else if(size == 4) {
-			char *rors = strstr(buffer, "rors");
-			if(!rors) rors = strstr(buffer, "ror ");
-			if(rors) {
-				if(debug) printf("@ fixup rors destination");
-				dRR = reg_raw(dR);
-				rors += 9;
-				if(dRR > 9) *rors++ = '1';
-				*rors = '0' + (dRR % 10);
+
+		if(reg_raw(dR) == 0xFF) {
+			// dynamic, stuff into state
+			get_source_data(&sRR, sEA, sR, size);
+			if(dEA == EA_AREG) size = 4;
+			else emit("\tcmp     r%d, #0\n", sRR);
+			emit("\t%s    r%d, [" CPU ", #%d]\n", stx(size), sRR, dR * 4); 
+
+		} else if((size == 4) || (dEA == EA_AREG)) {
+			// fixed, but can load directly (saves mov)
+			switch(sEA) {
+			case EA_ADDR:
+				emit("\t%s   r%d, [r%d]\n", ldx(size), reg_raw(dR), reg_raw(sR)); break;
+			case EA_AINC:
+				emit("\t%s   r%d, [r%d], #4\n", ldx(size), reg_raw(dR), reg_raw(sR)); break;
+			case EA_ADEC:
+				emit("\t%s   r%d, [r%d, #4]!\n", ldx(size), reg_raw(dR), reg_raw(sR)); break;
+			case EA_ADIS: case EA_AIDX:
+				emit("\t%s   r%d, [r%d, r1]\n", ldx(size), reg_raw(dR), reg_raw(sR)); break;
+			case EA_PIDX: case EA_PDIS: case EA_ABSW: case EA_ABSL:
+				emit("\t%s   r%d, [r1]\n", ldx(size), reg_raw(dR)); break;
+			case EA_IMMD:
+				if(size==4) emit("\tmovs    r%d, r%d\n", reg_raw(dR), reg_raw(sR));
+				else emit("\tbfi     r%d, r%d, #0, #%d\n", reg_raw(dR), reg_raw(sR), size * 8);
+				break;
+			}
+			if(dEA != EA_AREG && dEA != EA_IMMD) emit("\tcmp     r%d, #0\n", sRR);
+
+		} else {
+			// fixed, bfi
+			get_source_data(&sRR, sEA, sR, size);
+			if(dEA == EA_AREG) {
+				emit("\tmov     r%d, r%d\n", reg_raw(dR), sRR);
 			} else {
-				// fixed, mov
-				emit("\tmov     r%d, r%d\n", reg_raw(dR), sRR); 
+				emit("\tcmp     r%d, #0\n", sRR);
+				emit("\tbfi     r%d, r%d, #0, #%d\n", reg_raw(dR), sRR, size * 8); 
 			}
 		}
-		else emit("\tbfi     r%d, r%d, #0, #%d\n", reg_raw(dR), sRR, size * 8); // fixed, bfi
-
 		reg_flush();
 	} 
 	else { // mem -> mem
 		if(debug) printf("@ mem->mem\n");
 		get_source_data(&sRR, sEA, sR, size);
-
-		fixup_rors(buffer, sRR, size);
-
 		get_destination_data(&dRR, NULL, dEA, dR, size);
 		set_destination_data(&dRR, &sRR, dEA, size);
 	}

@@ -23,16 +23,16 @@ $(OUTPUT): $(OBJECTS)
 	$(SZ) $@
 
 obj/%.o: %.c
-	$(CC) $(CFLAGS) -c $< -o $@
+	$(CC) $(CCFLAGS) -c $< -o $@
 
 obj/%.o: ops/%.c
-	$(CC) $(CFLAGS) -c $< -o $@
+	$(CC) $(CCFLAGS) -c $< -o $@
 
 obj/%.o: %.s
-	$(AS) $(CFLAGS) -c $< -o $@
+	$(AS) $(CCFLAGS) -c $< -o $@
 
 obj/%.o: ops/%.s
-	$(AS) $(CFLAGS) -c $< -o $@
+	$(AS) $(CCFLAGS) -c $< -o $@
 
 .PHONY: premake
 premake:

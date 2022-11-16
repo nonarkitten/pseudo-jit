@@ -1,28 +1,34 @@
-COMMON_FLAGS := $(EXTRA_FLAGS) -Iinc -g -O0 \
-	-mbig-endian -marm -mcpu=cortex-a8 \
-	-mfpu=vfpv3 -mfloat-abi=hard  -ffast-math \
-	-pedantic -pedantic-errors -Wall -Wextra -Werror \
-	-ffixed-r3 -ffixed-r4 -ffixed-r5 -ffixed-r6 -ffixed-r7 \
-	-ffixed-r8 -ffixed-r9 -ffixed-r10 -ffixed-r11 -ffixed-r12 \
+# Compiler optimizations
+ifdef ($(DEBUG))
+# Optimize for debugging, but include basic optimizers for not-terrible-code
+CCFLAGS_OPT := -Og -g3 -ggdb -D_DEBUG
+else
+# Optimize for release and raise the bar for errors
+CCFLAGS_OPT := -Os -Werror -s
+endif
+
+# Universally good compiler warnings	
+CCFLAGS_WARN := \
+	-Wall -Wshadow -Wdouble-promotion -Wformat-overflow -Wformat-truncation \
+	-Wundef -Wno-unused-parameter
+
+CCFLAGS := $(CCFLAGS_OPT) $(CCFLAGS_WARN) \
+	-I. -I./inc -I./cpu -I./cpu/ops -mbig-endian -marm -mcpu=cortex-a8 \
+	-mfpu=vfpv3 -mfloat-abi=hard  -ffast-math -ffixed-r5  \
 	-ffunction-sections -fdata-sections -fno-exceptions -fomit-frame-pointer \
 	-nostdlib -ffreestanding -g -fmax-errors=5
 
-DEFINES :=
-
-CFLAGS := $(COMMON_FLAGS) $(DEFINES) -std=gnu11
-CXXFLAGS:= $(COMMON_FLAGS) $(DEFINES) -std=c++11
-
 SUBMAKE := 1
-
 AS := arm-none-eabi-gcc
 AR := arm-none-eabi-ar
 SZ := arm-none-eabi-size
 CC := arm-none-eabi-gcc
 OC := arm-none-eabi-objcopy
 
-export COMMON_FLAGS DEFINES CFLAGS CXXFLAGS AS AR SZ CC SUBMAKE
+export COMMON_FLAGS DEFINES CCFLAGS AS AR SZ CC SUBMAKE
 
 OUTPUT  := binaries/pjit.elf
+
 BINARY  := $(patsubst %.elf,%.bin,$(OUTPUT))
 MAPFILE := $(patsubst %.elf,%.map,$(OUTPUT))
 
@@ -33,19 +39,18 @@ LDFLAGS := -static -nostdlib -nostartfiles -T linker.lds \
 	-Wl,--be8 \
 	-Wl,--format=elf32-bigarm
 
-SOURCES := $(wildcard *.s) $(wildcard *.c) 
-OBJECTS := \
-	$(patsubst %.s,obj/%.o, \
-	$(patsubst %.c,obj/%.o, \
-	$(SOURCES) \
-	))
+SRCDIRS := .
+
+SOURCES += $(foreach dir,$(SRCDIRS),$(wildcard $(dir)/*.c) $(wildcard $(dir)/*.S))
+OBJECTS += $(addprefix obj/,$(addsuffix .o,$(basename $(foreach file,$(SOURCES),$(notdir $(file))))))
+VPATH += $(SRCDIRS)
 
 ALLLIBS = -Lobj -lpjit -lsupport
 
-.PHONY: all
+.PHONY: premake all clean
+
 all: premake $(OUTPUT)
 
-.PHONY: premake
 premake:
 	@make -C cpu/ops
 	@make -C cpu
@@ -56,22 +61,21 @@ $(OUTPUT): $(OBJECTS)
 	@echo
 	@echo !!!!!!!! Building PJIT ...
 	@echo
-	$(CC) $(CFLAGS) $(LDFLAGS) $(OBJECTS) -o $@ $(ALLLIBS)
+	$(CC) $(CCFLAGS) $(LDFLAGS) $(OBJECTS) -o $@ $(ALLLIBS)
 	$(OC) --gap-fill=0xff -O binary $@ $(BINARY)
 	$(SZ) $@
 
 obj/%.o: %.c
-	$(CC) $(CFLAGS) -c $< -o $@
+	$(CC) $(CCFLAGS) -c $< -o $@
 
-obj/%.o: %.s
-	$(AS) $(CFLAGS) -c $< -o $@
+obj/%.o: %.S
+	$(AS) $(CCFLAGS) -c $< -o $@
 
-.PHONY: clean
 clean:
 	@make -C cpu/ops clean
 	@make -C cpu clean
 	@make -C support clean
-	@rm -rf obj/* 2>/dev/null || true
+	@rm -rf $(OBJECTS)
 	@rm $(OUTPUT) 2>/dev/null || true
 	@rm $(BINARY) 2>/dev/null || true
 	@rm $(MAPFILE) 2>/dev/null || true

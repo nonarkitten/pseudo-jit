@@ -9,16 +9,21 @@
 ._*
 
 # Actual project stuff
+.vscode/*
 
 # GNU cruft
+obj/
+binaries/
 .cscode
 *.o
+*.a
 *~
 .#*
 *#
 settings.json
 
 # PJIT generated code
-cpu/ops/m68k_test
+cpu/ops/make_m68k
+cpu/ops/pjit_extword.*
 cpu/ops/*.s
 /Debug/
