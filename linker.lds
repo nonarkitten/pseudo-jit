@@ -3,32 +3,27 @@ ENTRY(main)
 
 SECTIONS
 {
-	. = 0x98000000;
+	. = 0x80000000;
 		
 	.text : {
+		*main.o(.text*)
 		*(.text*)
         *(.rodata*)
-	}
+	} >RAM
 	
 	/* non-zero global and static variables initialized by the application code */
-	. = ALIGN(4);
-	.data : { *(.data) }
+	.data : { 
+		. = ALIGN(4);
+		*(.data)
+	} >RAM
 	
 	/* global and static variable that are not initialized by the application code. */
 	/* the compiler (hopefully) initialize this data to 0. */
-	. = ALIGN(4);
-	_bss_start = .;
-	.bss :  { *(.bss) }
-	 
-	/* Put the stack inside the BSS to simplify clearing */
-	. = ALIGN(4);
-	.stack :
-	{
-		_stack_end = .;  /* the danger zone! */
-		. = . + 0x10000; /* 64kB of stack memory */
-		_stack_top = .;  /* stack grows upwards */
-	}
-
-	. = ALIGN(4);
-	_bss_end = .;
+	.bss :  {
+		. = ALIGN(4);
+		_bss_start = .;
+		*(.bss)
+		. = ALIGN(4);
+		_bss_end = .;
+	} >RAM
 }
