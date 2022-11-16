@@ -9,7 +9,7 @@
 ._*
 
 # Actual project stuff
-.vscode/*
+.vscode/
 
 # GNU cruft
 obj/
