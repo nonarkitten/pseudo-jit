@@ -468,65 +468,72 @@ try_again:
 		
 		fprintf(file, "%s", header);
 		
-		uint16_t real_opcode[65536];
-		for(int i=0; i<0x10000; i++) {
-			int len = opcode_len[i];
-			real_opcode[i] = (len < 0) ? -len : i;
-		}
-
-		uint16_t compressed_opcodes_index[8192];
-		uint16_t compressed_opcodes[65536];
-		uint16_t compressed_opcodes_count = 0;
-
-		int matches = 0;
-		for(int i=0; i<0x10000; i+=8) {
-			bool match = false;
-			for(int j=0; j<i; j+=8) {
-				if(0 == memcmp(&real_opcode[i], &real_opcode[j], 16)) {
-					// fprintf(stderr, "Fragment match: %04hX & %04hX\n", i, j);
-					compressed_opcodes_index[i / 8] =
-						compressed_opcodes_index[j / 8];
-					matches ++;
-					match = true;
-					break;
-				}
-			}
-			if(!match) {
-				// fprintf(stderr, "Fragment miss: %04hX\n", i);
-				compressed_opcodes_index[i / 8] = 
-					compressed_opcodes_count;
-				memcpy(&compressed_opcodes[compressed_opcodes_count],
-					&real_opcode[i], 32);
-				compressed_opcodes_count += 8;
-			}
-		}
-		fprintf(stderr, "Opcode fragments: %d\n", compressed_opcodes_count/8);
-		fprintf(stderr, "Fragment matches: %d\n", matches);
-
-		int size = 16384 + compressed_opcodes_count * 4;
-        fprintf(file, "\t// Duplicate fragment matches: %d\n", matches);
-        fprintf(file, "\t// Opcode fragments: %d at 8 words or 16 bytes per fragment\n", compressed_opcodes_count/8);
-        fprintf(file, "\t// Tables size: %d K-bytes (including index)\n", size);
-        fprintf(file, "\t// Compression: %0.1f%% of original size\n", size / 2621.44);
 		fprintf(file, "\t.text\n\t.global optab\n");
 		fprintf(file, "optab:\n\t.word ");
-		for(int i=0; i<compressed_opcodes_count; i++) {
+		
+		//uint16_t real_opcode[65536];
+		for(int i=0; i<0x10000; i++) {
+			int len = opcode_len[i];
+			uint16_t real_opcode = (len < 0) ? -len : i;
+
 			if(i && ((i & 3) == 0)) fprintf(file, "\t// %04hX\n\t.word ", (uint16_t)(i - 4));
 			char sepr = (i & 3) ? ',' : ' ';
-			fprintf(file, "%c opcode_%04hX", sepr, compressed_opcodes[i]);
-		}
+			fprintf(file, "%c opcode_%04hX", sepr, real_opcode);
+		}	
 
-        fprintf(file, "\n\n\t// This table requires 16KB (8192 16-bit words)\n");
-        fprintf(file, "\t// Each is an index to one of the above 8-word blocks \n");
+		// uint16_t compressed_opcodes_index[8192];
+		// uint16_t compressed_opcodes[65536];
+		// uint16_t compressed_opcodes_count = 0;
 
-        fprintf(file, "\t.text\n\t.global optab_idx\n");
-		fprintf(file, "optab_idx:\n\t.word ");
-		for(int op=0; op<0x10000; op+=8) {
-			int i = op / 8;
-			if(i && ((i & 3) == 0)) fprintf(file, "\t// %04hX\n\t.hword ", (uint16_t)(op - 32));
-			char sepr = (i & 3) ? ',' : ' ';
-			fprintf(file, "%c 0x%04hX", sepr, compressed_opcodes_index[i]);
-		}
+		// int matches = 0;
+		// for(int i=0; i<0x10000; i+=8) {
+		// 	bool match = false;
+		// 	for(int j=0; j<i; j+=8) {
+		// 		if(0 == memcmp(&real_opcode[i], &real_opcode[j], 16)) {
+		// 			// fprintf(stderr, "Fragment match: %04hX & %04hX\n", i, j);
+		// 			compressed_opcodes_index[i / 8] =
+		// 				compressed_opcodes_index[j / 8];
+		// 			matches ++;
+		// 			match = true;
+		// 			break;
+		// 		}
+		// 	}
+		// 	if(!match) {
+		// 		// fprintf(stderr, "Fragment miss: %04hX\n", i);
+		// 		compressed_opcodes_index[i / 8] = 
+		// 			compressed_opcodes_count;
+		// 		memcpy(&compressed_opcodes[compressed_opcodes_count],
+		// 			&real_opcode[i], 32);
+		// 		compressed_opcodes_count += 8;
+		// 	}
+		// }
+		// fprintf(stderr, "Opcode fragments: %d\n", compressed_opcodes_count/8);
+		// fprintf(stderr, "Fragment matches: %d\n", matches);
+
+		// int size = 16384 + compressed_opcodes_count * 4;
+        // fprintf(file, "\t// Duplicate fragment matches: %d\n", matches);
+        // fprintf(file, "\t// Opcode fragments: %d at 8 words or 16 bytes per fragment\n", compressed_opcodes_count/8);
+        // fprintf(file, "\t// Tables size: %d K-bytes (including index)\n", size);
+        // fprintf(file, "\t// Compression: %0.1f%% of original size\n", size / 2621.44);
+		// fprintf(file, "\t.text\n\t.global optab\n");
+		// fprintf(file, "optab:\n\t.word ");
+		// for(int i=0; i<compressed_opcodes_count; i++) {
+		// 	if(i && ((i & 3) == 0)) fprintf(file, "\t// %04hX\n\t.word ", (uint16_t)(i - 4));
+		// 	char sepr = (i & 3) ? ',' : ' ';
+		// 	fprintf(file, "%c opcode_%04hX", sepr, compressed_opcodes[i]);
+		// }
+
+        // fprintf(file, "\n\n\t// This table requires 16KB (8192 16-bit words)\n");
+        // fprintf(file, "\t// Each is an index to one of the above 8-word blocks \n");
+
+        // fprintf(file, "\t.text\n\t.global optab_idx\n");
+		// fprintf(file, "optab_idx:\n\t.word ");
+		// for(int op=0; op<0x10000; op+=8) {
+		// 	int i = op / 8;
+		// 	if(i && ((i & 3) == 0)) fprintf(file, "\t// %04hX\n\t.hword ", (uint16_t)(op - 32));
+		// 	char sepr = (i & 3) ? ',' : ' ';
+		// 	fprintf(file, "%c 0x%04hX", sepr, compressed_opcodes_index[i]);
+		// }
 
 
 			
@@ -536,7 +543,8 @@ try_again:
 		// 	uint16_t opcode = (len < 0) ? -len : i;
 		// 	
 		// }
-		
+
+	
 		fprintf(file, "\n\n");
 
 		fclose(file);
