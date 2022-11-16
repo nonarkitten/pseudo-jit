@@ -56,7 +56,7 @@ int emit_move(char *buffer, uint16_t size, uint16_t opcode) {
 			// move.bwl (an)+,-(an)	tst.bwl		(an)
 			return -(0x4A10 | ((size / 2) << 6) | (org_sEA & 7));
 		}
-		if(sEA == EA_AINC && dEA == EA_ADDR) {
+		if(sEA == EA_AINC && dEA == EA_AREG) {
 			// movea.wl	(an)+,an	movea.wl	(an),an	
 			return -(opcode & 0xFFF7);
 		}
@@ -149,7 +149,9 @@ int emit_move(char *buffer, uint16_t size, uint16_t opcode) {
 			case EA_AINC:
 				emit("\t%s   r%d, [r%d], #4\n", ldx(size), reg_raw(dR), reg_raw(sR)); break;
 			case EA_ADEC:
-				emit("\t%s   r%d, [r%d, #4]!\n", ldx(size), reg_raw(dR), reg_raw(sR)); break;
+				if(sR == dR) emit("\t%s   r%d, [r%d, #4]\n", ldx(size), reg_raw(dR), reg_raw(sR));
+				else emit("\t%s   r%d, [r%d, #4]!\n", ldx(size), reg_raw(dR), reg_raw(sR));
+				break;
 			case EA_ADIS: case EA_AIDX:
 				emit("\t%s   r%d, [r%d, r1]\n", ldx(size), reg_raw(dR), reg_raw(sR)); break;
 			case EA_PIDX: case EA_PDIS: case EA_ABSW: case EA_ABSL:
