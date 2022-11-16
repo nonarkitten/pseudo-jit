@@ -125,9 +125,6 @@ int emit_DBCC(char *buffer, uint16_t opcode) {
 static int addr_err_emitted = false;
 
 int emit_BCC(char *buffer, uint16_t opcode) {
-	static bool emit_bsr = false;
-	static bool emit_bra = false;
-
 	lines = 0;
 	emit_reset( buffer );
 
@@ -149,7 +146,8 @@ int emit_BCC(char *buffer, uint16_t opcode) {
 	}
 
 	int8_t d = (int8_t)(opcode & 0xff);
-	if(d & 1) {
+	if((d == 0) || ((uint8_t)d == 0xFF)) { /* long branch already in r1 */ }
+	else if(d & 1) {
 		if(addr_err_emitted) {
 			return addr_err_emitted;
 		} else {
@@ -157,39 +155,12 @@ int emit_BCC(char *buffer, uint16_t opcode) {
 			emit("\tsvc     #%d\n", ADDRESSERR);
 			return lines;
 		}
-	}
-	if(d > 0) emit("\tmov     r1, #0x%02x\n", d);
-	if(d < 0) emit("\tmov     r1, #0x%02x\n", (uint8_t)(-d));	
+	}	
+	else if(d > 0) emit("\tmov     r1, #0x%02x\n", d);
+	else if(d < 0) emit("\tmvn     r1, #0x%02x\n", (uint8_t)(-d));	
 	
-	if(cc == 1) {
-		if(emit_bsr) {
-			emit("\tb      branch_subroutine\n");
-		} else {
-			emit("branch_subroutine:\n");
-			emit("\tsub     r3, lr, #4\n");
-			emit("\tldr     r0, [" CPU ", #%d]\n", offsetof(cpu_t, m68k_page));
-			emit("\tubfx    r3, r3, #1, #12\n");
-			emit("\torr     r0, r3, r0\n");
-			emit("\tstr     r0, [r11, #-4]!\n");
-			emit("\tadd     r0, r0, r1\n");
-			emit("\tb       cpu_jump\n");
-		}
-		emit_bsr = true;
-
-	} else {
-		if(emit_bra) {
-			emit("\tb      branch_normal\n");
-		} else {
-			emit("branch_normal:\n");
-			emit("\tsub     r3, lr, #4\n");
-			emit("\tldr     r0, [" CPU ", #%d]\n", offsetof(cpu_t, m68k_page));
-			emit("\tubfx    r3, r3, #1, #12\n");
-			emit("\torr     r0, r3, r0\n");
-			emit("\tadd     r0, r0, r1\n");
-			emit("\tb       cpu_jump\n");
-		}
-		emit_bra = true;
-	}
+	if(cc == 1) emit("\tb       branch_subroutine\n");
+	else emit("\tb       branch_normal\n");
 	
 	return lines | NO_BX_LR;
 }

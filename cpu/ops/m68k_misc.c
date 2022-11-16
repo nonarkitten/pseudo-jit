@@ -75,9 +75,9 @@ int emit_LINK(char *buffer, uint16_t opcode) {
 	uint8_t dRR, dR = ((opcode & 0x0007) >> 0) |  0x8;
 	reg_alloc_arm(1);
 	if(!emit_get_reg( &dRR, dR, 4 )) return -1;
-	emit("\tstr     r%d, [" CPU ", #-4]!\n", dRR );
-	emit("\tmov     r%d, r11\n", dRR);
-	emit("\tadd     r11, r1\n");
+	emit("\tstr     r%d, [sp, #-4]!\n", dRR );
+	emit("\tmov     r%d, sp\n", dRR);
+	emit("\tadd     sp, r1\n");
 	reg_modified( dRR );
 	reg_flush();	
 
@@ -91,8 +91,8 @@ int emit_UNLK(char *buffer, uint16_t opcode) {
 
 	uint8_t dRR, dR = ((opcode & 0x0007) >> 0) |  0x8;
 	if(!emit_get_reg( &dRR, dR, 4 )) return -1;
-	emit("\tmov     r11, r%d\n", dRR);
-	emit("\tstr     r%d, [" CPU "], #4\n", dRR ); 
+	emit("\tmov     sp, r%d\n", dRR);
+	emit("\tldr     r%d, [sp], #4\n", dRR );
 	reg_flush();		
 	return lines;
 }

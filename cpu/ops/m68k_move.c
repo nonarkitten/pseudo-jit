@@ -32,7 +32,7 @@ int emit_move(char *buffer, uint16_t size, uint16_t opcode) {
 	if (dEA == EA_ABSL) return -(opcode & 0xFF3F);
 	// Absolute and PC-relative modes are all the same with source
 	if((sEA == EA_ABSL) || (sEA == EA_PDIS) || (sEA == EA_PIDX)) return -(opcode & 0xFFF8);
-	// Source Absolute, Indexed and Displacement are the same modes
+	// Source Indexed and Displacement are the same modes
 	if (dEA == EA_ADIS) return -(opcode ^ 0x00C0);
 	if (sEA == EA_ADIS) return -(opcode ^ 0x0018);
 	// Source and destination are the same, change to TST
@@ -266,8 +266,7 @@ int emit_MOVEP(char *buffer, uint16_t opcode) {
 }
 
 int emit_MOVEM(char *buffer, uint16_t opcode) {
-	char *ldx = (opcode & 0x0040) ? "ldrne " : "ldrhne";
-	char *stx = (opcode & 0x0040) ? "strne " : "strhne";
+	char *ldx, *stx;
 	uint16_t size = (opcode & 0x0040) ? 4 : 2;
 	uint16_t sEA = (opcode & 0x38) >> 3;
 	if(sEA == 7) sEA += (opcode & 0x0007) >> 0;
@@ -285,106 +284,153 @@ int emit_MOVEM(char *buffer, uint16_t opcode) {
 	lines = 0;
 	emit_reset( buffer );	
 	
-	reg_alloc_arm(0); // temp transfer
-	reg_alloc_arm(1); // register list
-	reg_alloc_arm(2); // extension value (if used)
-	
 	uint8_t sR = ((opcode & 0x0007) >> 0) | 8;
-	uint8_t sRR;
-	if(!emit_get_reg( &sRR, sR, 4 )) return -1;
+	uint8_t sRR = 2;
 	
-	if(sEA == EA_ADDR) {
-		emit("\tmov     r2, r%d\n", sRR);
-		reg_free(sRR); sRR = 2;
-	} else if((sEA == EA_AIDX) || (sEA == EA_ADIS)) {
-		emit("\tadd     r2, r%d, r1\n", sRR);
-		reg_free(sRR); sRR = 2;
-	} 
+	if((sEA == EA_AIDX) || (sEA == EA_ADIS)) {
+		emit("\tadd     r2, r%d, r1\n", reg_raw(sR));
+	} else if(sEA == EA_ADDR) {
+		emit("\tmov     r2, r%d\n", reg_raw(sR));
+	} else if((sEA == EA_AINC) || (sEA == EA_ADEC)) {
+		sRR = reg_raw(sR);
+	} // else r2 already has absolute register
 
 	// If the addressing register is also loaded from 
 	// memory, the memory value is ignored	
 	if (sEA == EA_AINC) {
 		// memory to register-list, normal reg list D0-D7, A0-A7
 		// address register should point to the next long address
-		for(uint16_t mask = 0x8000, reg = 0; mask; mask >>= 1, reg++) {
-			emit("\ttst     r1, #0x%04hX\n", mask);
-			uint8_t rreg = reg_raw(reg);
-			if(reg == sR) {
-				emit("\tadd     r%d, #%d @ skip same reg\n", reg, size);
-			} else if(rreg == 0xFF) {
-				emit("\t%s  r0, [r%d], #%d\n", ldx, sRR, size );
-				emit("\t%s  r0, [" CPU ", #%d]\n", stx, reg * 4);
-			} else {
-				emit("\t%s  r%d, [r%d], #%d\n", ldx, rreg, sRR, size );
-			}
-		}			
+		if(size == 2) {
+			ldx = "ldrhcs"; stx = "strh  ";
+		} else {
+			ldx = "ldrcs "; stx = "str   ";
+		}
+		// copy memory into CPU register struct
+		// r0 = temp
+		// r1 = mask
+		// r2, r6-r13 = register memory address
+		// r3 = CPU state address
+        emit("    stm     r5!, {r3-r4}  ;@ save d0,d1\n");
+		emit("    add     r3, r5, #32\n");
+		emit("    stm     r3!, {r6-r13} ;@ save a0-a7\n");
+		if(size == 2) emit("    add     r3, r5, #2\n");
+		emit("    cmp     r1, #0\n");
+		emit("0:  beq     1f\n");
+		emit("    lsrs    r1, r1, #1\n");
+		emit("    %s  r0, [r%d], #%d\n", ldx, sRR, size);
+		emit("    %s  r0, [r3], #4\n", stx);
+		emit("    b       0b\n");
+		emit("1:  ldm     r5!, {r3,r4}  ;@ restore d0,d1\n");
+		emit("    add     r2, r5, #32\n");
+		emit("    ldm     r2!, {r6-r13} ;@ restore a0-a7\n");
+		
 	} else if (sEA == EA_ADEC) {
 		// register-list to memory, reverse reg list A7-A0, D7-D0
 		// address register should point to the last long address written
-		for(uint16_t mask = 0x8000, reg = 15; mask; mask >>= 1, reg--) {
-			emit("\ttst     r1, #0x%04hX\n", mask);
-			uint8_t rreg = reg_raw(reg);
-			if(reg == sR) {
-				emit("\tsub     r%d, #%d @ skip same reg\n", reg, size);
-			} else if(rreg == 0xFF) {
-				emit("\t%s  r0, [" CPU ", #%d]\n", ldx, reg * 4);
-				emit("\t%s  r0, [r%d, #-%d]!\n", stx, sRR, size );
-			} else {
-				emit("\t%s  r%d, [r%d, #-%d]!\n", stx, rreg, sRR, size );
-			}
-		}		
+		if(size == 2) {
+			ldx = "ldrh  "; stx = "strhcs";
+		} else {
+			ldx = "ldr   "; stx = "strcs ";
+		}
+		// copy memory into CPU register struct
+		// r0 = temp
+		// r1 = mask
+		// r2, r6-r13 = register memory address
+		// r3 = CPU state address
+        emit("    stm     r5!, {r3-r4}  ;@ save d0,d1\n");
+		emit("    add     r3, r5, #32\n");
+		emit("    stm     r3!, {r6-r13} ;@ save a0-a7\n");
+		if(size == 2) emit("    add     r3, r5, #2\n");
+		emit("    lsls    r1, r1, #16\n");
+		emit("0:  beq     1f\n");
+		emit("    lsls    r1, r1, #1\n");
+		emit("    %s  r0, [r3, #-4]!\n", ldx);
+		emit("    %s  r0, [r%d, #-%d]!\n", stx, sRR, size);
+		emit("    b       0b\n");
+		emit("1:  ldm     r5!, {r3,r4}  ;@ restore d0,d1\n");
+		emit("    add     r2, r5, #32\n");
+		emit("    ldm     r2!, {r6-r13} ;@ restore a0-a7\n");
+		
 	} else if(opcode & 0x0400) {
 		// memory to register-list, normal reg list D0-D7, A0-A7
 		// address register remains unchanged
-		static bool wrote_movem_m2r_word = false;
-		static bool wrote_movem_m2r_long = false;
-
-		if((wrote_movem_m2r_word && size == 2) || (wrote_movem_m2r_long && size == 4)) {
-			emit("\tb       movem_m2r_%s\n", (size == 2) ? "word" : "long");
-			
-		} else {
-			emit("movem_m2r_%s:\n", (size == 2) ? "word" : "long");
-			for(uint16_t mask = 0x8000, reg = 0; mask; mask >>= 1, reg++) {
-				emit("\ttst     r1, #0x%04hX\n", mask);
-				uint8_t rreg = reg_raw(reg);
-				if(reg == sR) {
-					emit("\tadd     r%d, #%d @ skip same reg\n", reg, size);
-				} else if(rreg == 0xFF) {
-					emit("\t%s  r0, [r2], #4\n", ldx);
-					emit("\t%s  r0, [" CPU ", #%d]\n", stx, reg * 4);
-				} else {
-					emit("\t%s  r%d, [r2], #4\n", ldx, rreg );
-				}
+		static bool wrote_movem_word = 0;
+		static bool wrote_movem_long = 0;
+		if(size == 2) {
+			if(wrote_movem_word) {
+				emit("\tb       movem_word_m2r\n");
+				return lines | EXT_WORD_SRC_16B | NO_BX_LR;
 			}
-			if(size == 2) wrote_movem_m2r_word = true;
-			if(size == 4) wrote_movem_m2r_long = true;
+			wrote_movem_word = 1;
+			ldx = "ldrhcs"; stx = "strh  ";
+		} else {
+			if(wrote_movem_long) {
+				emit("\tb       movem_long_m2r\n");
+				return lines | EXT_WORD_SRC_16B | NO_BX_LR;
+			}
+			wrote_movem_long = 1;
+			ldx = "ldrcs "; stx = "str   ";
 		}
+		// copy memory into CPU register struct
+		// r0 = temp
+		// r1 = mask
+		// r2, r6-r13 = register memory address
+		// r3 = CPU state address
+		emit("movem_%s_m2r:\n", (size == 4) ? "long" : "word");
+        emit("    stm     r5!, {r3-r4}  ;@ save d0,d1\n");
+		emit("    add     r3, r5, #32\n");
+		emit("    stm     r3!, {r6-r13} ;@ save a0-a7\n");
+		if(size == 2) emit("    add     r3, r5, #2\n");
+		emit("    cmp     r1, #0\n");
+		emit("0:  beq     1f\n");
+		emit("    lsrs    r1, r1, #1\n");
+		emit("    %s  r0, [r%d], #%d\n", ldx, sRR, size);
+		emit("    %s  r0, [r3], #4\n", stx);
+		emit("    b       0b\n");
+		emit("1:  ldm     r5!, {r3,r4}  ;@ restore d0,d1\n");
+		emit("    add     r2, r5, #32\n");
+		emit("    ldm     r2!, {r6-r13} ;@ restore a0-a7\n");
+
 	} else {
 		// register-list to memory, normal reg list D0-D7, A0-A7
 		// address register remains unchanged
-		static bool wrote_movem_r2m_word = false;
-		static bool wrote_movem_r2m_long = false;
-
-		if((wrote_movem_r2m_word && size == 2) || (wrote_movem_r2m_long && size == 4)) {
-			emit("\tb       movem_r2m_%s\n", (size == 2) ? "word" : "long");
-			
-		} else {
-			emit("movem_r2m_%s:\n", (size == 2) ? "word" : "long");
-			for(uint16_t mask = 0x8000, reg = 0; mask; mask >>= 1, reg++) {
-				emit("\ttst     r1, #0x%04hX\n", mask);
-				uint8_t rreg = reg_raw(reg);
-				if(reg == sR) {
-					emit("\tadd     r%d, #%d @ skip same reg\n", reg, size);
-				} else if(rreg == 0xFF) {
-					emit("\t%s  r0, [" CPU ", #%d]\n", ldx, reg * 4);
-					emit("\t%s  r0, [r2], #4\n", stx);
-				} else {
-					emit("\t%s  r%d, [r2], #4\n", stx, rreg );
-				}
+		static bool wrote_movem_word = 0;
+		static bool wrote_movem_long = 0;
+		if(size == 2) {
+			if(wrote_movem_word) {
+				emit("\tb       movem_word_r2m\n");
+				return lines | EXT_WORD_SRC_16B | NO_BX_LR;
 			}
-			if(size == 2) wrote_movem_r2m_word = true;
-			if(size == 4) wrote_movem_r2m_long = true;
+			wrote_movem_word = 1;
+			ldx = "ldrh  "; stx = "strhcs";
+		} else {
+			if(wrote_movem_long) {
+				emit("\tb       movem_long_r2m\n");
+				return lines | EXT_WORD_SRC_16B | NO_BX_LR;
+			}
+			wrote_movem_long = 1;
+			ldx = "ldr   "; stx = "strcs ";
 		}
+		// copy memory into CPU register struct
+		// r0 = temp
+		// r1 = mask
+		// r2, r6-r13 = register memory address
+		// r3 = CPU state address
+		emit("movem_%s_r2m:\n", (size == 4) ? "long" : "word");
+        emit("    stm     r5!, {r3-r4}  ;@ save d0,d1\n");
+		emit("    add     r3, r5, #32\n");
+		emit("    stm     r3!, {r6-r13} ;@ save a0-a7\n");
+		if(size == 2) emit("    add     r3, r5, #2\n");
+		emit("    cmp     r1, #0\n");
+		emit("0:  beq     1f\n");
+		emit("    lsrs    r1, r1, #1\n");
+		emit("    %s  r0, [r3], #4\n", stx);
+		emit("    %s  r0, [r%d], #%d\n", ldx, sRR, size);
+		emit("    b       0b\n");
+		emit("1:  ldm     r5!, {r3,r4}  ;@ restore d0,d1\n");
+		emit("    add     r2, r5, #32\n");
+		emit("    ldm     r2!, {r6-r13} ;@ restore a0-a7\n");
+
 	}
 
 	reg_flush();

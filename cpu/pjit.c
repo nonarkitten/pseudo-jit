@@ -366,11 +366,47 @@ __attribute__((naked)) void cpu_lookup_nojit(void) {
     asm("bx\t%0" :: "r"(out));
 }
 
-/*  These are place holders for now, this code should be part of the handler. */
-void cpu_jump(uint32_t m68k_pc) {}
-void cpu_subroutine(uint32_t _lr, uint32_t new_m68k_pc) {}
-void relative_branch(uint32_t _lr, int32_t offset) {}
-void branch_subroutine(uint32_t _lr, int32_t offset) {}
+__attribute__((naked))
+void cpu_jump(uint32_t m68k_pc) {
+	register uint32_t *out asm("lr");
+    // save_cpu();
+    out = cache_find_entry(m68k_pc);
+    // restore_cpu();
+    asm("bx\t%0" :: "r"(out));
+}
+
+__attribute__((naked))
+void cpu_subroutine(uint32_t m68k_pc) {
+	register uint32_t *out asm("lr");
+    uint16_t *pc = (uint16_t*)cache_reverse((uint32_t)(out - 1));
+    asm("str\t%0, [sp, #-4]!" :: "r"(pc));
+    // save_cpu();
+    out = cache_find_entry(m68k_pc);
+    // restore_cpu();
+    asm("bx\t%0" :: "r"(out));
+}
+
+__attribute__((naked))
+void branch_normal(uint32_t nothing, int32_t offset) {
+	register uint32_t *out asm("lr");
+    uint32_t m68k_pc = offset + cache_reverse((uint32_t)(out - 1));
+    // save_cpu();
+    out = cache_find_entry(m68k_pc);
+    // restore_cpu();
+    asm("bx\t%0" :: "r"(out));
+}
+
+__attribute__((naked))
+void branch_subroutine(uint32_t nothing, int32_t offset) {
+	register uint32_t *out asm("lr");
+    uint32_t m68k_pc = cache_reverse((uint32_t)(out - 1));
+    asm("str\t%0, [sp, #-4]!" :: "r"(m68k_pc));
+    m68k_pc += offset;
+    // save_cpu();
+    out = cache_find_entry(m68k_pc);
+    // restore_cpu();
+    asm("bx\t%0" :: "r"(out));
+}
 
 /*  Start PJIT */
 void cpu_start(void* base) {

@@ -10,7 +10,7 @@
 // source is always 16 or 32-bit immediate
 // for destination, register-direct, pc-relative and immediate is not allowed
 
-int emit_alu(char *buffer, uint16_t size, uint16_t sEA, uint16_t dEA, ALU_OP_t alu_op) {
+static int emit_alu(char *buffer, uint16_t size, uint16_t sEA, uint16_t dEA, ALU_OP_t alu_op) {
 	uint8_t dR, dRR, sR, sRR, tRR;
 
 	if(size == 3 || size > 4) return -1;
@@ -38,18 +38,7 @@ int emit_alu(char *buffer, uint16_t size, uint16_t sEA, uint16_t dEA, ALU_OP_t a
 			// eor.bwl	dn,dn		clr.bwl		dn
 			return -(0x4200 | ((size / 2) << 6) | dR);
 		}
-
 	}
-	
-	// Guard standard aliasing of addressing modes -- this is an error
-	// Source PC-Relative should be in R1 as an absolute
-	// Both ABS.W and ABS.L should also be in R1 as an absolute
-	// And finally, indexed and displacement are the same modes
-	//if((sEA == EA_ABSW) || (sEA == EA_ADIS) || (sEA == EA_PDIS) || (sEA == EA_PIDX)) return -1;
-	//printf("@ %d\n", __LINE__);
-	// Destination PC modes are already illegal, but R2
-	//if((dEA == EA_ABSW) || (dEA == EA_ADIS)) return -1;
-	//printf("@ %d\n", __LINE__);
 	
 	char flags = (dEA == EA_AREG) ? ' ' : 's';
 
@@ -96,9 +85,11 @@ static int emit_immd(char *buffer, uint16_t opcode, ALU_OP_t op) {
 	
 	// no address register here
 	if((dEA & 0x38) == 0x08) return -1;
+
 	// standard substitutions
 	if(dEA == 0x39) return -(opcode & 0xFFF8); // change EA_ABSL to EA_ABSW
 	if((dEA & 0x38) == 0x28) return -(opcode ^ 0x0018); // change to EA_AIDX
+
 	uint16_t size = 1 << ((opcode & 0x00C0) >> 6);
 	return emit_alu(buffer, size, sEA, dEA, op);
 }
@@ -136,8 +127,9 @@ static int emit_ea(char *buffer, uint16_t opcode, ALU_OP_t alu_op) {
 		if((size == 1) && (sEA & 0x38) == 0x08) return -1;
 
 		// standard substitutions
-		if(sEA == 0x39) return -(opcode & 0xFFF8); // change EA_ABSL to EA_ABSW
-		if((sEA & 0x38) == 0x28) return -(opcode ^ 0x0018); // change to EA_AIDX
+		if((sEA & 0x38) == 0x28) return -(opcode ^ 0x0018); // change EA_ADIS to EA_AIDX
+		if((sEA > 0x38) && (sEA < 0x3C)) return -(opcode & 0xFFF8); // change to EA_ABSW
+
  		if((sEA == 0x3C) && (opcode != 0x803C) && (opcode != 0x823C)) {
  			if(debug) printf("@ alu -> alui optimization\n");
  			// or  -> ori 
@@ -162,6 +154,7 @@ static int emit_ea(char *buffer, uint16_t opcode, ALU_OP_t alu_op) {
 		
 		if(debug) printf("@ R = R op EA (%04hX)\n", (uint16_t)(opcode & 0x0100));
 	} else {
+		// r2m
 		sEA = (opcode & 0x0E00) >> 9;	
 		dEA = (opcode & 0x003F) >> 0;
 		// no registers of ANY kind here
@@ -201,7 +194,7 @@ static int emit_addr(char *buffer, uint16_t opcode, ALU_OP_t alu_op) {
 	uint16_t dEA = 0x08 | ((opcode & 0xE00) >> 9);
 	
 	// standard substitutions
-	if(sEA == 0x39) return -(opcode & 0xFFF8); // change EA_ABSL to EA_ABSW
+	if((sEA > 0x38) && (sEA < 0x3C)) return -(opcode & 0xFFF8); // change to EA_ABSW
 	if((sEA & 0x38) == 0x28) return -(opcode ^ 0x0018); // change to EA_AIDX
 	
 	uint16_t size = (opcode & 0x0100) ? 4 : 2;

@@ -3,19 +3,23 @@
 #include "m68k_emit_ea.h"
 #include "m68k_registers.h"
 
-void emit_get_cpsr(void) {	
+void emit_get_cpsr(int update_flags) {	
 	// get flags and conver them to 68K
-	emit("\tmrs     r0, CPSR\n");
-	emit("\tadd     r0, " CPU ", r0, lsr #28\n");	
-	emit("\tldrb    r0, [r0, %d]\n", offsetof(cpu_t, arm2cc));
-	
+	if(update_flags) {
+		emit("\tmrs     r0, CPSR\n");
+		emit("\tadd     r0, " CPU ", r0, lsr #28\n");	
+		emit("\tldrb    r0, [r0, #%d]\n", offsetof(cpu_t, arm2cc));
+	}
+
 	// load the sr_ccr and replace the low bytes
 	emit("\tldrh    r2, [" CPU ", #%d]\n", offsetof(cpu_t, sr));
-	emit("\tbfi     r2, r0, #0, #4\n");
 
-	// load X
-	// emit("\tldr     r0, [" CPU ", #%d]\n", offsetof(cpu_t, x));
-	// emit("\tbfi     r2, r0, #4, #1\n");
+	if(update_flags) {
+		emit("\tbfi     r2, r0, #0, #4\n");
+		// load X
+		// emit("\tldr     r0, [" CPU ", #%d]\n", offsetof(cpu_t, x));
+		// emit("\tbfi     r2, r0, #4, #1\n");
+	}
 }
 
 void emit_save_cpsr(void) {
@@ -37,7 +41,7 @@ int emit_ORI_TO_CCR(char *buffer, uint16_t opcode) {
 	lines = 0;
 	emit_reset( buffer );	
 
-	emit_get_cpsr();
+	emit_get_cpsr(1);
 	
 	// or the low 8-bits of our immediate
 	emit("\tuxtb    r1, r1\n");
@@ -51,7 +55,7 @@ int emit_ORI_TO_SR(char *buffer, uint16_t opcode) {
 	lines = 0;
 	emit_reset( buffer );	
 
-	emit_get_cpsr();
+	emit_get_cpsr(1);
 	
 	// are we in supervisor mode?
 	emit("\ttst     r2, #0x4000\n");
@@ -69,7 +73,7 @@ int emit_ANDI_TO_CCR(char *buffer, uint16_t opcode) {
 	lines = 0;
 	emit_reset( buffer );	
 
-	emit_get_cpsr();
+	emit_get_cpsr(1);
 	
 	// and the low 8-bits of our immediate
 	emit("\tuxtb    r1, r1\n");
@@ -83,7 +87,7 @@ int emit_ANDI_TO_SR(char *buffer, uint16_t opcode) {
 	lines = 0;
 	emit_reset( buffer );	
 
-	emit_get_cpsr();
+	emit_get_cpsr(1);
 	
 	// are we in supervisor mode?
 	emit("\ttst     r2, #0x4000\n");
@@ -101,7 +105,7 @@ int emit_EORI_TO_CCR(char *buffer, uint16_t opcode) {
 	lines = 0;
 	emit_reset( buffer );	
 
-	emit_get_cpsr();
+	emit_get_cpsr(1);
 	
 	// or the low 8-bits of our immediate
 	emit("\tuxtb    r1, r1\n");
@@ -115,7 +119,7 @@ int emit_EORI_TO_SR(char *buffer, uint16_t opcode) {
 	lines = 0;
 	emit_reset( buffer );	
 
-	emit_get_cpsr();
+	emit_get_cpsr(1);
 	
 	// are we in supervisor mode?
 	emit("\ttst     r2, #0x4000\n");
@@ -144,7 +148,7 @@ int emit_MOVE_FROM_SR(char *buffer, uint16_t opcode) {
 	else if(dEA >  EA_ABSW)	return -(opcode & 0xFFF8); // change to EA_ABSL
 	else if(dEA == EA_ADIS) return -(opcode ^ 0x0018); // change to EA_AIDX
 
-	emit_get_cpsr(); // cpsr is in r2
+	emit_get_cpsr(1); // cpsr is in r2
 	reg_alloc_arm(2);
 
 	get_destination_data( &dRR, NULL, dEA, dR, size );
@@ -168,21 +172,46 @@ static int emit_move_to(char *buffer, uint16_t opcode, int whole_sr) {
 	else if(sEA >  EA_ABSW)	return -(opcode & 0xFFF8); // change to EA_ABSW
 	else if(sEA == EA_ADIS) return -(opcode ^ 0x0018); // change to EA_AIDX
 	
-	emit_get_cpsr(); // cpsr is in r2
-	reg_alloc_arm(2);
+	reg_alloc_arm(0); // r0 gets trashed
 	
+	// This should leave our data in r1
+	if(get_source_data( &sRR, sEA, sR, size ) == 0) {
+		printf("@ problem opcode %04hX\n", opcode);
+	}
+
+	if(whole_sr) {
+		static int emitted = 0;
+		if(emitted) {
+			emit("\tb       move_to_sr\n");
+			reg_flush();
+			return lines | NO_BX_LR;
+		} else {
+			emit("move_to_sr:\n");
+			emitted = 1;
+		}
+	} else {
+		static int emitted = 0;
+		if(emitted) {
+			emit("\tb       move_to_cr\n");
+			reg_flush();
+			return lines | NO_BX_LR;
+		} else {
+			emit("move_to_cr:\n");
+			emitted = 1;
+		}
+	}
+
+	reg_alloc_arm(2); // r2 is returned
+	emit_get_cpsr(1); // cpsr is in r2
+	reg_free(0);
+
 	// are we in supervisor mode?
 	if(whole_sr) {
 		emit("\ttst     r2, #0x4000\n");
 		emit("\tsvcne   #%d\n", PRIV);
 	}
-	
-	if(get_source_data( &sRR, sEA, sR, size ) == 0) {
-		printf("@ problem opcode %04hX\n", opcode);
-	}
-	
+
 	emit("\tbfi     r2, r%d, #0, #%d\n", sRR, (whole_sr ? 16 : 8));
-	
 	emit_save_cpsr();
 	
 	// everything's done, let's return and free all the registers
@@ -205,7 +234,7 @@ int emit_MOVE_USP(char *buffer, uint16_t opcode) {
 	lines = 0;
 	emit_reset( buffer );	
 
-	emit_get_cpsr(); // cpsr is in r2
+	emit_get_cpsr(0); // cpsr is in r2
 	emit("\ttst     r2, #0x4000\n");
 	emit("\tsvcne   #%d\n", PRIV);
 

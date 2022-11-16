@@ -405,10 +405,10 @@ try_again:
 			
 			// print out all the aliases for this
 			if(opcode_len[opcode] > 0) {
-				char *op = "\tnop\n";
 				int len = opcode_len[opcode] & 0xFF;
-				if(len > 0) op = opcodes[opcode];
+				if(len < 0) continue;
 
+				char *op = (len > 0) ? opcodes[opcode] : "\tnop\n";
 				fprintf(file, "\t.global opcode_%04hX\n", opcode);
 				fprintf(file, "\t.syntax unified\n");
 				fprintf(file, "\t@ %s\n", m68k_op);
@@ -433,6 +433,9 @@ try_again:
 	// Emit the op lengths
 	{
 		char filename[16];
+		int max_len = 0;
+		uint16_t longest_op = 0;
+
 		sprintf(filename, "pjit_oplen.s");
 		FILE * file = fopen( filename, "w" );
 
@@ -450,11 +453,14 @@ try_again:
 			char sepr = (i & 7) ? ',' : ' ';
 			
 			int len = opcode_len[i];
+			
 			if (len < 0) len = opcode_len[-len];
+			else if((len & 0xFF) > max_len) max_len = (len & 0xFF), longest_op = i;
 			fprintf(file, "%c 0x%04hX", sepr, (uint16_t)len);
 		}
 		
 		fprintf(file, "\n\n");
+		fprintf(stderr, "Longest opcode: %d (%04X)\n", max_len, longest_op);
 
 		fclose(file);
 	}

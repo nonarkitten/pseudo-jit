@@ -120,21 +120,20 @@ int emit_jump(char *buffer, uint16_t opcode, int jsr) {
 	lines = 0;
 	emit_reset( buffer );	
 
-	if(jsr) {
-        emit("\tsub     r3, lr, #4\n");
-        emit("\tldr     r0, [" CPU ", #%d]\n", offsetof(cpu_t, m68k_page));
-        emit("\tubfx    r3, r3, #1, #12\n");
-        emit("\torr     r0, r3, r0\n");
-		emit("\tstr     r0, [r11, #-4]!\n");
-	}
+	// if(jsr) {
+    //     emit("\tsub     r3, lr, #4\n");
+    //     emit("\tldr     r0, [" CPU ", #%d]\n", offsetof(cpu_t, m68k_page));
+    //     emit("\tubfx    r3, r3, #1, #12\n");
+    //     emit("\torr     r0, r3, r0\n");
+	// 	emit("\tstr     r0, [r11, #-4]!\n");
+	// }
 
 	get_source_data( &sRR, sEA, sR, 4 );
 	if(sRR != 0) emit("\tmov     r0, r%d\n", sRR);
 	reg_free( sRR );
 
-    //if(jsr) emit("\tb       cpu_subroutine\n");
-	//else 
-	emit("\tb       cpu_jump\n");
+    if(jsr) emit("\tb       cpu_subroutine\n");
+	else emit("\tb       cpu_jump\n");
 
 	return lines_ext(lines, sEA, 0, 4) | NO_BX_LR;	
 }

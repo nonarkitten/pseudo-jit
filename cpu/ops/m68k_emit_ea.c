@@ -73,13 +73,13 @@ static int emit_fetch_ea_data( uint8_t* dRR, uint8_t* sRR, uint16_t sEA, uint8_t
 	case EA_ADEC: // -(Ax)
 		if(sRR && (reg_alloc_temp( sRR ) == ALLOC_FAILED)) return 0;
 		if(emit_get_reg( dRR, sR, 4 ) == ALLOC_FAILED) return 0;
-		emit("\tsub     r%d , r%d, #%d @ pre-dec\n", *dRR, *dRR, size);
+		emit("\tsub     r%d, r%d, #%d @ pre-dec\n", *dRR, *dRR, size);
 		break;
 
 	case EA_ADIS: case EA_AIDX:
 		if(sRR && (reg_alloc_temp( sRR ) == ALLOC_FAILED)) return 0;
 		if(emit_get_reg( dRR, sR, 4 ) == ALLOC_FAILED) return 0;
-		emit("\tadd     r%d , r%d, r%d\n", (is_src ? 1 : 2), (is_src ? 1 : 2), *dRR);
+		emit("\tadd     r%d, r%d, r%d\n", (is_src ? 1 : 2), (is_src ? 1 : 2), *dRR);
 		reg_modified(*dRR); reg_free(*dRR);
 		*dRR = is_src ? 1 : 2;
 		// assume PJIT eors index
@@ -141,7 +141,7 @@ static int emit_fetch_ea_data( uint8_t* dRR, uint8_t* sRR, uint16_t sEA, uint8_t
 	}
 
 	if(sEA == EA_AINC) {
-		emit("\tadd     r%d , r%d, #%d @ post-inc\n", oRR, oRR, size);
+		emit("\tadd     r%d, r%d, #%d @ post-inc\n", oRR, oRR, size);
 	}
 
 	// load the data
@@ -150,7 +150,7 @@ static int emit_fetch_ea_data( uint8_t* dRR, uint8_t* sRR, uint16_t sEA, uint8_t
 		emit("\t%s   r%d, [r%d]\n", ldx(size), *sRR, *dRR);
 		// if we're long, swap words
 #ifndef __PJIT_BIG_ENDIAN
-		if(size == 4) emit("\tror     r%d , r%d, #16\n", *sRR, *sRR);
+		if(size == 4) emit("\tror     r%d, r%d, #16\n", *sRR, *sRR);
 #endif
 	}
 	

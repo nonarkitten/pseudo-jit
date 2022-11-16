@@ -45,8 +45,7 @@ int emit_ADDQ(char *buffer, uint16_t opcode) {
 	
 	if(dEA == EA_AREG) {
 		if(opcode & 0x0100) { // subq
-			emit("\trsb     r%d, r%d, #%d\n", tRR, tRR, val);		
-			emit("\trsb     r%d, #0\n", tRR);
+			emit("\tsub     r%d, r%d, #%d\n", tRR, tRR, val);		
 
 		} else { // addq
 			emit("\tadd     r%d, r%d, #%d\n", tRR, tRR, val);		

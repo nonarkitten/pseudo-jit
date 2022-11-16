@@ -35,15 +35,23 @@ static int emit_add_sub_x(char *buffer, uint16_t opcode, int is_sub) {
 	
 	get_x_flag(is_sub); // put X into the C flag
 
-	get_source_data( &sRR, EA, sR, size );
+	if(sR != dR) get_source_data( &sRR, EA, sR, size );
 	//reg_alloc_temp( &tRR );
 	get_destination_data( &dRR, &tRR, EA, dR, size );
 
 	if(is_sub) {
-		emit("\trscs    r%d, r%d, r%d\n", tRR, tRR, sRR);	
-		emit("\trsb     r%d, #0\n", tRR);	
+		if(sR == dR) {
+			emit("\tmovs    r%d, #0\n", tRR);
+		} else {
+			emit("\trscs    r%d, r%d, r%d\n", tRR, tRR, sRR);	
+			emit("\trsb     r%d, #0\n", tRR);	
+		}
 	} else {
-		emit("\tadcs    r%d, r%d, r%d\n", tRR, tRR, sRR);	
+		if(sR == dR) {
+			emit("\tadcs    r%d, r%d, r%d\n", tRR, tRR, tRR);
+		} else {
+			emit("\tadcs    r%d, r%d, r%d\n", tRR, tRR, sRR);
+		}
 	}
 		
 	set_destination_data( &dRR, &tRR, EA, size );	
