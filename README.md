@@ -10,20 +10,6 @@ Please visit [the Wiki](https://github.com/nonarkitten/pseudo-jit/wiki) for more
 
 ## Building
 
-Download a copy of Code Composer Studio 10 (this might be buildable with GCC directly, but I'm not bothering with that right now). Git clone this into your workspace and then import it. You should be able to compile and debug from there.
+We've moved to using Visual Studio Code -- a totally cross-platform development environment that's been working great on my Mac. Code Composer Studio was just too much to fight with. To use, simple grab a copy of Visual Studio Code and install the cortex-debug extension and JLINK software from SEGGER. I've included my .vscode/launch.json in the project which should "just work."
 
-### Building PJIT Opcodes
-
-This is how I did it -- there are many different paths to Nirvana here.
-1. Enable Windows Subsystem for Linux (Turn Windows features on or off)
-2. Download Ubuntu 18.04 LTS https://aka.ms/wsl-ubuntu-1804 and install it
-3. If you want to make your life super easy, install:
-    - VS Code (https://code.visualstudio.com/)
-    - WSL Remote extension (https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-wsl) 
-4. Run Ubuntu and install the build-essentials: ```sudo apt install build-essential```
-5. Go into the generator folder, e.g., ```cd /mnt/d/Workspaces/CCS10/pjit-private/cpu/ops```
-6. And build, ```make -j16```
-
-## Building PJIT
-
-Once the opcodes are generated, then you'll be able to build PJIT and run it on Buffee.
+To build, open the shell and type "make." I'm not 100% this works on Windows anymore, but it should on Linux and Mac. This is now a one-step make that will build everything required and spit out the binary at the end.
