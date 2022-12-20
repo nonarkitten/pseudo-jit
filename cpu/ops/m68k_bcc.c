@@ -49,6 +49,9 @@ int emit_SCC(char *buffer, uint16_t opcode) {
 	} else if(cc == 1) {
 		emit("\tmov     r%d, #0\n", tRR);
 	} else {
+		if((cc == 2) || (cc == 3)) {
+			emit("\trsc     r0, r0, #0\n"); // flip C
+		}
 		emit("\tmov%s   r%d, #0xFF\n", arm_cc[cc], tRR);
 		emit("\tmov%s   r%d, #0\n", arm_cc[cc ^ 1], tRR);
 	}
@@ -77,27 +80,9 @@ int emit_DBCC(char *buffer, uint16_t opcode) {
 		emit("\t.extern branch_normal\n");
 	}
 	
-	//if(cc > 1) emit("\tbx%s    lr\n", arm_cc[cc]);
-	if(cc == 2) { // bhi
-		// 68K : /C & /Z
-		emit("\tbxcc    lr\n");
-		emit("\tbxne    lr\n");
-
-	} else if(cc == 3) { // bls
-		// 68K : C | Z
-		emit("\tbcc     0f\n");
-		emit("\tbxeq    lr\n");
-		emit("0:\n");
-
-	} else if(cc > 3) {
-		emit("\tbx%s    lr\n", arm_cc[cc]);
-
-	}
-	
 	reg_alloc_arm(1); // our offset
 	reg_alloc_temp(&tRR);
 
-	emit("\tmrs     r%d, CPSR\n", tRR);
 	
 	// determine our destination real register
 	if(!emit_get_reg( &dRR, dR, 2 )) return -1;
@@ -107,6 +92,7 @@ int emit_DBCC(char *buffer, uint16_t opcode) {
 	reg_flush();
 	
 	// skip if negative one
+	emit("\tmrs     r%d, CPSR\n", tRR);
 	emit("\tcmp     r%d, #-1\n", dRR);
 	emit("\tbne     0f\n");
 	emit("\tmsr     CPSR_fc, r%d\n", tRR);
@@ -114,7 +100,14 @@ int emit_DBCC(char *buffer, uint16_t opcode) {
 
 	// otherwise branch normally
 	emit("0:  msr     CPSR_fc, r%d\n", tRR);
-	emit("\tb       branch_normal\n");
+
+	// Between ARM and 68K, C is inverted
+	// 68K HI /C & /Z    ARM HI C & /Z
+	// 68K LS  C |  Z    ARM LS /C | Z
+	if((cc == 2) || (cc == 3)) {
+		emit("\trsc     r0, r0, #0\n"); // flip C
+	}
+	emit("\tb%s     branch_normal\n", arm_cc[cc]);
 
 	return lines | NO_BX_LR;
 }
@@ -129,21 +122,6 @@ int emit_BCC(char *buffer, uint16_t opcode) {
 	emit_reset( buffer );
 
 	int cc = (opcode & 0x0F00) >> 8;
-	if(cc == 2) { // bhi
-		// 68K : /C & /Z
-		emit("\tbcc     0f\n");
-		emit("\tbxeq    lr\n");
-		emit("0:\n");
-
-	} else if(cc == 3) { // bls
-		// 68K : C | Z
-		emit("\tbxcc    lr\n");
-		emit("\tbxne    lr\n");
-
-	} else if(cc > 3) {
-		emit("\tbx%s    lr\n", arm_cc[cc ^ 1]);
-
-	}
 
 	int8_t d = (int8_t)(opcode & 0xff);
 	if((d == 0) || ((uint8_t)d == 0xFF)) { /* long branch already in r1 */ }
@@ -159,8 +137,12 @@ int emit_BCC(char *buffer, uint16_t opcode) {
 	else if(d > 0) emit("\tmov     r1, #0x%02x\n", d);
 	else if(d < 0) emit("\tmvn     r1, #0x%02x\n", (uint8_t)(-d));	
 	
-	if(cc == 1) emit("\tb       branch_subroutine\n");
-	else emit("\tb       branch_normal\n");
+	if((cc == 2) || (cc == 3)) {
+		emit("\trsc     r0, r0, #0\n"); // flip C
+	}
+
+	if(cc == 1) emit("\tb%s     branch_subroutine\n", arm_cc[cc ^ 1]);
+	else emit("\tb%s     branch_normal\n", arm_cc[cc ^ 1]);
 	
 	return lines | NO_BX_LR;
 }
