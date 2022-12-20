@@ -73,13 +73,13 @@ static int emit_fetch_ea_data( uint8_t* dRR, uint8_t* sRR, uint16_t sEA, uint8_t
 	case EA_ADEC: // -(Ax)
 		if(sRR && (reg_alloc_temp( sRR ) == ALLOC_FAILED)) return 0;
 		if(emit_get_reg( dRR, sR, 4 ) == ALLOC_FAILED) return 0;
-		emit("\tsub     r%d, r%d, #%d @ pre-dec\n", *dRR, *dRR, size);
+		if(!sRR) emit("\tsub     r%d, r%d, #%d @ pre-dec\n", *dRR, *dRR, size);
 		break;
 
 	case EA_ADIS: case EA_AIDX:
 		if(sRR && (reg_alloc_temp( sRR ) == ALLOC_FAILED)) return 0;
 		if(emit_get_reg( dRR, sR, 4 ) == ALLOC_FAILED) return 0;
-		emit("\tadd     r%d, r%d, r%d\n", (is_src ? 1 : 2), (is_src ? 1 : 2), *dRR);
+		if(!sRR) emit("\tadd     r%d, r%d, r%d\n", (is_src ? 1 : 2), (is_src ? 1 : 2), *dRR);
 		reg_modified(*dRR); reg_free(*dRR);
 		*dRR = is_src ? 1 : 2;
 		// assume PJIT eors index
@@ -140,14 +140,23 @@ static int emit_fetch_ea_data( uint8_t* dRR, uint8_t* sRR, uint16_t sEA, uint8_t
 		}
 	}
 
-	if(sEA == EA_AINC) {
+	if(!(sRR) && (sEA == EA_AINC)) {
 		emit("\tadd     r%d, r%d, #%d @ post-inc\n", oRR, oRR, size);
 	}
 
 	// load the data
 	if(sRR) {
-		//if(/*is_src &&*/ reg_alloc_temp( sRR ) == ALLOC_FAILED) return 0;
-		emit("\t%s   r%d, [r%d]\n", ldx(size), *sRR, *dRR);
+		char ea[16];
+		if(sEA == EA_AINC) {
+			sprintf(ea, "[r%d], #%d", *dRR, size);
+		} else if(sEA == EA_ADEC) { 
+			sprintf(ea, "[r%d, #-%d]", *dRR, size);
+		} else if(sEA == EA_ADIS || sEA == EA_AIDX) {
+			sprintf(ea, "[r%d, r2]", *dRR);
+		} else {
+			sprintf(ea, "[r2]");
+		}
+		emit("\t%s   r%d, %s\n", ldx(size), *sRR, ea);
 		// if we're long, swap words
 #ifndef __PJIT_BIG_ENDIAN
 		if(size == 4) emit("\tror     r%d, r%d, #16\n", *sRR, *sRR);
@@ -157,21 +166,6 @@ static int emit_fetch_ea_data( uint8_t* dRR, uint8_t* sRR, uint16_t sEA, uint8_t
 	if(is_src) reg_free(*dRR);
 	return 1;
 }
-// baseline
-// line average: 5.658190
-// adding OR to each 24-bit memory access:
-// line average: 6.430614 (13.65% slower)
-// removing 24-bit address filter entirely:
-// line average: 4.890251 (13.57% faster)
-// all registers in ARM registers:
-// line average: 4.648176 (4.95% faster)
-// no registers in ARM registers (except A7)
-// line average: 6.019260 (23.09% slower)
-// just data register in ARM registers
-// line average: 5.691180 (16.38% slower)
-// no endian handling
-// line average: 4.401896 (10% faster)
-
 
 int get_source_data( uint8_t* sRR, uint16_t sEA, uint8_t sR, uint16_t size ) {
 	uint8_t dRR; // scratch, don't care
