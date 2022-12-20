@@ -4,693 +4,597 @@
 #include <string.h>
 #include <stdlib.h>
 
-const char* opcodes[] = {
-    "000000000x000xxx ORI.BW #,%E",
-    "000000000x01xxxx ORI.BW #,%E",
-    "000000000x10xxxx ORI.BW #,%E",
-    "000000000x110xxx ORI.BW #,%E",
-    "000000000x11100x ORI.BW #,%E",
-    "0000000000111100 ORI to CCR",
-    "0000000001111100 ORI to SR",
-    "0000000010000xxx ORI.L #,%E",
-    "000000001001xxxx ORI.L #,%E",
-    "000000001010xxxx ORI.L #,%E",
-    "0000000010110xxx ORI.L #,%E",
-    "000000001011100x ORI.L #,%E",    
-    
-    "000000100x000xxx ANDI.BW #,%E",
-    "000000100x01xxxx ANDI.BW #,%E",
-    "000000100x10xxxx ANDI.BW #,%E",
-    "000000100x110xxx ANDI.BW #,%E",
-    "000000100x11100x ANDI.BW #,%E",    
-    "0000001000111100 ANDI to CCR",
-    "0000001001111100 ANDI to SR",
-    "0000001010000xxx ANDI.L #,%E",
-    "000000101001xxxx ANDI.L #,%E",
-    "000000101010xxxx ANDI.L #,%E",
-    "0000001010110xxx ANDI.L #,%E",
-    "000000101011100x ANDI.L #,%E",    
+typedef struct {
+	uint16_t match, equal;
+    const char* op;
+} opcode_t;
 
-    "000001000x000xxx SUBI.BW #,%E",
-    "000001000x01xxxx SUBI.BW #,%E",
-    "000001000x10xxxx SUBI.BW #,%E",
-    "000001000x110xxx SUBI.BW #,%E",
-    "000001000x11100x SUBI.BW #,%E",
-    "0000010010000xxx SUBI.L #,%E",
-    "000001001001xxxx SUBI.L #,%E",
-    "000001001010xxxx SUBI.L #,%E",
-    "0000010010110xxx SUBI.L #,%E",
-    "000001001011100x SUBI.L #,%E",
-
-    "000001100x000xxx ADDI.BW #,%E",
-    "000001100x01xxxx ADDI.BW #,%E",
-    "000001100x10xxxx ADDI.BW #,%E",
-    "000001100x110xxx ADDI.BW #,%E",
-    "000001100x11100x ADDI.BW #,%E",
-    "0000011010000xxx ADDI.L #,%E",
-    "000001101001xxxx ADDI.L #,%E",
-    "000001101010xxxx ADDI.L #,%E",
-    "0000011010110xxx ADDI.L #,%E",
-    "000001101011100x ADDI.L #,%E",
-
-    "000010100x000xxx EORI.BW #,%E",
-    "000010100x01xxxx EORI.BW #,%E",
-    "000010100x10xxxx EORI.BW #,%E",
-    "000010100x110xxx EORI.BW #,%E",
-    "000010100x11100x EORI.BW #,%E",    
-    "0000101000111100 EORI to CCR",
-    "0000101001111100 EORI to SR",
-    "0000101010000xxx EORI.L #,%E",
-    "000010101001xxxx EORI.L #,%E",
-    "000010101010xxxx EORI.L #,%E",
-    "0000101010110xxx EORI.L #,%E",
-    "000010101011100x EORI.L #,%E",    
-    
-    "000011000x000xxx CMPI.BW #,%E",
-    "000011000x01xxxx CMPI.BW #,%E",
-    "000011000x10xxxx CMPI.BW #,%E",
-    "000011000x110xxx CMPI.BW #,%E",
-    "000011000x11100x CMPI.BW #,%E",
-    "0000110010000xxx CMPI.L #,%E",
-    "000011001001xxxx CMPI.L #,%E",
-    "000011001010xxxx CMPI.L #,%E",
-    "0000110010110xxx CMPI.L #,%E",
-    "000011001011100x CMPI.L #,%E",
-
-    "0000100000000xxx BCLR #,%E",
-    "000010000001xxxx BCLR #,%E",
-    "000010000010xxxx BCLR #,%E",
-    "0000100000110xxx BCLR #,%E",
-    "000010000011100x BCLR #,%E",
-    "0000xxx100000xxx BCLR D%N,%E",
-    "0000xxx10001xxxx BCLR D%N,%E",
-    "0000xxx10010xxxx BCLR D%N,%E",
-    "0000xxx100110xxx BCLR D%N,%E",
-    "0000xxx10011100x BCLR D%N,%E",
-
-    "0000100001000xxx BCHG #,%E",
-    "000010000101xxxx BCHG #,%E",
-    "000010000110xxxx BCHG #,%E",
-    "0000100001110xxx BCHG #,%E",
-    "000010000111100x BCHG #,%E",
-    "0000xxx101000xxx BCHG D%N,%E",
-    "0000xxx10101xxxx BCHG D%N,%E",
-    "0000xxx10110xxxx BCHG D%N,%E",
-    "0000xxx101110xxx BCHG D%N,%E",
-    "0000xxx10111100x BCHG D%N,%E",
-    
-    "0000100010000xxx BCLR #,%E",
-    "000010001001xxxx BCLR #,%E",
-    "000010001010xxxx BCLR #,%E",
-    "0000100010110xxx BCLR #,%E",
-    "000010001011100x BCLR #,%E",
-    "0000xxx110000xxx BCLR D%N,%E",
-    "0000xxx11001xxxx BCLR D%N,%E",
-    "0000xxx11010xxxx BCLR D%N,%E",
-    "0000xxx110110xxx BCLR D%N,%E",
-    "0000xxx11011100x BCLR D%N,%E",
-
-    "0000100011000xxx BSET #,%E",
-    "000010001101xxxx BSET #,%E",
-    "000010001110xxxx BSET #,%E",
-    "0000100011110xxx BSET #,%E",
-    "000010001111100x BSET #,%E",
-    "0000xxx111000xxx BSET D%N,%E",
-    "0000xxx11101xxxx BSET D%N,%E",
-    "0000xxx11110xxxx BSET D%N,%E",
-    "0000xxx111110xxx BSET D%N,%E",
-    "0000xxx11111100x BSET D%N,%E",
-    
-    "0000xxx10x001xxx MOVEP %E,D%N", //M->R
-    "0000xxx11x001xxx MOVEP D%N,%E", //R->M
-    
-    "0001xxx000000xxx MOVE.B %E,%E",
-    "0001xxx00001xxxx MOVE.B %E,%E",
-    "0001xxx00010xxxx MOVE.B %E,%E",
-    "0001xxx000110xxx MOVE.B %E,%E",
-    "0001xxx0001110xx MOVE.B %E,%E",
-    "0001xxx000111100 MOVE.B %E,%E",
-  
-    "0001xxx01x000xxx MOVE.B %E,%E", 
-    "0001xxx01x01xxxx MOVE.B %E,%E", 
-    "0001xxx01x10xxxx MOVE.B %E,%E",
-    "0001xxx01x110xxx MOVE.B %E,%E",
-    "0001xxx01x1110xx MOVE.B %E,%E",
-    "0001xxx01x111100 MOVE.B %E,%E",
-    
-    "0001xxx10x000xxx MOVE.B %E,%E",
-    "0001xxx10x01xxxx MOVE.B %E,%E",
-    "0001xxx10x10xxxx MOVE.B %E,%E",
-    "0001xxx10x110xxx MOVE.B %E,%E",
-    "0001xxx10x1110xx MOVE.B %E,%E",
-    "0001xxx10x111100 MOVE.B %E,%E",
-    
-    "0001xxx110000xxx MOVE.B %E,%E",
-    "0001xxx11001xxxx MOVE.B %E,%E",
-    "0001xxx11010xxxx MOVE.B %E,%E",
-    "0001xxx110110xxx MOVE.B %E,%E",
-    "0001xxx1101110xx MOVE.B %E,%E",
-    "0001xxx110111100 MOVE.B %E,%E",
-    
-    "000100x111000xxx MOVE.B %E,%E",    
-    "000100x11101xxxx MOVE.B %E,%E",    
-    "000100x11110xxxx MOVE.B %E,%E",
-    "000100x111110xxx MOVE.B %E,%E",    
-    "000100x1111110xx MOVE.B %E,%E",
-    "000100x111111100 MOVE.B %E,%E",
-
-    "0010xxx0000xxxxx MOVE.L %E,%E",
-    "0010xxx00010xxxx MOVE.L %E,%E",
-    "0010xxx000110xxx MOVE.L %E,%E",
-    "0010xxx0001110xx MOVE.L %E,%E",
-    "0010xxx000111100 MOVE.L %E,%E",
-    "0010xxx0010xxxxx MOVEA.L %E,%E",
-    "0010xxx00110xxxx MOVEA.L %E,%E",
-    "0010xxx001110xxx MOVEA.L %E,%E",
-    "0010xxx0011110xx MOVEA.L %E,%E",
-    "0010xxx001111100 MOVEA.L %E,%E",
-    "0010xxx01x0xxxxx MOVE.L %E,%E",
-    "0010xxx01x10xxxx MOVE.L %E,%E",
-    "0010xxx01x110xxx MOVE.L %E,%E",
-    "0010xxx01x1110xx MOVE.L %E,%E",
-    "0010xxx01x111100 MOVE.L %E,%E",
-    "0010xxx10x0xxxxx MOVE.L %E,%E",
-    "0010xxx10x10xxxx MOVE.L %E,%E",
-    "0010xxx10x110xxx MOVE.L %E,%E",
-    "0010xxx10x1110xx MOVE.L %E,%E",
-    "0010xxx10x111100 MOVE.L %E,%E",
-    "0010xxx1100xxxxx MOVE.L %E,%E",
-    "0010xxx11010xxxx MOVE.L %E,%E",
-    "0010xxx110110xxx MOVE.L %E,%E",
-    "0010xxx1101110xx MOVE.L %E,%E",
-    "0010xxx110111100 MOVE.L %E,%E",
-    "001000x1110xxxxx MOVE.L %E,%E",    
-    "001000x11110xxxx MOVE.L %E,%E",
-    "001000x111110xxx MOVE.L %E,%E",    
-    "001000x1111110xx MOVE.L %E,%E",
-    "001000x111111100 MOVE.L %E,%E",
-
-    "0011xxx0000xxxxx MOVE.W %E,%E",
-    "0011xxx00010xxxx MOVE.W %E,%E",
-    "0011xxx000110xxx MOVE.W %E,%E",
-    "0011xxx0001110xx MOVE.W %E,%E",
-    "0011xxx000111100 MOVE.W %E,%E",
-    "0011xxx0010xxxxx MOVEA.W %E,%E",
-    "0011xxx00110xxxx MOVEA.W %E,%E",
-    "0011xxx001110xxx MOVEA.W %E,%E",
-    "0011xxx0011110xx MOVEA.W %E,%E",
-    "0011xxx001111100 MOVEA.W %E,%E",
-    "0011xxx01x0xxxxx MOVE.W %E,%E",
-    "0011xxx01x10xxxx MOVE.W %E,%E",
-    "0011xxx01x110xxx MOVE.W %E,%E",
-    "0011xxx01x1110xx MOVE.W %E,%E",
-    "0011xxx01x111100 MOVE.W %E,%E",
-    "0011xxx10x0xxxxx MOVE.W %E,%E",
-    "0011xxx10x10xxxx MOVE.W %E,%E",
-    "0011xxx10x110xxx MOVE.W %E,%E",
-    "0011xxx10x1110xx MOVE.W %E,%E",
-    "0011xxx10x111100 MOVE.W %E,%E",
-    "0011xxx1100xxxxx MOVE.W %E,%E",
-    "0011xxx11010xxxx MOVE.W %E,%E",
-    "0011xxx110110xxx MOVE.W %E,%E",
-    "0011xxx1101110xx MOVE.W %E,%E",
-    "0011xxx110111100 MOVE.W %E,%E",
-    "001100x1110xxxxx MOVE.W %E,%E",    
-    "001100x11110xxxx MOVE.W %E,%E",
-    "001100x111110xxx MOVE.W %E,%E",
-    "001100x1111110xx MOVE.W %E,%E",
-    "001100x111111100 MOVE.W %E,%E",
-    
-    "0100000011000xxx MOVE SR,%E",
-    "010000001101xxxx MOVE SR,%E",
-    "010000001110xxxx MOVE SR,%E",
-    "0100000011110xxx MOVE SR,%E",
-    "010000001111100x MOVE SR,%E",
-
-    "0100010011000xxx MOVE %E,CCR",
-    "010001001101xxxx MOVE %E,CCR",
-    "010001001110xxxx MOVE %E,CCR",
-    "0100010011110xxx MOVE %E,CCR",
-	"01000100111110xx MOVE %E,CCR",
-	"0100010011111100 MOVE %E,CCR",
-    
-    "0100011011000xxx MOVE %E,SR",
-    "010001101101xxxx MOVE %E,SR",
-    "010001101110xxxx MOVE %E,SR",
-    "0100011011110xxx MOVE %E,SR",
-	"01000110111110xx MOVE %E,SR",
-	"0100011011111100 MOVE %E,SR",
-	
-    "010000000x000xxx NEGX.BW %E",
-    "010000000x01xxxx NEGX.BW %E",
-    "010000000x10xxxx NEGX.BW %E",
-    "010000000x110xxx NEGX.BW %E",
-    "010000000x11100x NEGX.BW %E",
-    "0100000010000xxx NEGX.L %E",
-    "010000001001xxxx NEGX.L %E",
-    "010000001010xxxx NEGX.L %E",
-    "0100000010110xxx NEGX.L %E",
-    "010000001011100x NEGX.L %E",    
-
-    "010000100x000xxx CLR.BW %E",
-    "010000100x01xxxx CLR.BW %E",
-    "010000100x10xxxx CLR.BW %E",
-    "010000100x110xxx CLR.BW %E",
-    "010000100x11100x CLR.BW %E",
-    "0100001010000xxx CLR.L %E",
-    "010000101001xxxx CLR.L %E",
-    "010000101010xxxx CLR.L %E",
-    "0100001010110xxx CLR.L %E",
-    "010000101011100x CLR.L %E",    
-
-    "010001000x000xxx NEG.BW %E",
-    "010001000x01xxxx NEG.BW %E",
-    "010001000x10xxxx NEG.BW %E",
-    "010001000x110xxx NEG.BW %E",
-    "010001000x11100x NEG.BW %E",
-    "0100010010000xxx NEG.L %E",
-    "010001001001xxxx NEG.L %E",
-    "010001001010xxxx NEG.L %E",
-    "0100010010110xxx NEG.L %E",
-    "010001001011100x NEG.L %E",    
-
-    "010001100x000xxx NOT.BW %E",
-    "010001100x01xxxx NOT.BW %E",
-    "010001100x10xxxx NOT.BW %E",
-    "010001100x110xxx NOT.BW %E",
-    "010001100x11100x NOT.BW %E",
-    "0100011010000xxx NOT.L %E",
-    "010001101001xxxx NOT.L %E",
-    "010001101010xxxx NOT.L %E",
-    "0100011010110xxx NOT.L %E",
-    "010001101011100x NOT.L %E", 
-
-    "0100100010000xxx EXT.W %E",
-    "0100100011000xxx EXT.L %E",
-
-    "0100100000000xxx NBCD #,%E",
-    "010010000001xxxx NBCD #,%E",
-    "010010000010xxxx NBCD #,%E",
-    "0100100000110xxx NBCD #,%E",
-    "010010000011100x NBCD #,%E",
-  
-    "0100100001000xxx SWAP %E",
-
-    "0100100001010xxx PEA %E",
-    "0100100001101xxx PEA %E",
-    "0100100001110xxx PEA %E",
-    "01001000011110xx PEA %E",
-  
-    "0100101011111100 ILLEGAL",
-
-    "0100101011000xxx TAS %E",
-    "010010101101xxxx TAS %E",
-    "010010101110xxxx TAS %E",
-    "0100101011110xxx TAS %E",
-    "010010101111100x TAS %E",
-  
-   //01001010ssmmmxxx
-   //        --       00,01,10 B W L
-    "010010100x000xxx TST.BW %E",
-    "010010100x01xxxx TST.BW %E",
-    "010010100x10xxxx TST.BW %E",
-    "010010100x110xxx TST.BW %E",
-    "010010100x11100x TST.BW %E",
-    "0100101010000xxx TST.L %E",
-    "010010101001xxxx TST.L %E",
-    "010010101010xxxx TST.L %E",
-    "0100101010110xxx TST.L %E",
-    "010010101011100x TST.L %E",
-  
-    "0100111001000xxx TRAP #%R",
-    "0100111001001000 TRAP #8",
-    "0100111001001001 TRAP #9",
-    "0100111001001010 TRAP #10",
-    "0100111001001011 TRAP #11",
-    "0100111001001100 TRAP #12",
-    "0100111001001101 TRAP #13",
-    "0100111001001110 TRAP #14",
-    "0100111001001111 TRAP #15",
-	
-    "0100111001010xxx LINK A%R",
-    "0100111001011xxx UNLK A%R",
-    "0100111001100xxx MOVE A%R,USP",
-    "0100111001101xxx MOVE USP,A%R",
-
-    "0100111001110000 RESET",
-    "0100111001110001 NOP",
-    "0100111001110010 STOP",
-    "0100111001110011 RTE",
-    "0100111001110101 RTS",
-    "0100111001110110 TRAPV",
-    "0100111001110111 RTR",
-
-    "0100111010010xxx JSR %E",
-    "0100111010101xxx JSR %E",
-    "0100111010110xxx JSR %E",
-    "01001110101110xx JSR %E",
-        
-    "0100111011010xxx JMP %E",
-    "0100111011101xxx JMP %E",
-    "0100111011110xxx JMP %E",
-    "01001110111110xx JMP %E",
-
-   //01001d001smmmrrr d=0/1, s=0/1
-   // d=0 regs->ea		s=0 word
-   // d=1 ea->regs		s=1 long
-   
-   // d=0 regs->ea
-    "010010001x010xxx MOVEM <list>,%E",
-    "010010001x10xxxx MOVEM <list>,%E",
-    "010010001x110xxx MOVEM <list>,%E",
-    "010010001x11100x MOVEM <list>,%E",
-	
-   // d=1 ea->regs	
-    //"010011001smmmrrr"
-    "010011001x01xxxx MOVEM %E,<list>",
-    "010011001x101xxx MOVEM %E,<list>",
-    "010011001x110xxx MOVEM %E,<list>",
-    "010011001x1110xx MOVEM %E,<list>",
-
-   //0100rrr111mmmrrr ea (Ax), (d16,Ax), (d8,Ax,Xn)
-   //    ---          all valid
-   //          
-    "0100xxx111010xxx LEA %E,A%R", // (Ax)
-    "0100xxx111101xxx LEA %E,A%R", // (d16,Ax)
-    "0100xxx111110xxx LEA %E,A%R", // (d8,Ax,Xn)
-    "0100xxx1111110xx LEA %E,A%R",
-
-    "0100xxx110000xxx CHK %E,D%N",
-    "0100xxx11001xxxx CHK %E,D%N",
-    "0100xxx11010xxxx CHK %E,D%N",
-    "0100xxx110110xxx CHK %E,D%N",
-    "0100xxx11011100x CHK %E,D%N",
-
-    "0101xxx00x000xxx ADDQ.BW #%N,%E",
-    "0101xxx00x01xxxx ADDQ.BW #%N,%E",
-    "0101xxx00x10xxxx ADDQ.BW #%N,%E",
-    "0101xxx00x110xxx ADDQ.BW #%N,%E",
-    "0101xxx00x11100x ADDQ.BW #%N,%E",
-    "0101xxx0100xxxxx ADDQ.L #%N,%E",
-    "0101xxx01010xxxx ADDQ.L #%N,%E",
-    "0101xxx010110xxx ADDQ.L #%N,%E",
-    "0101xxx01011100x ADDQ.L #%N,%E",    
-
-    "0101xxx10x000xxx SUBQ.BW #%N,%E",
-    "0101xxx10x01xxxx SUBQ.BW #%N,%E",
-    "0101xxx10x10xxxx SUBQ.BW #%N,%E",
-    "0101xxx10x110xxx SUBQ.BW #%N,%E",
-    "0101xxx10x11100x SUBQ.BW #%N,%E",
-    "0101xxx1100xxxxx SUBQ.L #%N,%E",
-    "0101xxx11010xxxx SUBQ.L #%N,%E",
-    "0101xxx110110xxx SUBQ.L #%N,%E",
-    "0101xxx11011100x SUBQ.L #%N,%E",    
-
-    "0101xxxx11000xxx SCC %E",
-    "0101xxxx1101xxxx SCC %E",
-    "0101xxxx1110xxxx SCC %E",
-    "0101xxxx11110xxx SCC %E",
-    "0101xxxx1111100x SCC %E",
-
-    "0101xxxx11001xxx DBcc D%R,label",
-
-	"01100000xxxxxxxx BRA label",
-	"01100001xxxxxxxx BSR label",
-	"01101xxxxxxxxxxx Bcc label",
-	"011001xxxxxxxxxx Bcc label",
-	"0110001xxxxxxxxx Bcc label",
-	
-	"0111xxx0xxxxxxxx MOVEQ #Immd,D%N",
-		
-    "1000xxx011000xxx DIVU %E,D%N",
-    "1000xxx01101xxxx DIVU %E,D%N",
-    "1000xxx01110xxxx DIVU %E,D%N",
-    "1000xxx011110xxx DIVU %E,D%N",
-    "1000xxx0111110xx DIVU %E,D%N",
-    "1000xxx011111100 DIVU %E,D%N",
-
-    "1000xxx111000xxx DIVS %E,D%N",
-    "1000xxx11101xxxx DIVS %E,D%N",
-    "1000xxx11110xxxx DIVS %E,D%N",
-    "1000xxx111110xxx DIVS %E,D%N",
-    "1000xxx1111110xx DIVS %E,D%N",
-    "1000xxx111111100 DIVS %E,D%N",
-
-    "1000xxx100000xxx SBCD D%R,D%N",
-    "1000xxx100001xxx SBCD -(A%R),-(A%N)",
-
-    "1000xxx00x000xxx OR.BW %E,D%N",		// 0 = reg dest, ea source, all ea modes
-    "1000xxx00x01xxxx OR.BW %E,D%N",
-    "1000xxx00x10xxxx OR.BW %E,D%N",
-    "1000xxx00x110xxx OR.BW %E,D%N",
-    "1000xxx00x1110xx OR.BW %E,D%N",
-    "1000xxx00x111100 OR.BW %E,D%N",
-    "1000xxx001001xxx OR.W A%N,%E",
-    "1000xxx10x01xxxx OR.BW D%N,%E",		// 1 = ea dest, no PC, Imm or Reg direct
-    "1000xxx10x10xxxx OR.BW D%N,%E",
-    "1000xxx10x110xxx OR.BW D%N,%E",
-    "1000xxx10x11100x OR.BW D%N,%E",
-    
-    "1000xxx010000xxx OR.L %E,D%N",
-    "1000xxx010001xxx OR.L %E,D%N",
-    "1000xxx01001xxxx OR.L %E,D%N",
-    "1000xxx01010xxxx OR.L %E,D%N",
-    "1000xxx010110xxx OR.L %E,D%N",
-    "1000xxx0101110xx OR.L %E,D%N",
-    "1000xxx010111100 OR.L %E,D%N",
-    "1000xxx11001xxxx OR.L D%N,%E",
-    "1000xxx11010xxxx OR.L D%N,%E",
-    "1000xxx110110xxx OR.L D%N,%E",
-    "1000xxx11011100x OR.L D%N,%E",  
-
-    "1001xxx00x000xxx SUB.BW %E,D%N",		// 0 = reg dest, ea source, all ea modes
-    "1001xxx00x01xxxx SUB.BW %E,D%N",
-    "1001xxx00x10xxxx SUB.BW %E,D%N",
-    "1001xxx00x110xxx SUB.BW %E,D%N",
-    "1001xxx00x1110xx SUB.BW %E,D%N",
-    "1001xxx00x111100 SUB.BW %E,D%N",
-    "1001xxx001001xxx SUB.W A%N,%E",
-    "1001xxx10x01xxxx SUB.BW D%N,%E",		// 1 = ea dest, no PC, Imm or Reg direct
-    "1001xxx10x10xxxx SUB.BW D%N,%E",
-    "1001xxx10x110xxx SUB.BW D%N,%E",
-    "1001xxx10x11100x SUB.BW D%N,%E",
-   
-    "1001xxx010000xxx SUB.L %E,D%N",
-    "1001xxx010001xxx SUB.L %E,D%N",
-    "1001xxx01001xxxx SUB.L %E,D%N",
-    "1001xxx01010xxxx SUB.L %E,D%N",
-    "1001xxx010110xxx SUB.L %E,D%N",
-    "1001xxx0101110xx SUB.L %E,D%N",
-    "1001xxx010111100 SUB.L %E,D%N",
-    "1001xxx11001xxxx SUB.L D%N,%E",
-    "1001xxx11010xxxx SUB.L D%N,%E",
-    "1001xxx110110xxx SUB.L D%N,%E",
-    "1001xxx11011100x SUB.L D%N,%E",
-
-    "1001xxx10x000xxx SUBX.BW D%R,D%N",
-    "1001xxx10x001xxx SUBX.BW -(A%R),-(A%N)",
-    "1001xxx110000xxx SUBX.L D%R,D%N",
-    "1001xxx110001xxx SUBX.L -(A%R),-(A%N)",
-    
-    "1001xxx0110xxxxx SUBA.W %E,A%N",
-    "1001xxx01110xxxx SUBA.W %E,A%N",
-    "1001xxx011110xxx SUBA.W %E,A%N",
-    "1001xxx0111110xx SUBA.W %E,A%N",
-    "1001xxx011111100 SUBA.W %E,A%N",
-    
-    "1001xxx1110xxxxx SUBA.L %E,A%N",
-    "1001xxx11110xxxx SUBA.L %E,A%N",
-    "1001xxx111110xxx SUBA.L %E,A%N",
-    "1001xxx1111110xx SUBA.L %E,A%N",
-    "1001xxx111111100 SUBA.L %E,A%N",    
-    
-    "1010xxxxxxxxxxxx ALINE Exception",
-    
-    "1011xxx000000xxx CMP.B %E,D%N",
-    "1011xxx00001xxxx CMP.B %E,D%N",
-    "1011xxx0010xxxxx CMP.W %E,D%N",
-    "1011xxx00x10xxxx CMP.BW %E,D%N",
-    "1011xxx00x110xxx CMP.BW %E,D%N",
-    "1011xxx00x1110xx CMP.BW %E,D%N",
-    "1011xxx00x111100 CMP.BW %E,D%N",
-    "1011xxx0100xxxxx CMP.L %E,D%N",
-    "1011xxx01010xxxx CMP.L %E,D%N",
-    "1011xxx010110xxx CMP.L %E,D%N",
-    "1011xxx0101110xx CMP.L %E,D%N",
-    "1011xxx010111100 CMP.L %E,D%N",
-    
-    "1011xxx0110xxxxx CMPA.W %E,A%N",
-    "1011xxx01110xxxx CMPA.W %E,A%N",
-    "1011xxx011110xxx CMPA.W %E,A%N",
-    "1011xxx0111110xx CMPA.W %E,A%N",
-    "1011xxx011111100 CMPA.W %E,A%N",
-    
-    "1011xxx1110xxxxx CMPA.L %E,A%N",
-    "1011xxx11110xxxx CMPA.L %E,A%N",
-    "1011xxx111110xxx CMPA.L %E,A%N",
-    "1011xxx1111110xx CMPA.L %E,A%N",
-    "1011xxx111111100 CMPA.L %E,A%N",
-    
-    "1011xxx100001xxx CMPM.B (A%R)+,(A%N)+",
-    "1011xxx101001xxx CMPM.W (A%R)+,(A%N)+",
-    "1011xxx110001xxx CMPM.L (A%R)+,(A%N)+",
-    
-    "1011xxx10x000xxx EOR.BW %E,D%N",
-    "1011xxx10x01xxxx EOR.BW %E,D%N",
-    "1011xxx10x10xxxx EOR.BW %E,D%N",
-    "1011xxx10x110xxx EOR.BW %E,D%N",
-    "1011xxx10x11100x EOR.BW %E,D%N",
-    "1011xxx110000xxx EOR.L D%N,%E",
-    "1011xxx11001xxxx EOR.L D%N,%E",
-    "1011xxx11010xxxx EOR.L D%N,%E",
-    "1011xxx110110xxx EOR.L D%N,%E",
-    "1011xxx11011100x EOR.L D%N,%E",
-    
-    "1100xxx00x000xxx AND.BW %E,D%N",		// 0 = reg dest, ea source, all ea modes
-    "1100xxx00x01xxxx AND.BW %E,D%N",
-    "1100xxx00x10xxxx AND.BW %E,D%N",
-    "1100xxx00x110xxx AND.BW %E,D%N",
-    "1100xxx00x1110xx AND.BW %E,D%N",
-    "1100xxx00x111100 AND.BW %E,D%N",
-    "1100xxx001001xxx AND.W A%N,%E",
-    "1100xxx10x01xxxx AND.BW D%N,%E",		// 1 = ea dest, no PC, Imm or Reg direct
-    "1100xxx10x10xxxx AND.BW D%N,%E",
-    "1100xxx10x110xxx AND.BW D%N,%E",
-    "1100xxx10x11100x AND.BW D%N,%E",
-    
-    "1100xxx010000xxx AND.L %E,D%N",
-    "1100xxx010001xxx AND.L %E,D%N",
-    "1100xxx01001xxxx AND.L %E,D%N",
-    "1100xxx01010xxxx AND.L %E,D%N",
-    "1100xxx010110xxx AND.L %E,D%N",
-    "1100xxx0101110xx AND.L %E,D%N",
-    "1100xxx010111100 AND.L %E,D%N",
-    "1100xxx11001xxxx AND.L D%N,%E",
-    "1100xxx11010xxxx AND.L D%N,%E",
-    "1100xxx110110xxx AND.L D%N,%E",
-    "1100xxx11011100x AND.L D%N,%E",
-
-    "1100xxx011000xxx MULU %E,D%N",
-    "1100xxx01101xxxx MULU %E,D%N",
-    "1100xxx01110xxxx MULU %E,D%N",
-    "1100xxx011110xxx MULU %E,D%N",
-    "1100xxx0111110xx MULU %E,D%N",
-    "1100xxx011111100 MULU %E,D%N",
-
-    "1100xxx111000xxx MULS %E,D%N",
-    "1100xxx11101xxxx MULS %E,D%N",
-    "1100xxx11110xxxx MULS %E,D%N",
-    "1100xxx111110xxx MULS %E,D%N",
-    "1100xxx1111110xx MULS %E,D%N",
-    "1100xxx111111100 MULS %E,D%N",
-
-    "1100xxx100000xxx ABCD D%R, D%N",
-    "1100xxx100001xxx ABCD -(A%R),-(A%N)",
-    
-    "1100xxx101000xxx EXG D%N,D%R",
-    "1100xxx101001xxx EXG A%N,A%R",
-    "1100xxx110001xxx EXG D%N,A%R",
-    
-    "1101xxx00x000xxx ADD.BW %E,D%N",		// 0 = reg dest, ea source, all ea modes
-    "1101xxx00x01xxxx ADD.BW %E,D%N",
-    "1101xxx00x10xxxx ADD.BW %E,D%N",
-    "1101xxx00x110xxx ADD.BW %E,D%N",
-    "1101xxx00x1110xx ADD.BW %E,D%N",
-    "1101xxx00x111100 ADD.BW %E,D%N",
-    "1101xxx001001xxx ADD.W A%N,%E",
-    "1101xxx10x01xxxx ADD.BW D%N,%E",		// 1 = ea dest, no PC, Imm or Reg direct
-    "1101xxx10x10xxxx ADD.BW D%N,%E",
-    "1101xxx10x110xxx ADD.BW D%N,%E",
-    "1101xxx10x11100x ADD.BW D%N,%E",
-    
-    "1101xxx010000xxx ADD.L %E,D%N",
-    "1101xxx010001xxx ADD.L %E,D%N",
-    "1101xxx01001xxxx ADD.L %E,D%N",
-    "1101xxx01010xxxx ADD.L %E,D%N",
-    "1101xxx010110xxx ADD.L %E,D%N",
-    "1101xxx0101110xx ADD.L %E,D%N",
-    "1101xxx010111100 ADD.L %E,D%N",
-    "1101xxx11001xxxx ADD.L D%N,%E",
-    "1101xxx11010xxxx ADD.L D%N,%E",
-    "1101xxx110110xxx ADD.L D%N,%E",
-    "1101xxx11011100x ADD.L D%N,%E",
-
-    "1101xxx10x000xxx ADDX.BW D%R,D%N",
-    "1101xxx10x001xxx ADDX.BW -(A%R),-(A%N)",
-    "1101xxx110000xxx ADDX.L D%R,D%N",
-    "1101xxx110001xxx ADDX.L -(A%R),-(A%N)",
-    
-    "1101xxx0110xxxxx ADDA.W %E,A%N",
-    "1101xxx01110xxxx ADDA.W %E,A%N",
-    "1101xxx011110xxx ADDA.W %E,A%N",
-    "1101xxx0111110xx ADDA.W %E,A%N",
-    "1101xxx011111100 ADDA.W %E,A%N",
-    
-    "1101xxx1110xxxxx ADDA.L %E,A%N",
-    "1101xxx11110xxxx ADDA.L %E,A%N",
-    "1101xxx111110xxx ADDA.L %E,A%N",
-    "1101xxx1111110xx ADDA.L %E,A%N",
-    "1101xxx111111100 ADDA.L %E,A%N",
-    
-    // Memory shifs
-    "1110000x1101xxxx ASd %E",
-    "1110000x1110xxxx ASd %E",
-    "1110000x11110xxx ASd %E",
-    "1110000x1111100x ASd %E",
-
-    "1110001x1101xxxx LSd %E",
-    "1110001x1110xxxx LSd %E",
-    "1110001x11110xxx LSd %E",
-    "1110001x1111100x LSd %E",
-    
-    "1110010x1101xxxx ROXd %E",
-    "1110010x1110xxxx ROXd %E",
-    "1110010x11110xxx ROXd %E",
-    "1110010x1111100x ROXd %E",
-
-    "1110011x1101xxxx ROd %E",
-    "1110011x1110xxxx ROd %E",
-    "1110011x11110xxx ROd %E",
-    "1110011x1111100x ROd %E",
-
-    // Register shifts
-    "1110xxxx0x000xxx ASd.BW %N,D%R",
-    "1110xxxx10000xxx ASd.L %N,D%R",
-    
-    "1110xxxx0x001xxx LSd.BW %N,D%R",
-    "1110xxxx10001xxx LSd.L %N,D%R",
-    
-    "1110xxxx0x010xxx ROXd.BW %N,D%R",
-    "1110xxxx10010xxx ROXd.L %N,D%R",
-    
-    "1110xxxx0x011xxx ROd.BW %N,D%R",
-    "1110xxxx10011xxx ROd.L %N,D%R",
-
-
-    "1110xxxx0x100xxx ASd.BW D%N,D%R",
-    "1110xxxx10100xxx ASd.L D%N,D%R",
-    
-    "1110xxxx0x101xxx LSd.BW D%N,D%R",
-    "1110xxxx10101xxx LSd.L D%N,D%R",
-    
-    "1110xxxx0x110xxx ROXd.BW D%N,D%R",
-    "1110xxxx10110xxx ROXd.L D%N,D%R",
-    
-    "1110xxxx0x111xxx ROd.BW D%N,D%R",
-    "1110xxxx10111xxx ROd.L D%N,D%R",
-
-
-    "1111xxxxxxxxxxxx FLINE Exception",
-
+const char* cc[] = { 
+    "T ", "F ", "HI", "LS",
+    "CC", "CS", "NE", "EQ",
+    "VC", "VS", "PL", "MI",
+    "GE", "LT", "GT", "LE",
 };
 
-//const int OPCODE_COUNT = sizeof(opcodes) / sizeof(char*);
-#define OPCODE_COUNT (sizeof(opcodes) / sizeof(char*))
+const opcode_t opcodes[] = {
+    { 0xFFB8, 0x0000, "ORI.@ #Immd,$E" },
+    { 0xFFB0, 0x0010, "ORI.@ #Immd,$E" },
+    { 0xFFB0, 0x0020, "ORI.@ #Immd,$E" },
+    { 0xFFB8, 0x0030, "ORI.@ #Immd,$E" },
+    { 0xFFBE, 0x0038, "ORI.@ #Immd,$E" },
+    { 0xFFFF, 0x003C, "ORI to CCR" },
+    { 0xFFFF, 0x007C, "ORI to SR" },
+    { 0xFFF8, 0x0080, "ORI.L #Immd,$E" },
+    { 0xFFF0, 0x0090, "ORI.L #Immd,$E" },
+    { 0xFFF0, 0x00A0, "ORI.L #Immd,$E" },
+    { 0xFFF8, 0x00B0, "ORI.L #Immd,$E" },
+    { 0xFFFE, 0x00B8, "ORI.L #Immd,$E" },
+    { 0xFFB8, 0x0200, "ANDI.@ #Immd,$E" },
+    { 0xFFB0, 0x0210, "ANDI.@ #Immd,$E" },
+    { 0xFFB0, 0x0220, "ANDI.@ #Immd,$E" },
+    { 0xFFB8, 0x0230, "ANDI.@ #Immd,$E" },
+    { 0xFFBE, 0x0238, "ANDI.@ #Immd,$E" },
+    { 0xFFFF, 0x023C, "ANDI to CCR" },
+    { 0xFFFF, 0x027C, "ANDI to SR" },
+    { 0xFFF8, 0x0280, "ANDI.L #Immd,$E" },
+    { 0xFFF0, 0x0290, "ANDI.L #Immd,$E" },
+    { 0xFFF0, 0x02A0, "ANDI.L #Immd,$E" },
+    { 0xFFF8, 0x02B0, "ANDI.L #Immd,$E" },
+    { 0xFFFE, 0x02B8, "ANDI.L #Immd,$E" },
+    { 0xFFB8, 0x0400, "SUBI.@ #Immd,$E" },
+    { 0xFFB0, 0x0410, "SUBI.@ #Immd,$E" },
+    { 0xFFB0, 0x0420, "SUBI.@ #Immd,$E" },
+    { 0xFFB8, 0x0430, "SUBI.@ #Immd,$E" },
+    { 0xFFBE, 0x0438, "SUBI.@ #Immd,$E" },
+    { 0xFFF8, 0x0480, "SUBI.L #Immd,$E" },
+    { 0xFFF0, 0x0490, "SUBI.L #Immd,$E" },
+    { 0xFFF0, 0x04A0, "SUBI.L #Immd,$E" },
+    { 0xFFF8, 0x04B0, "SUBI.L #Immd,$E" },
+    { 0xFFFE, 0x04B8, "SUBI.L #Immd,$E" },
+    { 0xFFB8, 0x0600, "ADDI.@ #Immd,$E" },
+    { 0xFFB0, 0x0610, "ADDI.@ #Immd,$E" },
+    { 0xFFB0, 0x0620, "ADDI.@ #Immd,$E" },
+    { 0xFFB8, 0x0630, "ADDI.@ #Immd,$E" },
+    { 0xFFBE, 0x0638, "ADDI.@ #Immd,$E" },
+    { 0xFFF8, 0x0680, "ADDI.L #Immd,$E" },
+    { 0xFFF0, 0x0690, "ADDI.L #Immd,$E" },
+    { 0xFFF0, 0x06A0, "ADDI.L #Immd,$E" },
+    { 0xFFF8, 0x06B0, "ADDI.L #Immd,$E" },
+    { 0xFFFE, 0x06B8, "ADDI.L #Immd,$E" },
+    { 0xFFB8, 0x0A00, "EORI.@ #Immd,$E" },
+    { 0xFFB0, 0x0A10, "EORI.@ #Immd,$E" },
+    { 0xFFB0, 0x0A20, "EORI.@ #Immd,$E" },
+    { 0xFFB8, 0x0A30, "EORI.@ #Immd,$E" },
+    { 0xFFBE, 0x0A38, "EORI.@ #Immd,$E" },
+    { 0xFFFF, 0x0A3C, "EORI to CCR" },
+    { 0xFFFF, 0x0A7C, "EORI to SR" },
+    { 0xFFF8, 0x0A80, "EORI.L #Immd,$E" },
+    { 0xFFF0, 0x0A90, "EORI.L #Immd,$E" },
+    { 0xFFF0, 0x0AA0, "EORI.L #Immd,$E" },
+    { 0xFFF8, 0x0AB0, "EORI.L #Immd,$E" },
+    { 0xFFFE, 0x0AB8, "EORI.L #Immd,$E" },
+    { 0xFFB8, 0x0C00, "CMPI.@ #Immd,$E" },
+    { 0xFFB0, 0x0C10, "CMPI.@ #Immd,$E" },
+    { 0xFFB0, 0x0C20, "CMPI.@ #Immd,$E" },
+    { 0xFFB8, 0x0C30, "CMPI.@ #Immd,$E" },
+    { 0xFFBE, 0x0C38, "CMPI.@ #Immd,$E" },
+    { 0xFFF8, 0x0C80, "CMPI.L #Immd,$E" },
+    { 0xFFF0, 0x0C90, "CMPI.L #Immd,$E" },
+    { 0xFFF0, 0x0CA0, "CMPI.L #Immd,$E" },
+    { 0xFFF8, 0x0CB0, "CMPI.L #Immd,$E" },
+    { 0xFFFE, 0x0CB8, "CMPI.L #Immd,$E" },
+    { 0xFFF8, 0x0800, "BCLR #Immd,$E" },
+    { 0xFFF0, 0x0810, "BCLR #Immd,$E" },
+    { 0xFFF0, 0x0820, "BCLR #Immd,$E" },
+    { 0xFFF8, 0x0830, "BCLR #Immd,$E" },
+    { 0xFFFE, 0x0838, "BCLR #Immd,$E" },
+    { 0xF1F8, 0x0100, "BCLR D$N,$E" },
+    { 0xF1F0, 0x0110, "BCLR D$N,$E" },
+    { 0xF1F0, 0x0120, "BCLR D$N,$E" },
+    { 0xF1F8, 0x0130, "BCLR D$N,$E" },
+    { 0xF1FE, 0x0138, "BCLR D$N,$E" },
+    { 0xFFF8, 0x0840, "BCHG #Immd,$E" },
+    { 0xFFF0, 0x0850, "BCHG #Immd,$E" },
+    { 0xFFF0, 0x0860, "BCHG #Immd,$E" },
+    { 0xFFF8, 0x0870, "BCHG #Immd,$E" },
+    { 0xFFFE, 0x0878, "BCHG #Immd,$E" },
+    { 0xF1F8, 0x0140, "BCHG D$N,$E" },
+    { 0xF1F0, 0x0150, "BCHG D$N,$E" },
+    { 0xF1F0, 0x0160, "BCHG D$N,$E" },
+    { 0xF1F8, 0x0170, "BCHG D$N,$E" },
+    { 0xF1FE, 0x0178, "BCHG D$N,$E" },
+    { 0xFFF8, 0x0880, "BCLR #Immd,$E" },
+    { 0xFFF0, 0x0890, "BCLR #Immd,$E" },
+    { 0xFFF0, 0x08A0, "BCLR #Immd,$E" },
+    { 0xFFF8, 0x08B0, "BCLR #Immd,$E" },
+    { 0xFFFE, 0x08B8, "BCLR #Immd,$E" },
+    { 0xF1F8, 0x0180, "BCLR D$N,$E" },
+    { 0xF1F0, 0x0190, "BCLR D$N,$E" },
+    { 0xF1F0, 0x01A0, "BCLR D$N,$E" },
+    { 0xF1F8, 0x01B0, "BCLR D$N,$E" },
+    { 0xF1FE, 0x01B8, "BCLR D$N,$E" },
+    { 0xFFF8, 0x08C0, "BSET #Immd,$E" },
+    { 0xFFF0, 0x08D0, "BSET #Immd,$E" },
+    { 0xFFF0, 0x08E0, "BSET #Immd,$E" },
+    { 0xFFF8, 0x08F0, "BSET #Immd,$E" },
+    { 0xFFFE, 0x08F8, "BSET #Immd,$E" },
+    { 0xF1F8, 0x01C0, "BSET D$N,$E" },
+    { 0xF1F0, 0x01D0, "BSET D$N,$E" },
+    { 0xF1F0, 0x01E0, "BSET D$N,$E" },
+    { 0xF1F8, 0x01F0, "BSET D$N,$E" },
+    { 0xF1FE, 0x01F8, "BSET D$N,$E" },
+    { 0xF1B8, 0x0108, "MOVEP $E,D$N" },
+    { 0xF1B8, 0x0188, "MOVEP D$N,$E" },
+    { 0xF1F8, 0x1000, "MOVE.B $E,$E" },
+    { 0xF1F0, 0x1010, "MOVE.B $E,$E" },
+    { 0xF1F0, 0x1020, "MOVE.B $E,$E" },
+    { 0xF1F8, 0x1030, "MOVE.B $E,$E" },
+    { 0xF1FC, 0x1038, "MOVE.B $E,$E" },
+    { 0xF1FF, 0x103C, "MOVE.B $E,$E" },
+    { 0xF1B8, 0x1080, "MOVE.B $E,$E" },
+    { 0xF1B0, 0x1090, "MOVE.B $E,$E" },
+    { 0xF1B0, 0x10A0, "MOVE.B $E,$E" },
+    { 0xF1B8, 0x10B0, "MOVE.B $E,$E" },
+    { 0xF1BC, 0x10B8, "MOVE.B $E,$E" },
+    { 0xF1BF, 0x10BC, "MOVE.B $E,$E" },
+    { 0xF1B8, 0x1100, "MOVE.B $E,$E" },
+    { 0xF1B0, 0x1110, "MOVE.B $E,$E" },
+    { 0xF1B0, 0x1120, "MOVE.B $E,$E" },
+    { 0xF1B8, 0x1130, "MOVE.B $E,$E" },
+    { 0xF1BC, 0x1138, "MOVE.B $E,$E" },
+    { 0xF1BF, 0x113C, "MOVE.B $E,$E" },
+    { 0xF1F8, 0x1180, "MOVE.B $E,$E" },
+    { 0xF1F0, 0x1190, "MOVE.B $E,$E" },
+    { 0xF1F0, 0x11A0, "MOVE.B $E,$E" },
+    { 0xF1F8, 0x11B0, "MOVE.B $E,$E" },
+    { 0xF1FC, 0x11B8, "MOVE.B $E,$E" },
+    { 0xF1FF, 0x11BC, "MOVE.B $E,$E" },
+    { 0xFDF8, 0x11C0, "MOVE.B $E,$E" },
+    { 0xFDF0, 0x11D0, "MOVE.B $E,$E" },
+    { 0xFDF0, 0x11E0, "MOVE.B $E,$E" },
+    { 0xFDF8, 0x11F0, "MOVE.B $E,$E" },
+    { 0xFDFC, 0x11F8, "MOVE.B $E,$E" },
+    { 0xFDFF, 0x11FC, "MOVE.B $E,$E" },
+    { 0xF1E0, 0x2000, "MOVE.L $E,$E" },
+    { 0xF1F0, 0x2020, "MOVE.L $E,$E" },
+    { 0xF1F8, 0x2030, "MOVE.L $E,$E" },
+    { 0xF1FC, 0x2038, "MOVE.L $E,$E" },
+    { 0xF1FF, 0x203C, "MOVE.L $E,$E" },
+    { 0xF1E0, 0x2040, "MOVEA.L $E,$E" },
+    { 0xF1F0, 0x2060, "MOVEA.L $E,$E" },
+    { 0xF1F8, 0x2070, "MOVEA.L $E,$E" },
+    { 0xF1FC, 0x2078, "MOVEA.L $E,$E" },
+    { 0xF1FF, 0x207C, "MOVEA.L $E,$E" },
+    { 0xF1A0, 0x2080, "MOVE.L $E,$E" },
+    { 0xF1B0, 0x20A0, "MOVE.L $E,$E" },
+    { 0xF1B8, 0x20B0, "MOVE.L $E,$E" },
+    { 0xF1BC, 0x20B8, "MOVE.L $E,$E" },
+    { 0xF1BF, 0x20BC, "MOVE.L $E,$E" },
+    { 0xF1A0, 0x2100, "MOVE.L $E,$E" },
+    { 0xF1B0, 0x2120, "MOVE.L $E,$E" },
+    { 0xF1B8, 0x2130, "MOVE.L $E,$E" },
+    { 0xF1BC, 0x2138, "MOVE.L $E,$E" },
+    { 0xF1BF, 0x213C, "MOVE.L $E,$E" },
+    { 0xF1E0, 0x2180, "MOVE.L $E,$E" },
+    { 0xF1F0, 0x21A0, "MOVE.L $E,$E" },
+    { 0xF1F8, 0x21B0, "MOVE.L $E,$E" },
+    { 0xF1FC, 0x21B8, "MOVE.L $E,$E" },
+    { 0xF1FF, 0x21BC, "MOVE.L $E,$E" },
+    { 0xFDE0, 0x21C0, "MOVE.L $E,$E" },
+    { 0xFDF0, 0x21E0, "MOVE.L $E,$E" },
+    { 0xFDF8, 0x21F0, "MOVE.L $E,$E" },
+    { 0xFDFC, 0x21F8, "MOVE.L $E,$E" },
+    { 0xFDFF, 0x21FC, "MOVE.L $E,$E" },
+    { 0xF1E0, 0x3000, "MOVE.W $E,$E" },
+    { 0xF1F0, 0x3020, "MOVE.W $E,$E" },
+    { 0xF1F8, 0x3030, "MOVE.W $E,$E" },
+    { 0xF1FC, 0x3038, "MOVE.W $E,$E" },
+    { 0xF1FF, 0x303C, "MOVE.W $E,$E" },
+    { 0xF1E0, 0x3040, "MOVEA.W $E,$E" },
+    { 0xF1F0, 0x3060, "MOVEA.W $E,$E" },
+    { 0xF1F8, 0x3070, "MOVEA.W $E,$E" },
+    { 0xF1FC, 0x3078, "MOVEA.W $E,$E" },
+    { 0xF1FF, 0x307C, "MOVEA.W $E,$E" },
+    { 0xF1A0, 0x3080, "MOVE.W $E,$E" },
+    { 0xF1B0, 0x30A0, "MOVE.W $E,$E" },
+    { 0xF1B8, 0x30B0, "MOVE.W $E,$E" },
+    { 0xF1BC, 0x30B8, "MOVE.W $E,$E" },
+    { 0xF1BF, 0x30BC, "MOVE.W $E,$E" },
+    { 0xF1A0, 0x3100, "MOVE.W $E,$E" },
+    { 0xF1B0, 0x3120, "MOVE.W $E,$E" },
+    { 0xF1B8, 0x3130, "MOVE.W $E,$E" },
+    { 0xF1BC, 0x3138, "MOVE.W $E,$E" },
+    { 0xF1BF, 0x313C, "MOVE.W $E,$E" },
+    { 0xF1E0, 0x3180, "MOVE.W $E,$E" },
+    { 0xF1F0, 0x31A0, "MOVE.W $E,$E" },
+    { 0xF1F8, 0x31B0, "MOVE.W $E,$E" },
+    { 0xF1FC, 0x31B8, "MOVE.W $E,$E" },
+    { 0xF1FF, 0x31BC, "MOVE.W $E,$E" },
+    { 0xFDE0, 0x31C0, "MOVE.W $E,$E" },
+    { 0xFDF0, 0x31E0, "MOVE.W $E,$E" },
+    { 0xFDF8, 0x31F0, "MOVE.W $E,$E" },
+    { 0xFDFC, 0x31F8, "MOVE.W $E,$E" },
+    { 0xFDFF, 0x31FC, "MOVE.W $E,$E" },
+    { 0xFFF8, 0x40C0, "MOVE SR,$E" },
+    { 0xFFF0, 0x40D0, "MOVE SR,$E" },
+    { 0xFFF0, 0x40E0, "MOVE SR,$E" },
+    { 0xFFF8, 0x40F0, "MOVE SR,$E" },
+    { 0xFFFE, 0x40F8, "MOVE SR,$E" },
+    { 0xFFF8, 0x44C0, "MOVE $E,CCR" },
+    { 0xFFF0, 0x44D0, "MOVE $E,CCR" },
+    { 0xFFF0, 0x44E0, "MOVE $E,CCR" },
+    { 0xFFF8, 0x44F0, "MOVE $E,CCR" },
+    { 0xFFFC, 0x44F8, "MOVE $E,CCR" },
+    { 0xFFFF, 0x44FC, "MOVE $E,CCR" },
+    { 0xFFF8, 0x46C0, "MOVE $E,SR" },
+    { 0xFFF0, 0x46D0, "MOVE $E,SR" },
+    { 0xFFF0, 0x46E0, "MOVE $E,SR" },
+    { 0xFFF8, 0x46F0, "MOVE $E,SR" },
+    { 0xFFFC, 0x46F8, "MOVE $E,SR" },
+    { 0xFFFF, 0x46FC, "MOVE $E,SR" },
+    { 0xFFB8, 0x4000, "NEGX.@ $E" },
+    { 0xFFB0, 0x4010, "NEGX.@ $E" },
+    { 0xFFB0, 0x4020, "NEGX.@ $E" },
+    { 0xFFB8, 0x4030, "NEGX.@ $E" },
+    { 0xFFBE, 0x4038, "NEGX.@ $E" },
+    { 0xFFF8, 0x4080, "NEGX.L $E" },
+    { 0xFFF0, 0x4090, "NEGX.L $E" },
+    { 0xFFF0, 0x40A0, "NEGX.L $E" },
+    { 0xFFF8, 0x40B0, "NEGX.L $E" },
+    { 0xFFFE, 0x40B8, "NEGX.L $E" },
+    { 0xFFB8, 0x4200, "CLR.@ $E" },
+    { 0xFFB0, 0x4210, "CLR.@ $E" },
+    { 0xFFB0, 0x4220, "CLR.@ $E" },
+    { 0xFFB8, 0x4230, "CLR.@ $E" },
+    { 0xFFBE, 0x4238, "CLR.@ $E" },
+    { 0xFFF8, 0x4280, "CLR.L $E" },
+    { 0xFFF0, 0x4290, "CLR.L $E" },
+    { 0xFFF0, 0x42A0, "CLR.L $E" },
+    { 0xFFF8, 0x42B0, "CLR.L $E" },
+    { 0xFFFE, 0x42B8, "CLR.L $E" },
+    { 0xFFB8, 0x4400, "NEG.@ $E" },
+    { 0xFFB0, 0x4410, "NEG.@ $E" },
+    { 0xFFB0, 0x4420, "NEG.@ $E" },
+    { 0xFFB8, 0x4430, "NEG.@ $E" },
+    { 0xFFBE, 0x4438, "NEG.@ $E" },
+    { 0xFFF8, 0x4480, "NEG.L $E" },
+    { 0xFFF0, 0x4490, "NEG.L $E" },
+    { 0xFFF0, 0x44A0, "NEG.L $E" },
+    { 0xFFF8, 0x44B0, "NEG.L $E" },
+    { 0xFFFE, 0x44B8, "NEG.L $E" },
+    { 0xFFB8, 0x4600, "NOT.@ $E" },
+    { 0xFFB0, 0x4610, "NOT.@ $E" },
+    { 0xFFB0, 0x4620, "NOT.@ $E" },
+    { 0xFFB8, 0x4630, "NOT.@ $E" },
+    { 0xFFBE, 0x4638, "NOT.@ $E" },
+    { 0xFFF8, 0x4680, "NOT.L $E" },
+    { 0xFFF0, 0x4690, "NOT.L $E" },
+    { 0xFFF0, 0x46A0, "NOT.L $E" },
+    { 0xFFF8, 0x46B0, "NOT.L $E" },
+    { 0xFFFE, 0x46B8, "NOT.L $E" },
+    { 0xFFF8, 0x4880, "EXT.W $E" },
+    { 0xFFF8, 0x48C0, "EXT.L $E" },
+    { 0xFFF8, 0x4800, "NBCD $E" },
+    { 0xFFF0, 0x4810, "NBCD $E" },
+    { 0xFFF0, 0x4820, "NBCD $E" },
+    { 0xFFF8, 0x4830, "NBCD $E" },
+    { 0xFFFE, 0x4838, "NBCD $E" },
+    { 0xFFF8, 0x4840, "SWAP $E " },
+    { 0xFFF8, 0x4850, "PEA $E  " },
+    { 0xFFF8, 0x4868, "PEA $E  " },
+    { 0xFFF8, 0x4870, "PEA $E  " },
+    { 0xFFFC, 0x4878, "PEA $E  " },
+    { 0xFFFF, 0x4AFC, "ILLEGAL " },
+    { 0xFFF8, 0x4AC0, "TAS $E  " },
+    { 0xFFF0, 0x4AD0, "TAS $E  " },
+    { 0xFFF0, 0x4AE0, "TAS $E  " },
+    { 0xFFF8, 0x4AF0, "TAS $E  " },
+    { 0xFFFE, 0x4AF8, "TAS $E  " },
+    { 0xFFB8, 0x4A00, "TST.@ $E" },
+    { 0xFFB0, 0x4A10, "TST.@ $E" },
+    { 0xFFB0, 0x4A20, "TST.@ $E" },
+    { 0xFFB8, 0x4A30, "TST.@ $E" },
+    { 0xFFBE, 0x4A38, "TST.@ $E" },
+    { 0xFFF8, 0x4A80, "TST.L $E" },
+    { 0xFFF0, 0x4A90, "TST.L $E" },
+    { 0xFFF0, 0x4AA0, "TST.L $E" },
+    { 0xFFF8, 0x4AB0, "TST.L $E" },
+    { 0xFFFE, 0x4AB8, "TST.L $E" },
+    { 0xFFF8, 0x4E40, "TRAP #$R" },
+    { 0xFFFF, 0x4E48, "TRAP #8 " },
+    { 0xFFFF, 0x4E49, "TRAP #9 " },
+    { 0xFFFF, 0x4E4A, "TRAP #10" },
+    { 0xFFFF, 0x4E4B, "TRAP #11" },
+    { 0xFFFF, 0x4E4C, "TRAP #12" },
+    { 0xFFFF, 0x4E4D, "TRAP #13" },
+    { 0xFFFF, 0x4E4E, "TRAP #14" },
+    { 0xFFFF, 0x4E4F, "TRAP #15" },
+    { 0xFFF8, 0x4E50, "LINK A$R" },
+    { 0xFFF8, 0x4E58, "UNLK A$R" },
+    { 0xFFF8, 0x4E60, "MOVE A$R,USP" },
+    { 0xFFF8, 0x4E68, "MOVE USP,A$R" },
+    { 0xFFFF, 0x4E70, "RESET   " },
+    { 0xFFFF, 0x4E71, "NOP     " },
+    { 0xFFFF, 0x4E72, "STOP    " },
+    { 0xFFFF, 0x4E73, "RTE     " },
+    { 0xFFFF, 0x4E75, "RTS     " },
+    { 0xFFFF, 0x4E76, "TRAPV   " },
+    { 0xFFFF, 0x4E77, "RTR     " },
+    { 0xFFF8, 0x4E90, "JSR $E  " },
+    { 0xFFF8, 0x4EA8, "JSR $E  " },
+    { 0xFFF8, 0x4EB0, "JSR $E  " },
+    { 0xFFFC, 0x4EB8, "JSR $E  " },
+    { 0xFFF8, 0x4ED0, "JMP $E  " },
+    { 0xFFF8, 0x4EE8, "JMP $E  " },
+    { 0xFFF8, 0x4EF0, "JMP $E  " },
+    { 0xFFFC, 0x4EF8, "JMP $E  " },
+    { 0xFFB8, 0x4890, "MOVEM <list>,$E" },
+    { 0xFFB0, 0x48A0, "MOVEM <list>,$E" },
+    { 0xFFB8, 0x48B0, "MOVEM <list>,$E" },
+    { 0xFFBE, 0x48B8, "MOVEM <list>,$E" },
+    { 0xFFB0, 0x4C90, "MOVEM $E,<list>" },
+    { 0xFFB8, 0x4CA8, "MOVEM $E,<list>" },
+    { 0xFFB8, 0x4CB0, "MOVEM $E,<list>" },
+    { 0xFFBC, 0x4CB8, "MOVEM $E,<list>" },
+    { 0xF1F8, 0x41D0, "LEA $E,A$R" },
+    { 0xF1F8, 0x41E8, "LEA $E,A$R" },
+    { 0xF1F8, 0x41F0, "LEA $E,A$R" },
+    { 0xF1FC, 0x41F8, "LEA $E,A$R" },
+    { 0xF1F8, 0x4180, "CHK $E,D$N" },
+    { 0xF1F0, 0x4190, "CHK $E,D$N" },
+    { 0xF1F0, 0x41A0, "CHK $E,D$N" },
+    { 0xF1F8, 0x41B0, "CHK $E,D$N" },
+    { 0xF1FE, 0x41B8, "CHK $E,D$N" },
+    { 0xF1B8, 0x5000, "ADDQ.@ #$N,$E" },
+    { 0xF1B0, 0x5010, "ADDQ.@ #$N,$E" },
+    { 0xF1B0, 0x5020, "ADDQ.@ #$N,$E" },
+    { 0xF1B8, 0x5030, "ADDQ.@ #$N,$E" },
+    { 0xF1BE, 0x5038, "ADDQ.@ #$N,$E" },
+    { 0xF1E0, 0x5080, "ADDQ.L #$N,$E" },
+    { 0xF1F0, 0x50A0, "ADDQ.L #$N,$E" },
+    { 0xF1F8, 0x50B0, "ADDQ.L #$N,$E" },
+    { 0xF1FE, 0x50B8, "ADDQ.L #$N,$E" },
+    { 0xF1B8, 0x5100, "SUBQ.@ #$N,$E" },
+    { 0xF1B0, 0x5110, "SUBQ.@ #$N,$E" },
+    { 0xF1B0, 0x5120, "SUBQ.@ #$N,$E" },
+    { 0xF1B8, 0x5130, "SUBQ.@ #$N,$E" },
+    { 0xF1BE, 0x5138, "SUBQ.@ #$N,$E" },
+    { 0xF1E0, 0x5180, "SUBQ.L #$N,$E" },
+    { 0xF1F0, 0x51A0, "SUBQ.L #$N,$E" },
+    { 0xF1F8, 0x51B0, "SUBQ.L #$N,$E" },
+    { 0xF1FE, 0x51B8, "SUBQ.L #$N,$E" },
+    { 0xF0F8, 0x50C0, "Scc $E  " },
+    { 0xF0F0, 0x50D0, "Scc $E  " },
+    { 0xF0F0, 0x50E0, "Scc $E  " },
+    { 0xF0F8, 0x50F0, "Scc $E  " },
+    { 0xF0FE, 0x50F8, "Scc $E  " },
+    { 0xFFF8, 0x51C8, "DBRA D$R,label" },
+    { 0xF0F8, 0x50C8, "DBcc D$R,label" },
+    { 0xFF00, 0x6000, "BRA label" },
+    { 0xFF00, 0x6100, "BSR label" },
+    { 0xF800, 0x6800, "Bcc label" },
+    { 0xFC00, 0x6400, "Bcc label" },
+    { 0xFE00, 0x6200, "Bcc label" },
+    { 0xF100, 0x7000, "MOVEQ #Immd,D$N" },
+    { 0xF1F8, 0x80C0, "DIVU $E,D$N" },
+    { 0xF1F0, 0x80D0, "DIVU $E,D$N" },
+    { 0xF1F0, 0x80E0, "DIVU $E,D$N" },
+    { 0xF1F8, 0x80F0, "DIVU $E,D$N" },
+    { 0xF1FC, 0x80F8, "DIVU $E,D$N" },
+    { 0xF1FF, 0x80FC, "DIVU $E,D$N" },
+    { 0xF1F8, 0x81C0, "DIVS $E,D$N" },
+    { 0xF1F0, 0x81D0, "DIVS $E,D$N" },
+    { 0xF1F0, 0x81E0, "DIVS $E,D$N" },
+    { 0xF1F8, 0x81F0, "DIVS $E,D$N" },
+    { 0xF1FC, 0x81F8, "DIVS $E,D$N" },
+    { 0xF1FF, 0x81FC, "DIVS $E,D$N" },
+    { 0xF1F8, 0x8100, "SBCD D$R,D$N" },
+    { 0xF1F8, 0x8108, "SBCD -(A$R),-(A$N)" },
+    { 0xF1B8, 0x8000, "OR.@ $E,D$N" },
+    { 0xF1B0, 0x8010, "OR.@ $E,D$N" },
+    { 0xF1B0, 0x8020, "OR.@ $E,D$N" },
+    { 0xF1B8, 0x8030, "OR.@ $E,D$N" },
+    { 0xF1BC, 0x8038, "OR.@ $E,D$N" },
+    { 0xF1BF, 0x803C, "OR.@ $E,D$N" },
+    { 0xF1F8, 0x8048, "OR.W A$N,$E" },
+    { 0xF1B0, 0x8110, "OR.@ D$N,$E" },
+    { 0xF1B0, 0x8120, "OR.@ D$N,$E" },
+    { 0xF1B8, 0x8130, "OR.@ D$N,$E" },
+    { 0xF1BE, 0x8138, "OR.@ D$N,$E" },
+    { 0xF1F8, 0x8080, "OR.L $E,D$N" },
+    { 0xF1F8, 0x8088, "OR.L $E,D$N" },
+    { 0xF1F0, 0x8090, "OR.L $E,D$N" },
+    { 0xF1F0, 0x80A0, "OR.L $E,D$N" },
+    { 0xF1F8, 0x80B0, "OR.L $E,D$N" },
+    { 0xF1FC, 0x80B8, "OR.L $E,D$N" },
+    { 0xF1FF, 0x80BC, "OR.L $E,D$N" },
+    { 0xF1F0, 0x8190, "OR.L D$N,$E" },
+    { 0xF1F0, 0x81A0, "OR.L D$N,$E" },
+    { 0xF1F8, 0x81B0, "OR.L D$N,$E" },
+    { 0xF1FE, 0x81B8, "OR.L D$N,$E" },
+    { 0xF1B8, 0x9000, "SUB.@ $E,D$N" },
+    { 0xF1B0, 0x9010, "SUB.@ $E,D$N" },
+    { 0xF1B0, 0x9020, "SUB.@ $E,D$N" },
+    { 0xF1B8, 0x9030, "SUB.@ $E,D$N" },
+    { 0xF1BC, 0x9038, "SUB.@ $E,D$N" },
+    { 0xF1BF, 0x903C, "SUB.@ $E,D$N" },
+    { 0xF1F8, 0x9048, "SUB.W A$N,$E" },
+    { 0xF1B0, 0x9110, "SUB.@ D$N,$E" },
+    { 0xF1B0, 0x9120, "SUB.@ D$N,$E" },
+    { 0xF1B8, 0x9130, "SUB.@ D$N,$E" },
+    { 0xF1BE, 0x9138, "SUB.@ D$N,$E" },
+    { 0xF1F8, 0x9080, "SUB.L $E,D$N" },
+    { 0xF1F8, 0x9088, "SUB.L $E,D$N" },
+    { 0xF1F0, 0x9090, "SUB.L $E,D$N" },
+    { 0xF1F0, 0x90A0, "SUB.L $E,D$N" },
+    { 0xF1F8, 0x90B0, "SUB.L $E,D$N" },
+    { 0xF1FC, 0x90B8, "SUB.L $E,D$N" },
+    { 0xF1FF, 0x90BC, "SUB.L $E,D$N" },
+    { 0xF1F0, 0x9190, "SUB.L D$N,$E" },
+    { 0xF1F0, 0x91A0, "SUB.L D$N,$E" },
+    { 0xF1F8, 0x91B0, "SUB.L D$N,$E" },
+    { 0xF1FE, 0x91B8, "SUB.L D$N,$E" },
+    { 0xF1B8, 0x9100, "SUBX.@ D$R,D$N" },
+    { 0xF1B8, 0x9108, "SUBX.@ -(A$R),-(A$N)" },
+    { 0xF1F8, 0x9180, "SUBX.L D$R,D$N" },
+    { 0xF1F8, 0x9188, "SUBX.L -(A$R),-(A$N)" },
+    { 0xF1E0, 0x90C0, "SUBA.W $E,A$N" },
+    { 0xF1F0, 0x90E0, "SUBA.W $E,A$N" },
+    { 0xF1F8, 0x90F0, "SUBA.W $E,A$N" },
+    { 0xF1FC, 0x90F8, "SUBA.W $E,A$N" },
+    { 0xF1FF, 0x90FC, "SUBA.W $E,A$N" },
+    { 0xF1E0, 0x91C0, "SUBA.L $E,A$N" },
+    { 0xF1F0, 0x91E0, "SUBA.L $E,A$N" },
+    { 0xF1F8, 0x91F0, "SUBA.L $E,A$N" },
+    { 0xF1FC, 0x91F8, "SUBA.L $E,A$N" },
+    { 0xF1FF, 0x91FC, "SUBA.L $E,A$N" },
+    { 0xF000, 0xA000, "ALINE Exception" },
+    { 0xF1F8, 0xB000, "CMP.B $E,D$N" },
+    { 0xF1F0, 0xB010, "CMP.B $E,D$N" },
+    { 0xF1E0, 0xB040, "CMP.W $E,D$N" },
+    { 0xF1B0, 0xB020, "CMP.@ $E,D$N" },
+    { 0xF1B8, 0xB030, "CMP.@ $E,D$N" },
+    { 0xF1BC, 0xB038, "CMP.@ $E,D$N" },
+    { 0xF1BF, 0xB03C, "CMP.@ $E,D$N" },
+    { 0xF1E0, 0xB080, "CMP.L $E,D$N" },
+    { 0xF1F0, 0xB0A0, "CMP.L $E,D$N" },
+    { 0xF1F8, 0xB0B0, "CMP.L $E,D$N" },
+    { 0xF1FC, 0xB0B8, "CMP.L $E,D$N" },
+    { 0xF1FF, 0xB0BC, "CMP.L $E,D$N" },
+    { 0xF1E0, 0xB0C0, "CMPA.W $E,A$N" },
+    { 0xF1F0, 0xB0E0, "CMPA.W $E,A$N" },
+    { 0xF1F8, 0xB0F0, "CMPA.W $E,A$N" },
+    { 0xF1FC, 0xB0F8, "CMPA.W $E,A$N" },
+    { 0xF1FF, 0xB0FC, "CMPA.W $E,A$N" },
+    { 0xF1E0, 0xB1C0, "CMPA.L $E,A$N" },
+    { 0xF1F0, 0xB1E0, "CMPA.L $E,A$N" },
+    { 0xF1F8, 0xB1F0, "CMPA.L $E,A$N" },
+    { 0xF1FC, 0xB1F8, "CMPA.L $E,A$N" },
+    { 0xF1FF, 0xB1FC, "CMPA.L $E,A$N" },
+    { 0xF1F8, 0xB108, "CMPM.B (A$R)+,(A$N)+" },
+    { 0xF1F8, 0xB148, "CMPM.W (A$R)+,(A$N)+" },
+    { 0xF1F8, 0xB188, "CMPM.L (A$R)+,(A$N)+" },
+    { 0xF1B8, 0xB100, "EOR.@ $E,D$N" },
+    { 0xF1B0, 0xB110, "EOR.@ $E,D$N" },
+    { 0xF1B0, 0xB120, "EOR.@ $E,D$N" },
+    { 0xF1B8, 0xB130, "EOR.@ $E,D$N" },
+    { 0xF1BE, 0xB138, "EOR.@ $E,D$N" },
+    { 0xF1F8, 0xB180, "EOR.L D$N,$E" },
+    { 0xF1F0, 0xB190, "EOR.L D$N,$E" },
+    { 0xF1F0, 0xB1A0, "EOR.L D$N,$E" },
+    { 0xF1F8, 0xB1B0, "EOR.L D$N,$E" },
+    { 0xF1FE, 0xB1B8, "EOR.L D$N,$E" },
+    { 0xF1B8, 0xC000, "AND.@ $E,D$N" },
+    { 0xF1B0, 0xC010, "AND.@ $E,D$N" },
+    { 0xF1B0, 0xC020, "AND.@ $E,D$N" },
+    { 0xF1B8, 0xC030, "AND.@ $E,D$N" },
+    { 0xF1BC, 0xC038, "AND.@ $E,D$N" },
+    { 0xF1BF, 0xC03C, "AND.@ $E,D$N" },
+    { 0xF1F8, 0xC048, "AND.W A$N,$E" },
+    { 0xF1B0, 0xC110, "AND.@ D$N,$E" },
+    { 0xF1B0, 0xC120, "AND.@ D$N,$E" },
+    { 0xF1B8, 0xC130, "AND.@ D$N,$E" },
+    { 0xF1BE, 0xC138, "AND.@ D$N,$E" },
+    { 0xF1F8, 0xC080, "AND.L $E,D$N" },
+    { 0xF1F8, 0xC088, "AND.L $E,D$N" },
+    { 0xF1F0, 0xC090, "AND.L $E,D$N" },
+    { 0xF1F0, 0xC0A0, "AND.L $E,D$N" },
+    { 0xF1F8, 0xC0B0, "AND.L $E,D$N" },
+    { 0xF1FC, 0xC0B8, "AND.L $E,D$N" },
+    { 0xF1FF, 0xC0BC, "AND.L $E,D$N" },
+    { 0xF1F0, 0xC190, "AND.L D$N,$E" },
+    { 0xF1F0, 0xC1A0, "AND.L D$N,$E" },
+    { 0xF1F8, 0xC1B0, "AND.L D$N,$E" },
+    { 0xF1FE, 0xC1B8, "AND.L D$N,$E" },
+    { 0xF1F8, 0xC0C0, "MULU $E,D$N" },
+    { 0xF1F0, 0xC0D0, "MULU $E,D$N" },
+    { 0xF1F0, 0xC0E0, "MULU $E,D$N" },
+    { 0xF1F8, 0xC0F0, "MULU $E,D$N" },
+    { 0xF1FC, 0xC0F8, "MULU $E,D$N" },
+    { 0xF1FF, 0xC0FC, "MULU $E,D$N" },
+    { 0xF1F8, 0xC1C0, "MULS $E,D$N" },
+    { 0xF1F0, 0xC1D0, "MULS $E,D$N" },
+    { 0xF1F0, 0xC1E0, "MULS $E,D$N" },
+    { 0xF1F8, 0xC1F0, "MULS $E,D$N" },
+    { 0xF1FC, 0xC1F8, "MULS $E,D$N" },
+    { 0xF1FF, 0xC1FC, "MULS $E,D$N" },
+    { 0xF1F8, 0xC100, "ABCD D$R, D$N" },
+    { 0xF1F8, 0xC108, "ABCD -(A$R),-(A$N)" },
+    { 0xF1F8, 0xC140, "EXG D$N,D$R" },
+    { 0xF1F8, 0xC148, "EXG A$N,A$R" },
+    { 0xF1F8, 0xC188, "EXG D$N,A$R" },
+    { 0xF1B8, 0xD000, "ADD.@ $E,D$N" },
+    { 0xF1B0, 0xD010, "ADD.@ $E,D$N" },
+    { 0xF1B0, 0xD020, "ADD.@ $E,D$N" },
+    { 0xF1B8, 0xD030, "ADD.@ $E,D$N" },
+    { 0xF1BC, 0xD038, "ADD.@ $E,D$N" },
+    { 0xF1BF, 0xD03C, "ADD.@ $E,D$N" },
+    { 0xF1F8, 0xD048, "ADD.W A$N,$E" },
+    { 0xF1B0, 0xD110, "ADD.@ D$N,$E" },
+    { 0xF1B0, 0xD120, "ADD.@ D$N,$E" },
+    { 0xF1B8, 0xD130, "ADD.@ D$N,$E" },
+    { 0xF1BE, 0xD138, "ADD.@ D$N,$E" },
+    { 0xF1F8, 0xD080, "ADD.L $E,D$N" },
+    { 0xF1F8, 0xD088, "ADD.L $E,D$N" },
+    { 0xF1F0, 0xD090, "ADD.L $E,D$N" },
+    { 0xF1F0, 0xD0A0, "ADD.L $E,D$N" },
+    { 0xF1F8, 0xD0B0, "ADD.L $E,D$N" },
+    { 0xF1FC, 0xD0B8, "ADD.L $E,D$N" },
+    { 0xF1FF, 0xD0BC, "ADD.L $E,D$N" },
+    { 0xF1F0, 0xD190, "ADD.L D$N,$E" },
+    { 0xF1F0, 0xD1A0, "ADD.L D$N,$E" },
+    { 0xF1F8, 0xD1B0, "ADD.L D$N,$E" },
+    { 0xF1FE, 0xD1B8, "ADD.L D$N,$E" },
+    { 0xF1B8, 0xD100, "ADDX.@ D$R,D$N" },
+    { 0xF1B8, 0xD108, "ADDX.@ -(A$R),-(A$N)" },
+    { 0xF1F8, 0xD180, "ADDX.L D$R,D$N" },
+    { 0xF1F8, 0xD188, "ADDX.L -(A$R),-(A$N)" },
+    { 0xF1E0, 0xD0C0, "ADDA.W $E,A$N" },
+    { 0xF1F0, 0xD0E0, "ADDA.W $E,A$N" },
+    { 0xF1F8, 0xD0F0, "ADDA.W $E,A$N" },
+    { 0xF1FC, 0xD0F8, "ADDA.W $E,A$N" },
+    { 0xF1FF, 0xD0FC, "ADDA.W $E,A$N" },
+    { 0xF1E0, 0xD1C0, "ADDA.L $E,A$N" },
+    { 0xF1F0, 0xD1E0, "ADDA.L $E,A$N" },
+    { 0xF1F8, 0xD1F0, "ADDA.L $E,A$N" },
+    { 0xF1FC, 0xD1F8, "ADDA.L $E,A$N" },
+    { 0xF1FF, 0xD1FC, "ADDA.L $E,A$N" },
+    { 0xFEF0, 0xE0D0, "ASd $E  " },
+    { 0xFEF0, 0xE0E0, "ASd $E  " },
+    { 0xFEF8, 0xE0F0, "ASd $E  " },
+    { 0xFEFE, 0xE0F8, "ASd $E  " },
+    { 0xFEF0, 0xE2D0, "LSd $E  " },
+    { 0xFEF0, 0xE2E0, "LSd $E  " },
+    { 0xFEF8, 0xE2F0, "LSd $E  " },
+    { 0xFEFE, 0xE2F8, "LSd $E  " },
+    { 0xFEF0, 0xE4D0, "ROXd $E " },
+    { 0xFEF0, 0xE4E0, "ROXd $E " },
+    { 0xFEF8, 0xE4F0, "ROXd $E " },
+    { 0xFEFE, 0xE4F8, "ROXd $E " },
+    { 0xFEF0, 0xE6D0, "ROd $E  " },
+    { 0xFEF0, 0xE6E0, "ROd $E  " },
+    { 0xFEF8, 0xE6F0, "ROd $E  " },
+    { 0xFEFE, 0xE6F8, "ROd $E  " },
+    { 0xF0B8, 0xE000, "ASd.@ $N,D$R" },
+    { 0xF0F8, 0xE080, "ASd.L $N,D$R" },
+    { 0xF0B8, 0xE008, "LSd.@ $N,D$R" },
+    { 0xF0F8, 0xE088, "LSd.L $N,D$R" },
+    { 0xF0B8, 0xE010, "ROXd.@ $N,D$R" },
+    { 0xF0F8, 0xE090, "ROXd.L $N,D$R" },
+    { 0xF0B8, 0xE018, "ROd.@ $N,D$R" },
+    { 0xF0F8, 0xE098, "ROd.L $N,D$R" },
+    { 0xF0B8, 0xE020, "ASd.@ D$N,D$R" },
+    { 0xF0F8, 0xE0A0, "ASd.L D$N,D$R" },
+    { 0xF0B8, 0xE028, "LSd.@ D$N,D$R" },
+    { 0xF0F8, 0xE0A8, "LSd.L D$N,D$R" },
+    { 0xF0B8, 0xE030, "ROXd.@ D$N,D$R" },
+    { 0xF0F8, 0xE0B0, "ROXd.L D$N,D$R" },
+    { 0xF0B8, 0xE038, "ROd.@ D$N,D$R" },
+    { 0xF0F8, 0xE0B8, "ROd.L D$N,D$R" },
+    { 0xF000, 0xF000, "FLINE Exception" },
+};
 
-typedef struct {
-	uint16_t match;
-	uint16_t equal;
-} opcode_t;
+#define OPCODE_COUNT (sizeof(opcodes) / sizeof(opcode_t))
 
 char *ea(uint16_t ea) {
 	static char b1[32], b2[32], *buffer;
@@ -702,15 +606,16 @@ char *ea(uint16_t ea) {
 	case 0x10: sprintf( buffer, "(A%d)", ea & 7 ); break;
 	case 0x18: sprintf( buffer, "(A%d)+", ea & 7 ); break;
 	case 0x20: sprintf( buffer, "-(A%d)", ea & 7 ); break;
-	case 0x28: sprintf( buffer, "(d16,A%d)", ea & 7 ); break;
-	case 0x30: sprintf( buffer, "(d8,A%d,Xn)", ea & 7 ); break;
+	case 0x28: sprintf( buffer, "d16(A%d)", ea & 7 ); break;
+	case 0x30: sprintf( buffer, "d8(A%d,Xn)", ea & 7 ); break;
 	case 0x38:
 		switch(ea & 7) {
 		case 0: sprintf(buffer, "ABS.W"); break;		
 		case 1: sprintf(buffer, "ABS.L"); break;		
-		case 2: sprintf(buffer, "(d16,PC)"); break;		
-		case 3: sprintf(buffer, "(d8,PC,Xn)"); break;
+		case 2: sprintf(buffer, "d16(PC)"); break;		
+		case 3: sprintf(buffer, "d8(PC,Xn)"); break;
 		case 4: sprintf(buffer, "#Immd"); break;	
+        default: return NULL;
 		}
 		break;
 	} // end switch
@@ -718,102 +623,85 @@ char *ea(uint16_t ea) {
 }
 
 const char* m68k_disasm(uint16_t op) {
-	static bool inited = false;
-	static opcode_t ops[OPCODE_COUNT] = { 0 };
 	static char buffer[64];
 	static char buffer2[64];
-	
-	if(!inited) {
-		int total_ops = 0;
-		inited = true;
-		for(uint32_t i=0; i<OPCODE_COUNT; i++) {
-			uint16_t match = 0, equal = 0, count = 0;
-			for(int b=0; b<16; b++) {
-				uint16_t bit = 0x8000 >> b;
-				char c = opcodes[i][b];
-				if(c != 'x') {
-					match |= bit;
-					if(c == '1') equal |= bit;
-				} else {
-					count++;
-				}
-			}
-			ops[i].match = match;
-			ops[i].equal = equal;
-		}
-		printf("%d total opcodes loaded.\n", total_ops);
-	}
 
+    int i;
+    for(i=0; i<OPCODE_COUNT; i++) {
+        if((op & opcodes[i].match) == opcodes[i].equal)
+            break;
+    }
+    if(i == OPCODE_COUNT) return "ILLEGAL";
 
-	//extern int debug;
-	
-	for(uint32_t i=0; i<OPCODE_COUNT; i++) {
-		if((op & ops[i].match) == ops[i].equal) {
-			sprintf( buffer, "%s", &opcodes[i][17] );
+    sprintf( buffer, "%s", opcodes[i].op );
 
-			//int x = strlen(ops[i].op) - 5; // back up over \n
-			//if(debug) printf("@ Disassembling opcode %04hX\n", op);
-			char* ea1 = strstr(buffer, "%E");
-			char* ea2 = ea1 ? strstr(ea1 + 1, "%E") : 0;
-			char* imm = strstr(buffer, "%N");
-			char* reg = strstr(buffer, "%R");
-			
-			int ea1_off = ea1 - buffer;
-			int ea2_off = ea2 - buffer;
-			int imm_off = imm - buffer;
-			int reg_off = reg - buffer;
+    char* cnd = strstr(buffer, "cc");
+    char* bwx = strstr(buffer, ".@");
+    char* shf = strstr(buffer, "d.");
+    char* ea1 = strstr(buffer, "$E");
+    char* ea2 = ea1 ? strstr(ea1 + 1, "$E") : 0;
+    char* imm = strstr(buffer, "$N");
+    char* reg = strstr(buffer, "$R");
+    
+    int cnd_off = cnd - buffer;
+    int bwx_off = bwx - buffer;
+    int shf_off = shf - buffer;
+    int ea1_off = ea1 - buffer;
+    int ea2_off = ea2 - buffer;
+    int imm_off = imm - buffer;
+    int reg_off = reg - buffer;
 
-			unsigned _i = (op >> 9) & 7;
-			unsigned _r = (op & 7);
-			
-			if(ea1) buffer[ea1_off + 1] = 's';
-			if(ea2) buffer[ea2_off + 1] = 's';
-			if(imm) buffer[imm_off + 1] = 'd';
-			if(reg) buffer[reg_off + 1] = 'd';
-			
-			if(ea1 && ea2) {
-				char* _ea1 = ea(op & 0x3F);
-				char* _ea2 = ea(((op >> 9) & 0x07) | ((op >> 3) & 0x38));
-				sprintf(buffer2, buffer, _ea1, _ea2);
-				
-			} else if(ea1) {
-				char* _ea = ea(op & 0x3F);
-				if(imm && reg) {
-					if (ea1 < imm) {
-						if (imm < reg)      sprintf(buffer2, buffer, _ea,_i,_r);  //return [ea1,imm,reg];
-						else if (ea1 < reg) sprintf(buffer2, buffer, _ea,_r,_i);  //return [ea1,reg,imm];
-						else                sprintf(buffer2, buffer, _r,_ea,_i);  //return [reg,ea1,imm];
-					} else {
-						if (ea1 < reg)      sprintf(buffer2, buffer, _i,_ea,_r);  //return [imm,ea1,reg];
-						else if (imm < reg) sprintf(buffer2, buffer, _i,_r,_ea);  //return [imm,reg,ea1];
-						else                sprintf(buffer2, buffer, _r,_i,_ea);  //return [reg,imm,ea1];
-					}
-				} else if(imm) {
-					if (ea1 < imm)          sprintf(buffer2, buffer, _ea,_i);  //return [reg,ea1,imm];
-					else                    sprintf(buffer2, buffer, _i,_ea);  //return [reg,imm,ea1];
-					
-				} else if(reg) {
-					if (ea1 < reg)          sprintf(buffer2, buffer, _ea,_r);  //return [reg,ea1,imm];
-					else                    sprintf(buffer2, buffer, _r,_ea);  //return [reg,imm,ea1];
-					
-				} else                      sprintf(buffer2, buffer, _ea);  //return [reg,imm,ea1];
-				
-			} else {
-				if(imm && reg) {
-					if (imm < reg)          sprintf(buffer2, buffer, _i,_r);  //return [ea1,imm,reg];
-					else                    sprintf(buffer2, buffer, _r,_i);  //return [reg,ea1,imm];
-					
-				} 
-				else if(imm)                sprintf(buffer2, buffer, _i);  //return [reg,ea1,imm];
-				else if(reg)                sprintf(buffer2, buffer, _r);  //return [reg,ea1,imm];
-				else                        sprintf(buffer2, buffer);  //return [reg,imm,ea1];
-				
-			}
-			return buffer2;
-		}
-	}
-	
-	return "ILLEGAL";
+    unsigned _i = (op >> 9) & 7;
+    unsigned _r = (op & 7);
+    
+    if(cnd) buffer[cnd_off] = cc[(op >> 8) & 0xF][0], buffer[cnd_off + 1] = cc[(op >> 8) & 0xF][1];
+    if(bwx) buffer[bwx_off + 1] = (op & 0x0040) ? 'W' : 'B';
+    if(shf) buffer[shf_off] = (op & 0x0100) ? 'L' : 'R';
+    if(ea1) buffer[ea1_off] = '%', buffer[ea1_off + 1] = 's';
+    if(ea2) buffer[ea2_off] = '%', buffer[ea2_off + 1] = 's';
+    if(imm) buffer[imm_off] = '%', buffer[imm_off + 1] = 'd';
+    if(reg) buffer[reg_off] = '%', buffer[reg_off + 1] = 'd';
+    
+    if(ea1 && ea2) {
+        char* _ea1 = ea(op & 0x3F);
+        char* _ea2 = ea(((op >> 9) & 0x07) | ((op >> 3) & 0x38));
+        sprintf(buffer2, buffer, _ea1, _ea2);
+        
+    } else if(ea1) {
+        char* _ea = ea(op & 0x3F);
+        if(imm && reg) {
+            if (ea1 < imm) {
+                if (imm < reg)      sprintf(buffer2, buffer, _ea,_i,_r);  // return [ea1,imm,reg];
+                else if (ea1 < reg) sprintf(buffer2, buffer, _ea,_r,_i);  // return [ea1,reg,imm];
+                else                sprintf(buffer2, buffer, _r,_ea,_i);  // return [reg,ea1,imm];
+            } else {
+                if (ea1 < reg)      sprintf(buffer2, buffer, _i,_ea,_r);  // return [imm,ea1,reg];
+                else if (imm < reg) sprintf(buffer2, buffer, _i,_r,_ea);  // return [imm,reg,ea1];
+                else                sprintf(buffer2, buffer, _r,_i,_ea);  // return [reg,imm,ea1];
+            }
+        } else if(imm) {
+            if (ea1 < imm)          sprintf(buffer2, buffer, _ea,_i);     // return [reg,ea1,imm];
+            else                    sprintf(buffer2, buffer, _i,_ea);     // return [reg,imm,ea1];
+            
+        } else if(reg) {
+            if (ea1 < reg)          sprintf(buffer2, buffer, _ea,_r);     // return [reg,ea1,imm];
+            else                    sprintf(buffer2, buffer, _r,_ea);     // return [reg,imm,ea1];
+            
+        } else                      sprintf(buffer2, buffer, _ea);        // return [reg,imm,ea1];
+        
+    } else {
+        if(imm && reg) {
+            if (imm < reg)          sprintf(buffer2, buffer, _i,_r);      // return [ea1,imm,reg];
+            else                    sprintf(buffer2, buffer, _r,_i);      // return [reg,ea1,imm];
+            
+        } 
+        else if(imm)                sprintf(buffer2, buffer, _i);         // return [reg,ea1,imm];
+        else if(reg)                sprintf(buffer2, buffer, _r);         // return [reg,ea1,imm];
+        else                        sprintf(buffer2, buffer);             // return [reg,imm,ea1];
+        
+    }
+    return buffer2;
+
 }
 
 
