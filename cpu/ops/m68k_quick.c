@@ -13,6 +13,7 @@
 
 
 int emit_ADDQ(char *buffer, uint16_t opcode) {
+	char EA[32];
 	uint16_t size = 1 << ((opcode & 0x00C0) >> 6);
 	if(size > 4) return -1; // no such size
 	
@@ -36,32 +37,42 @@ int emit_ADDQ(char *buffer, uint16_t opcode) {
 	//fprintf( stderr, "%04hX ", opcode );
 	lines = 0;
 	emit_reset( buffer );
-	
-	get_destination_data( &dRR, &tRR, dEA, dR, size );
 
 	// get the 'quick' integer
 	uint8_t val = (opcode >> 9) & 7;
 	if(val == 0) val = 8;
+
+	if(reg_raw(dR) == 0xFF) {
+		reg_alloc_arm(0);
+		emit("\tmov     r%d, #%d\n", 0, val);
+		sprintf(EA, "r%d", 0);
+
+	} else {
+		sprintf(EA, "#%d", val);
+	}
+
+	get_destination_data( &dRR, &tRR, dEA, dR, size );
 	
 	if(dEA == EA_AREG) {
 		if(opcode & 0x0100) { // subq
-			emit("\tsub     r%d, r%d, #%d\n", tRR, tRR, val);		
+			emit("\tsub     r%d, r%d, %s\n", tRR, tRR, EA);		
 
 		} else { // addq
-			emit("\tadd     r%d, r%d, #%d\n", tRR, tRR, val);		
+			emit("\tadd     r%d, r%d, %s\n", tRR, tRR, EA);		
 		}
 		
 	} else {
 		if(opcode & 0x0100) { // subq
-			emit("\trsbs    r%d, r%d, #%d\n", tRR, tRR, val);		
+			emit("\trsbs    r%d, r%d, %s\n", tRR, tRR, EA);		
 			emit("\trsb     r%d, #0\n", tRR);
 
 		} else { // addq
-			emit("\tadds    r%d, r%d, #%d\n", tRR, tRR, val);		
+			emit("\tadds    r%d, r%d, %s\n", tRR, tRR, EA);		
 		}
 	}
 	
 	set_destination_data( &dRR, &tRR, dEA, size );
+	reg_flush();
 
 	return lines_ext(lines, 0, dEA, size);
 }
@@ -75,19 +86,32 @@ int emit_SUBQ(char *buffer, uint16_t opcode) {
 //     ---          Data register
 
 int emit_MOVEQ(char *buffer, uint16_t opcode) {
+	char EA[32];
+
 	lines = 0;
 	emit_reset( buffer );
 
 	uint8_t dR = (opcode & 0x0E00) >> 9;
-	uint8_t dVal = (uint8_t)(uint8_t)(opcode & 0xFF);
+	int8_t dVal = (int8_t)(uint8_t)(opcode & 0xFF);
 	uint8_t dRR;
+
+	if(dVal >= 0) sprintf(EA, "#0x%02x", dVal);
+	else sprintf(EA, "#0x%02x", (uint8_t)(~dVal));
+
+	if(reg_raw(dR) == 0xFF) {
+		reg_alloc_arm(0);
+		if(dVal >= 0) emit("\tmov     r0, %s\n", EA);
+		else emit("\tmvn     r0, %s\n", EA);
+		sprintf(EA, "r0");
+
+	}
 
 	if(!emit_get_reg( &dRR, dR, 4 )) return -1;
 
 	if(dVal >= 0)
-		emit("\tmov     r%d, #0x%02x\n", dRR, dVal);
+		emit("\tmov     r%d, %s\n", dRR, EA);
 	else 
-		emit("\tmvn     r%d, #0x%02x\n", dRR, (uint8_t)(~dVal));
+		emit("\tmvn     r%d, %s\n", dRR, EA);
 
 	reg_modified(dRR);
 	reg_flush();
