@@ -120,6 +120,7 @@ typedef struct {
 	union {
 		uint32_t reg[32];
 		struct {
+			// offsets 0 thru 7
 			union {
 				uint32_t d[8];
 				struct {
@@ -133,6 +134,7 @@ typedef struct {
 					uint32_t    d7;
 				};
 			};
+			// offsets 8 thru 15
 			union {
 				uint32_t a[8];
 				struct {
@@ -146,22 +148,22 @@ typedef struct {
 					uint32_t    a7;
 				};
 			};
-			uint32_t sfc;    // Source Function Code
-			uint32_t usp;    // User Stack Pointer
-			uint32_t dfc;    // Destination Function Code
-			uint32_t vbr;    // Vector Base Register
-			uint32_t cacr;   // Cache Control Register
-			uint32_t caar;   // Cache Address Register
-			uint32_t tc;     // MMU Translation Control Register
-			uint32_t msp;    // Master Stack Pointer
-			uint32_t itt0;   // Instruction Transparent Translation Register 0
-			uint32_t isp;    // Interrupt Stack Pointer
-			uint32_t itt1;   // Instruction Transparent Translation Register 1
-			uint32_t mmusr;  // MMU Status Register
-			uint32_t dtt0;   // Data Transparent Translation Register 0
-			uint32_t urp;    // User Root Pointer
-			uint32_t dtt1;   // Data Transparent Translation Register 1
-			uint32_t srp;    // Supervisor Root Pointer	
+			uint32_t sfc;    // 16 Source Function Code
+			uint32_t usp;    // 17 User Stack Pointer
+			uint32_t dfc;    // 18 Destination Function Code
+			uint32_t vbr;    // 19 Vector Base Register
+			uint32_t cacr;   // 20 Cache Control Register
+			uint32_t caar;   // 21 Cache Address Register
+			uint32_t tc;     // 22 MMU Translation Control Register
+			uint32_t msp;    // 23 Master Stack Pointer
+			uint32_t itt0;   // 24 Instruction Transparent Translation Register 0
+			uint32_t isp;    // 25 Interrupt Stack Pointer
+			uint32_t itt1;   // 26 Instruction Transparent Translation Register 1
+			uint32_t mmusr;  // 27 MMU Status Register
+			uint32_t dtt0;   // 28 Data Transparent Translation Register 0
+			uint32_t urp;    // 29 User Root Pointer
+			uint32_t dtt1;   // 30 Data Transparent Translation Register 1
+			uint32_t srp;    // 31 Supervisor Root Pointer	
 		};
 	};
 		
