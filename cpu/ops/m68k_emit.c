@@ -282,6 +282,23 @@ int emit_NOP(char *buffer, uint16_t opcode) {
 	return 1;
 }
 
+int issvc(char* c) {
+	return
+		(c[0]=='\t') && 
+		(c[1]=='s') && 
+		(c[2]=='v') && 
+		(c[3]=='c') && 
+		(c[4]==' ');
+} 
+
+int isbranch(char* c) {
+	if(*c++ != '\t') return 0;
+	if(*c++ != 'b') return 0;
+	if((*c == 'i') || (*c == 'k')) return 0;
+	if(c[0]=='f' && c[1]=='i') return 0;
+	return 1;
+}
+
 int main(int argc, char ** argv) {
 //	const char *omitted = "// omitted\n";
 	char buffer[16384];
@@ -378,184 +395,115 @@ try_again:
 			total_alias++;
 		}
 	}
-	
-	// Emit the opcode functions in sixteen files
-	for(int i=0; i<0x10000; i+=0x1000) {
-		char filename[16];		
-		sprintf(filename, "pjit_ops_%04hX.s", (uint16_t)i);
-		FILE * file = fopen( filename, "w" );
 
-		fprintf(stderr, "Generating file '%s'...\n", filename); 
-				
-		fprintf(file, "%s", header);
-	
-		fprintf(file, "\t.text\n");
-		fprintf(file, "\t.code 32\n"); 
-		if(i == 0x5000) {
-			fprintf(file, "\t.extern branch_normal\n");
-		} else if(i == 0x6000) {
-			fprintf(file, "\t.global branch_normal\n");
+	// Build super opcode table
+	int common = 0;
+	int common_lines = 0;
+	const char* common_blocks[65546] = { 0 };
+	const char *filename = "pjit_ops.s";
+	FILE * file = fopen( filename, "w" );
+	char* new_line = NULL;
+
+	fprintf(stderr, "Generating file '%s'...\n", filename); 
+	fprintf(file, "%s", header);	
+	fprintf(file, "\t.global optab\n\t.text\n");
+	fprintf(file, "\t.code 32\n");
+	fprintf(file, "\t.syntax unified\n\noptab:\n");
+	for(int opcode=0; opcode<0x10000; opcode++) {
+		const char *m68k_op = m68k_disasm(opcode);
+		//fprintf(file, "\t.global opcode_%04hX\n", (uint16_t)opcode);
+		fprintf(file, "opcode_%04hX:  @ %s\n", (uint16_t)opcode, m68k_op);
+		int len = opcode_len[opcode];
+		uint16_t real_opcode = (len < 0) ? -len : opcode;
+		char *op;
+
+		if(len < 0) {
+			len = opcode_len[real_opcode] & 0xFF;
+			op = opcodes[real_opcode];
+		} else {
+			op = opcodes[opcode];
 		}
-		fprintf(file, "\n");
 
-		for(int j=0; j<0x1000; j++) {
-			uint16_t opcode = i + j;
-			const char *m68k_op = m68k_disasm(opcode);
-			bool valid = (opcode == 0x4AFC) || memcmp(m68k_op, "ILLEGAL", 7);
-			
-			// print out all the aliases for this
-			if(opcode_len[opcode] > 0) {
-				int len = opcode_len[opcode] & 0xFF;
-				if(len < 0) continue;
+		if((len & 0xFF) == 0) {
+			/* True NOP */
+			fprintf(file, "\tnop\n");
+			fprintf(file, "\tnop\n");
 
-				char *op = (len > 0) ? opcodes[opcode] : "\tnop\n";
-				fprintf(file, "\t.global opcode_%04hX\n", opcode);
-				fprintf(file, "\t.syntax unified\n");
-				fprintf(file, "\t@ %s\n", m68k_op);
-				fprintf(file, "opcode_%04hX:\n%s", opcode, op);
-				
-				if((opcode_len[opcode] & NO_BX_LR) != NO_BX_LR)
-					fprintf(file, "\tbx      lr\n");
-				fprintf(file, "\n");
-				if(!valid) {
-					fprintf(stderr, "ERR: opcode emitted for invalid pattern %04hX\n", opcode);
-				}
-			} else if(opcode_len[opcode] == 0) {
-				if(valid) {
-					fprintf(stderr, "ERR: opcode skipped for valid pattern %04hX: %s", opcode, m68k_op);
+		} else if((len & 0xFF) == 1) {
+			if(issvc(op)) {
+				/* Add CPSR save for pending exception */
+				fprintf(file, "\tmrs     r0, CPSR\n");
+				fprintf(file, "%s", op);
+			} else if(isbranch(op)) {
+				/* Put branches in second slot, always */
+				fprintf(file, "\tnop @ bonus\n");
+				fprintf(file, "%s", op);
+			} else {
+				/* Otherwise just pad it */
+				fprintf(file, "%s", op);
+				fprintf(file, "\tnop\n");
+			}
+		} else if((len & 0xFF) == 2) {
+			/* Longest opcode we can hold inline */
+			fprintf(file, "%s", op);
+
+		} else {
+			/* All other opcodes need to be split; we'll
+			   cleave off the first line and add a branch
+			   to the rest. If the rest is common with other
+			   opcodes, then we'll reuse those */
+			char* old_line = strdup(op);
+			new_line = strchr(old_line, '\n');
+			*new_line++ = 0;
+
+			common_lines += (len & 0xFF);
+			{
+				static char buffer[2048];
+				sprintf(buffer, "%s\tbx      lr\n", new_line);
+				new_line = strdup(buffer);
+			}
+	
+			fprintf(file, "%s\n", old_line);
+			int i;
+			for(i=0; i<common; i++) {
+				if(0==strcmp(common_blocks[i], new_line)) {
+					break;
 				}
 			}
+			// Not found
+			if(i == common) {
+				common_blocks[common] = new_line;
+				fprintf(file, "\tbl      common_%04hX\n", (uint16_t)common);
+				common++;
+			} else {
+				fprintf(file, "\tbl      common_%04hX\n", (uint16_t)i);
+			}
 		}
-		fprintf(file, "\tnop\n\n");		
-		fclose(file);
+		fflush(file);
 	}
-	
-	// Emit the op lengths
-	{
-		char filename[16];
-		int max_len = 0;
-		uint16_t longest_op = 0;
+	fclose(file);
+	common_blocks[common++] = new_line;
 
-		sprintf(filename, "pjit_oplen.s");
-		FILE * file = fopen( filename, "w" );
-
-		fprintf(stderr, "Generating file '%s'...\n", filename); 
-		
-		fprintf(file, "%s", header);
-		
-		fprintf(file, "\t.text\n\t.global oplen\n");
-		fprintf(file, "oplen:");
-		
-		for(int i=0; i<0x10000; i++) {
-			if((i & 4095) == 0) fprintf(file, "\n;// 0x%04hX\n\t.hword ", (uint16_t)i);
-			else if((i & 7) == 0) fprintf(file, "\t;// 0x%04hX\n\t.hword ", (uint16_t)(i - 8));
-			
-			char sepr = (i & 7) ? ',' : ' ';
-			
-			int len = opcode_len[i];
-			
-			if (len < 0) len = opcode_len[-len];
-			else if((len & 0xFF) > max_len) max_len = (len & 0xFF), longest_op = i;
-			fprintf(file, "%c 0x%04hX", sepr, (uint16_t)len);
-		}
-		
-		fprintf(file, "\n\n");
-		fprintf(stderr, "Longest opcode: %d (%04X)\n", max_len, longest_op);
-
-		fclose(file);
+	// Build commons
+	filename = "pjit_common.s";
+	file = fopen( filename, "w" );
+	fprintf(stderr, "Generating file '%s'...\n", filename); 
+	fprintf(file, "%s", header);	
+	fprintf(file, "\t.text\n");
+	fprintf(file, "\t.code 32\n"); 
+	fprintf(file, "\t.syntax unified\n");
+	fprintf(file, "\t.global move_to_cr\n");
+	fprintf(file, "\t.global move_to_sr\n");
+	fprintf(file, "\t.global movem_word_r2m\n");
+	fprintf(file, "\t.global movem_long_r2m\n");
+	fprintf(file, "\t.global movem_word_m2r\n");
+	fprintf(file, "\t.global movem_long_m2r\n");
+	for(int i=0; i<common; i++) {
+		fprintf(file, "\t.global common_%04hX\n", (uint16_t)i);
+		fprintf(file, "common_%04hX:\n%s\n", (uint16_t)i, common_blocks[i]);
 	}
+	fclose(file);
 
-	{
-		char filename[16];
-		sprintf(filename, "pjit_optab.s");
-		FILE * file = fopen( filename, "w" );
-		
-		fprintf(stderr, "Generating file '%s'...\n", filename); 
-		
-		fprintf(file, "%s", header);
-		
-		fprintf(file, "\t.text\n\t.global optab\n");
-		fprintf(file, "optab:\n\t.word ");
-		
-		//uint16_t real_opcode[65536];
-		for(int i=0; i<0x10000; i++) {
-			int len = opcode_len[i];
-			uint16_t real_opcode = (len < 0) ? -len : i;
-
-			if(i && ((i & 3) == 0)) fprintf(file, "\t// %04hX\n\t.word ", (uint16_t)(i - 4));
-			char sepr = (i & 3) ? ',' : ' ';
-			fprintf(file, "%c opcode_%04hX", sepr, real_opcode);
-		}	
-
-		// uint16_t compressed_opcodes_index[8192];
-		// uint16_t compressed_opcodes[65536];
-		// uint16_t compressed_opcodes_count = 0;
-
-		// int matches = 0;
-		// for(int i=0; i<0x10000; i+=8) {
-		// 	bool match = false;
-		// 	for(int j=0; j<i; j+=8) {
-		// 		if(0 == memcmp(&real_opcode[i], &real_opcode[j], 16)) {
-		// 			// fprintf(stderr, "Fragment match: %04hX & %04hX\n", i, j);
-		// 			compressed_opcodes_index[i / 8] =
-		// 				compressed_opcodes_index[j / 8];
-		// 			matches ++;
-		// 			match = true;
-		// 			break;
-		// 		}
-		// 	}
-		// 	if(!match) {
-		// 		// fprintf(stderr, "Fragment miss: %04hX\n", i);
-		// 		compressed_opcodes_index[i / 8] = 
-		// 			compressed_opcodes_count;
-		// 		memcpy(&compressed_opcodes[compressed_opcodes_count],
-		// 			&real_opcode[i], 32);
-		// 		compressed_opcodes_count += 8;
-		// 	}
-		// }
-		// fprintf(stderr, "Opcode fragments: %d\n", compressed_opcodes_count/8);
-		// fprintf(stderr, "Fragment matches: %d\n", matches);
-
-		// int size = 16384 + compressed_opcodes_count * 4;
-        // fprintf(file, "\t// Duplicate fragment matches: %d\n", matches);
-        // fprintf(file, "\t// Opcode fragments: %d at 8 words or 16 bytes per fragment\n", compressed_opcodes_count/8);
-        // fprintf(file, "\t// Tables size: %d K-bytes (including index)\n", size);
-        // fprintf(file, "\t// Compression: %0.1f%% of original size\n", size / 2621.44);
-		// fprintf(file, "\t.text\n\t.global optab\n");
-		// fprintf(file, "optab:\n\t.word ");
-		// for(int i=0; i<compressed_opcodes_count; i++) {
-		// 	if(i && ((i & 3) == 0)) fprintf(file, "\t// %04hX\n\t.word ", (uint16_t)(i - 4));
-		// 	char sepr = (i & 3) ? ',' : ' ';
-		// 	fprintf(file, "%c opcode_%04hX", sepr, compressed_opcodes[i]);
-		// }
-
-        // fprintf(file, "\n\n\t// This table requires 16KB (8192 16-bit words)\n");
-        // fprintf(file, "\t// Each is an index to one of the above 8-word blocks \n");
-
-        // fprintf(file, "\t.text\n\t.global optab_idx\n");
-		// fprintf(file, "optab_idx:\n\t.word ");
-		// for(int op=0; op<0x10000; op+=8) {
-		// 	int i = op / 8;
-		// 	if(i && ((i & 3) == 0)) fprintf(file, "\t// %04hX\n\t.hword ", (uint16_t)(op - 32));
-		// 	char sepr = (i & 3) ? ',' : ' ';
-		// 	fprintf(file, "%c 0x%04hX", sepr, compressed_opcodes_index[i]);
-		// }
-
-
-			
-		// 	
-
-		// 	int len = opcode_len[i];
-		// 	uint16_t opcode = (len < 0) ? -len : i;
-		// 	
-		// }
-
-	
-		fprintf(file, "\n\n");
-
-		fclose(file);
-	}
-	
 	// Emit all the extension modes
 	{
 		char branches[16384];
@@ -567,14 +515,14 @@ try_again:
 		fprintf(stderr, "Generating file '%s'...\n", filename); 
 		
 		for(int r=1; r<3; r++) {
-			char *b = branches;
-			for(int i=0; i<128; i++) {
-				b += sprintf(b, "\tmov     r%d, #%d\n\tb       0f\n", r, i);
-			}
-			for(int i=-128; i; i++) {
-				b += sprintf(b, "\tmvn     r%d, #%d\n", r, ~i);
-				if(i < -1) b += sprintf(b, "\tb       0f\n");
-			}
+			// char *b = branches;
+			// for(int i=0; i<128; i++) {
+			// 	b += sprintf(b, "\tmov     r%d, #%d\n\tb       0f\n", r, i);
+			// }
+			// for(int i=-128; i; i++) {
+			// 	b += sprintf(b, "\tmvn     r%d, #%d\n", r, ~i);
+			// 	if(i < -1) b += sprintf(b, "\tb       0f\n");
+			// }
 			
 			fprintf(file, "\t.text\n\t.thumb_func\n\t.syntax unified\n");
 
@@ -595,7 +543,7 @@ try_again:
 					reg_alloc_arm(r);
 					reg_alloc_68k(&rD, d, s ? 4 : 2); // todo bail?
 				
-					fprintf(file, "0:\n%s", buffer);
+					fprintf(file, "%s", buffer);
 					fprintf(file, "\tadd     r%d, r%d\n", r, rD);				
 					fprintf(file, "\tbx      lr\n\n");
 					reg_flush();
@@ -621,11 +569,47 @@ try_again:
 				}
 			}
 		}
-	
 		fclose(file);
 	}
-	
+
+	// Emit the op lengths
+	{
+		char filename[16];
+		int max_len = 0;
+		uint16_t longest_op = 0;
+
+		sprintf(filename, "pjit_oplen.s");
+		FILE * file = fopen( filename, "w" );
+
+		fprintf(stderr, "Generating file '%s'...\n", filename); 
+		
+		fprintf(file, "%s", header);
+		
+		fprintf(file, "\t.text\n\t.global oplen\n");
+		fprintf(file, "oplen:");
+		
+		for(int i=0; i<0x10000; i++) {
+			if((i & 4095) == 0) fprintf(file, "\n;// 0x%04hX\n\t.byte  ", (uint16_t)i);
+			else if((i & 7) == 0) fprintf(file, "\t;// 0x%04hX\n\t.byte  ", (uint16_t)(i - 8));
+			
+			char sepr = (i & 7) ? ',' : ' ';
+			
+			int len = opcode_len[i];
+			
+			if (len < 0) len = opcode_len[-len];
+			else if((len & 0xFF) > max_len) max_len = (len & 0xFF), longest_op = i;
+			fprintf(file, "%c 0x%02hhX", sepr, (uint8_t)((len >> 8)|(len & 15)));
+		}
+		
+		fprintf(file, "\n\n");
+		fprintf(stderr, "Longest opcode: %d (%04X)\n", max_len, longest_op);
+
+		fclose(file);
+	}
+
 	printf("\n");
+	
+	printf("Total common instructions: %d\n", common_lines );
 	printf("Total real 68k instructions: %d\n", total_68k );
 	printf("Total aliased 68k instructions: %d\n", total_alias );
 	printf("Total invalid 68k instructions: %d\n", total_invalid );

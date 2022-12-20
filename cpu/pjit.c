@@ -54,7 +54,7 @@ __attribute__ ((aligned (1 << PAGE_SIZE)))
 static uint32_t pjit_cache[1<<SET_BITS][1 << PAGE_COUNT][1 << PAGE_SIZE] = { 0 };
 
 extern const uint32_t optab[65536];
-extern const uint16_t oplen[65536];
+extern const uint8_t oplen[65536];
 
 static void cpu_lookup_inline(void);
 static void cpu_lookup_noinline(void);
