@@ -137,18 +137,11 @@ ALLOC_ERR_t reg_alloc_68k(uint8_t *reg_arm, uint8_t reg_68k, int size) {
 			if(debug) printf("@ reg_alloc_68k r%d (new)\n", reg);
 			if(!suppress_load) {
 
-			// little-endian BB
-			//               WW WW
-			//               LL LL LL LL
-			// big endian             BB
-			//                     WW WW
-			//               LL LL LL LL
+			int off = reg_68k * 4;
 #ifdef __PJIT_BIG_ENDIAN
-			int off = (size == 3) ? 0 : (size == 2) ? 2 : 3;
-#else
-			const int off = 0;
+			off += (size == 3) ? 0 : (size == 2) ? 2 : 3;
 #endif
-			emit("\t%s   r%d, [" CPU ", %d]\n", ldx(size), reg, reg_68k * 4 + off);
+			emit("\t%s   r%d, [" CPU ", #%d]\n", ldx(size), reg, off);
 			*reg_arm = reg;
 			}
 
@@ -186,8 +179,11 @@ ALLOC_ERR_t reg_free(uint8_t reg_arm) {
 				}
 				
 			} else {
-				uint16_t offset = reg_map[reg_arm].reg * 4;
-				emit("\t%s    r%d, [" CPU ", %d]\n", stx(reg_map[reg_arm].size), reg_arm, offset);
+				int off = reg_map[reg_arm].reg * 4;
+#ifdef __PJIT_BIG_ENDIAN
+				off += (reg_map[reg_arm].size == 3) ? 0 : (reg_map[reg_arm].size == 2) ? 2 : 3;
+#endif
+				emit("\t%s    r%d, [" CPU ", #%d]\n", stx(reg_map[reg_arm].size), reg_arm, off);
 			}
 		}
 		reg_map[reg_arm].raw = 0;
