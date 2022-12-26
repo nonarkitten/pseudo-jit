@@ -1,5 +1,5 @@
 /* entry point of the program, first instruction executed */
-ENTRY(main) 
+ENTRY(pjit_entry) 
 
 SECTIONS
 {
@@ -9,13 +9,13 @@ SECTIONS
 		*main.o(.text*)
 		*(.text*)
         *(.rodata*)
-	} >RAM
+	}
 	
 	/* non-zero global and static variables initialized by the application code */
 	.data : { 
 		. = ALIGN(4);
 		*(.data)
-	} >RAM
+	}
 	
 	/* global and static variable that are not initialized by the application code. */
 	/* the compiler (hopefully) initialize this data to 0. */
@@ -25,5 +25,5 @@ SECTIONS
 		*(.bss)
 		. = ALIGN(4);
 		_bss_end = .;
-	} >RAM
+	}
 }
