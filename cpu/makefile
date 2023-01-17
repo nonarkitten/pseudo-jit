@@ -3,12 +3,10 @@ $(error SUBMAKE not set, run make from root folder)
 endif
 
 OUTPUT  := ../obj/libpjit.a
-SOURCES  := $(wildcard ops/*.s) $(wildcard *.c) pjit_support.s ops/m68k_da.c
+SOURCES  := $(wildcard *.c) pjit_support.s ops/m68k_da.c
 OBJECTS  := \
 	$(patsubst %.s,obj/%.o, \
 	$(patsubst %.c,obj/%.o, \
-	$(patsubst ops/%.s,obj/%.o, \
-	$(patsubst ops/%.c,obj/%.o, \
 	$(SOURCES) \
 	))))
 

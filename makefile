@@ -1,11 +1,11 @@
 # Compiler optimizations
-ifdef ($(DEBUG))
+# ifdef ($(DEBUG))
 # Optimize for debugging, but include basic optimizers for not-terrible-code
 CCFLAGS_OPT := -Og -g3 -ggdb -D_DEBUG
-else
+# else
 # Optimize for release and raise the bar for errors
-CCFLAGS_OPT := -Os -Werror -s
-endif
+# CCFLAGS_OPT := -Os -Werror -s
+# endif
 
 # Universally good compiler warnings	
 CCFLAGS_WARN := \
@@ -52,7 +52,7 @@ all: premake $(OUTPUT)
 
 premake:
 	@mkdir -p obj
-	@make -C cpu/ops
+	@mkdir -p binaries
 	@make -C cpu
 	@make -C support
 

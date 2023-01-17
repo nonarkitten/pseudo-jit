@@ -22,6 +22,9 @@ binaries/
 *#
 settings.json
 
+# Graveyard
+dead/
+
 # PJIT generated code
 cpu/ops/make_m68k
 cpu/ops/pjit_extword.*

@@ -11,9 +11,58 @@
             "device": "AM3358",
             "request": "launch",
             "type": "cortex-debug",
-            "runToEntryPoint": "main",
+            "overrideLaunchCommands": [
+                "monitor reset",
+                "monitor halt",
+                "file ./binaries/buffee_bootloader.elf",
+                "load",
+                "break main",
+                "jump Reset_Handler",
+
+                // "monitor reset halt",
+                // "load",
+                // "monitor reset halt",
+                // "break main",
+                // "jump main",
+            ],
+
+//            "runToEntryPoint": "main",
             "interface": "jtag",
             "servertype": "jlink"
         }
     ]
 }
+
+/*
+            "monitor reset halt",
+            "file ./binaries/mybootloader.elf",
+            "load",
+            "tb main",
+            "jump Reset_Handler",
+*/
+
+/*
+int ResetTarget()
+{
+    JLINK_SYS_Report("Init...");
+    
+    JLINK_TIF_ActivateTargetReset();
+    JLINK_TIF_ReleaseTargetReset();
+    
+    JLINK_ExecCommand("erase");
+    JLINK_ExecCommand("loadbin /.../init.bin, 0x0");
+       
+    JLINK_ExecCommand("r");
+    JLINK_ExecCommand("g");
+    JLINK_SYS_Sleep(500);
+    JLINK_ExecCommand("h");
+    
+    // Allow execution form sdram
+    JLINK_MEM_WriteU32(0xE000ED98, 0); // MPU_RNR
+    JLINK_MEM_WriteU32(0xE000ED9C, 0xa0000000); // MPU_RBAR
+    JLINK_MEM_WriteU32(0xE000EDA0, 0x3000027); // MPU_RASR
+    JLINK_MEM_WriteU32(0xE000ED94, 5); // MPU_CTRL
+    
+    JLINK_SYS_Report("Init done");
+}
+*/
