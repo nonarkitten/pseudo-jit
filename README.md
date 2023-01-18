@@ -8,8 +8,87 @@ This work is licensed under a <a rel="license" href="http://creativecommons.org/
 
 Please visit [the Wiki](https://github.com/nonarkitten/pseudo-jit/wiki) for more information.
 
+## Future Plans
+
+While PJIT is working in principle, getting it loaded and debugging has been a huge challenge with open source offerings (though, to be fair, they're actually better than TI's own Code Compser Studio). As such we're refactoring PJIT into PJIT 2.0 with the following goals:
+- migrate old PJIT into pjit-legacy branch
+- migrating the Buffee Bootloader code to this repository
+- cleaning up instructions for Visual Studio Code for loading and debugging
+- adding instructions for using UART/XMODEM bootloader
+- single binary for bootloader and PJIT
+
+## Single Binary PJIT
+This means making the whole executable under 127KB! This is incredibly small, but in our investigation, after many attempts at compressing code, we found that the generator itself was the smallest, by far. While making debugging much more accessible, it also makes booting much faster as our goal is to boot Buffee inside the 150ms window of the original 68000 (thus appearing virtually "instant").
+
+So, during boot, PJIT has to:
+- initialize all hardware including I2C, PMIC, clocks, EEPROM, DRAM, GPMC, GreenPAK, SPI and UART (done)
+- verify basic operating state of the system (i.e. Power-On Self Test or POST; to-do)
+- based on EEPROM settings, initialize PJIT cache and opcode jump tables (to-do)
+- finally, start PJIT
+
 ## Building
 
 We've moved to using Visual Studio Code -- a totally cross-platform development environment that's been working great on my Mac. Code Composer Studio was just too much to fight with. To use, simple grab a copy of Visual Studio Code and install the cortex-debug extension and JLINK software from SEGGER. I've included my .vscode/launch.json in the project which should "just work."
 
 To build, open the shell and type "make." I'm not 100% this works on Windows anymore, but it should on Linux and Mac. This is now a one-step make that will build everything required and spit out the binary at the end.
+
+## Programming -- UART
+You'll need a good Terminal emulator package. On MacOS, I cannot recommend Serial highly enough -- this is a great bit of software. On Windows, Tera Term is absolutely the best. On Linux you're on your own, but I'm sure there's something you can apt-get. Along with this, you'll need an FTDI USB to Serial adapter along with a Tag Connect TC2030 (or compatible). People comfortable with hacking can solder bodge wires directly to their board and use any sort of USB to UART bridge (or even use another PC old enough to have serial on board). Here's the pinout:
+
+```
+          _
+         (_)   Alignment pin (GND)
+         
+3.3VDC   o o   I2C SCL
+FTDI Rx  o o   FTDI Tx
+GND      o o   I2C SDA
+        _   _
+       (_) (_) Alignment pins (GND)
+```
+
+To program connect everything and power-on Buffee. If Buffee is uninitialized you should simply see the letter C repeating indefinately. If Buffee has already been programmed, you'll see the POST along with a small menu to perform more functions. To reprogram Buffee, simply select 'E' to erase the SPI flash, then reboot; from here you'll get the repeating C's.
+
+To send the image, select XMODEM and the .BIN file generated when compiling PJIT (also provided here under releases). Once it uploads, you'll see the above menu again. To make the image permanent, select 'P' to program the SPI flash with the current version of PJIT.
+```
+              ____ ______________
+  ______     |    |   \__    ___/
+  \  __ \    |    |   | |    |
+  |  |_) )\__|    |   | |    |
+  |   __/\________|___| |____|
+  |__|
+
+[BOOT] Build Date Oct 21 2022, Time 17:49:02
+[BOOT] Image 402F0400 ~ 402F600C (23564 bytes)
+[I2C0] 000_10xx ($8~$A) GreenPAK Detected, image OK.
+[I2C0] 101_0000 ($50) EEPROM Detected, settings loaded.
+[I2C0] 010_0100 ($24) PMIC Detected, Nitro mode enabled.
+[EMIF] DRAM Initialized, Memory test passed, 512MB OK.
+[BOOT] Completed in 0.09731 seconds.
+MENU
+E. Erase all SPI flash.
+P. Write SRAM to SPI flash.
+X. Reboot.
+Ready.
+] █
+```
+Note: while rare, we may have to update the GreenPAK code. During boot, if this happens, it will automatically reprogram the GreenPAK which may delay boot by a few seconds. This should only ever happen once.
+
+Note 2: yes, the I2C pins allow you direct access to the EEPROM, PMIC and GreenPAK.
+
+## Programming -- JTAG
+To program via JTAG you need to have some JTAG Programmer such as a Segger JLINK (or clone) along with the 20-pin adapter and Tag Connect TC-2050. As with the UART method, if you feel comfortable with it, you're welcome to hack together any other solution you like. Here's the pinout for the JTAG header on Buffee:
+```
+          _
+         (_)   Alignment pin (GND)
+         
+3.3VDC   o o   Reset
+TMS      o o   TRST
+GND      o o   TDI
+TCK      o o   GND
+GND      o o   TDO
+        _   _
+       (_) (_) Alignment pins (GND)
+```
+From Visual Studio Code, simply hit the "Run" icon to then start debugging.
+
+Note on both Tag Connect headers: there are no "click" holes to hold the Tag Connect pogo pins firmly in place for prolonged programming times. My recommendation is to use ouchless hair elastics. Wrap the elastic around Buffee length-wise before replacing it into the 68000 socket and then loop that around the Tag Connect header at the taper (strain releif) part. You may have to play around with the tension to make it stand up right, but once you do, it should stay firm indefinately. I know this sounds supremely hacky, but it's actually better than trying to use their own "pin anchors".
