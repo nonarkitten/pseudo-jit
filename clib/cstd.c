@@ -1,8 +1,46 @@
 /*
- * cstd.c
+ * Copyright (c) 2020-2023 Renee Cousins, the Buffee Project - http://www.buffee.ca
  *
- *  Created on: Apr. 14, 2021
- *      Author: renee.cousins
+ * This is part of PJIT the Pseudo-JIT 68K emulator.
+ *
+ * PJIT is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ *
+ * PJIT is licensed under a Creative Commons
+ * Attribution-NonCommercial-ShareAlike 4.0 International License.
+ *
+ * Under the terms of this license you are free copy and redistribute
+ * the material in any medium or format as well as remix, transform,
+ * and build upon the material.
+ *
+ * You must give appropriate credit, provide a link to the license,
+ * and indicate if changes were made. You may do so in any reasonable
+ * manner, but not in any way that suggests the licensor endorses you
+ * or your use.
+ *
+ * You may not use the material for commercial purposes.
+ *
+ * If you remix, transform, or build upon the material, you must
+ * distribute your contributions under the same license as the original.
+ *
+ * You may not apply legal terms or technological measures that legally
+ * restrict others from doing anything the license permits.
+ *
+ * Portions of PJIT have been derived from the following:
+ *
+ *     Castaway (formerly FAST), GPL version 2 License
+ *     Copyright (c) 1994-2002 Martin Döring, Joachim Hönig
+ *    
+ *     Cyclone 68K, GPL version 2 License
+ *     Copyright (c) 2004,2011 Dave "FinalDave" Haywood
+ *     Copyright (c) 2005-2011 Graûvydas "notaz" Ignotas
+ *    
+ *     TI StarterWare, modified BSD 3-Clause License
+ *     Copyright (C) 2010 Texas Instruments Incorporated - http://www.ti.com/
+ *
+ *     libbbb, Apache License, Version 2.0
+ *     Copyright 2015 University of Applied Sciences Western Switzerland / Fribourg
  */
 
 #include <stdio.h>
@@ -11,30 +49,6 @@
 #include <stddef.h>
 
 #include <arm_neon.h>
-
-uint32_t __aeabi_uidiv(uint32_t numerator, uint32_t denominator) {
-    return (uint32_t)((double)numerator / (double)denominator);
-}
-
-uint32x2_t __aeabi_uidivmod(uint32_t numerator, uint32_t denominator) {
-    double d = (double)denominator;
-    uint32_t q = (uint32_t)((double)numerator / d);
-    uint32_t r = numerator - ((double)q * d);
-    uint32x2_t ret = { q, r };
-    return ret;
-}
-
-int32_t __aeabi_idiv(int32_t numerator, int32_t denominator) {
-    return (int32_t)((double)numerator / (double)denominator);
-}
-
-int32x2_t __aeabi_idivmod(int32_t numerator, int32_t denominator) {
-    double d = (double)denominator;
-    int32_t q = (int32_t)((double)numerator / d);
-    int32_t r = numerator - ((double)q * d);
-    int32x2_t ret = { q, r };
-    return ret;
-}
 
 div_t div (int num, int denom) {
     div_t r;
@@ -184,4 +198,47 @@ char * strncpy ( char * destination, const char * source, size_t num ) {
 char * strncat ( char * destination, const char * source, size_t num ) {
     char *d = destination + strlen(source);
     return strncpy(d, source, num);
+}
+
+int echo_on = 0;
+void setecho(int on) {
+    echo_on = on;
+}
+
+extern uint8_t _getchar(void);
+extern void _putchar(uint8_t);
+
+int puts ( const char * str ) {
+    return printf("%s\r\n", str);
+}
+
+int putchar ( int character ) {
+    _putchar(character);
+    return character;
+}
+
+int getchar ( void ) {
+    return _getchar();
+}
+
+char * gets (char * str) {
+    int i = 0;
+    char c;
+    do {
+        c = _getchar();
+        if(c == '\b') {
+            if(i) {
+                if(echo_on) printf("\b \b");
+                i--;
+            }
+        } else {
+            if(c == '\n' || c == '\r') {
+                putchar('\n');
+                c = 0;
+            }
+            if(c && echo_on) putchar(c);
+            str[i++] = c;
+        }
+    } while(c);
+    return str;
 }
