@@ -31,22 +31,23 @@
  *
  *     Castaway (formerly FAST), GPL version 2 License
  *     Copyright (c) 1994-2002 Martin Döring, Joachim Hönig
- *    
+ *
  *     Cyclone 68K, GPL version 2 License
  *     Copyright (c) 2004,2011 Dave "FinalDave" Haywood
  *     Copyright (c) 2005-2011 Graûvydas "notaz" Ignotas
- *    
+ *
  *     TI StarterWare, modified BSD 3-Clause License
  *     Copyright (C) 2010 Texas Instruments Incorporated - http://www.ti.com/
  *
  *     libbbb, Apache License, Version 2.0
  *     Copyright 2015 University of Applied Sciences Western Switzerland / Fribourg
- * 
+ *
  *     emu68 (https://github.com/michalsc), Mozilla Public License, v. 2.0
  *     Copyright © 2019 Michal Schulz <michal.schulz@gmx.de>
  */
 
 #include "pjit.h"
+#include "pjit_extword.h"
 
 extern const uint32_t optab[65536];
 extern const uint8_t  oplen[65536];
@@ -57,15 +58,17 @@ static void cpu_lookup_nojit(void);
 
 // The following Copyrights are included as the original author wrote them
 // modified BSD 3-Clause License requires inclusion of Copyright with binaries
-__attribute__((used)) const char *ti_c    = "Copyright (C) 2010 Texas Instruments Incorporated - http://www.ti.com/";
+__attribute__((used)) const char *ti_c = "Copyright (C) 2010 Texas Instruments Incorporated - http://www.ti.com/";
 // Apache License requires inclusion of Copyright with binaries
-__attribute__((used)) const char *cast_c  = "Copyright 2015 University of Applied Sciences Western Switzerland / Fribourg";
+__attribute__((used)) const char *libbbb_c = "Copyright 2015 University of Applied Sciences Western Switzerland / Fribourg";
 // Mozilla Public License, v. 2.0 requires inclusion of Copyright with binaries
-__attribute__((used)) const char *cast_c  = "Copyright © 2019 Michal Schulz <michal.schulz@gmx.de>";
+__attribute__((used)) const char *emu68_c = "Copyright © 2019 Michal Schulz <michal.schulz@gmx.de>";
 // GPL does NOT require inclusion of Copyright with binaries but are included anyway
 __attribute__((used)) const char *c68k_c1 = "Copyright (c) 2004,2011 Dave \"FinalDave\" Haywood (emudave (at) gmail.com)";
 __attribute__((used)) const char *c68k_c2 = "Copyright (c) 2005-2011 Graûvydas \"notaz\" Ignotas (notasas (at) gmail.com)";
 __attribute__((used)) const char *cast_c  = "Copyright (c) 1994-2002 Martin Döring, Joachim Hönig";
+// Our copyright
+__attribute__((used)) const char *buffe_c = "Copyright (c) 2020-2023 Renee Cousins, the Buffee Project - http://www.buffee.ca";
 
 /*   ____          _        _____           _ _   _
     / ___|___   __| | ___  | ____|_ __ ___ (_) |_| |_ ___ _ __ ___
@@ -180,366 +183,244 @@ static inline uint32_t emit_dst_ext(uint32_t current, uint16_t opcode) {
 }
 static inline uint32_t emit_return(void) { return 0xE12FFF1E; }
 
-/*
-      ____           _            _   _                 _ _ _
-     / ___|__ _  ___| |__   ___  | | | | __ _ _ __   __| | (_)_ __   __ _
-    | |   / _` |/ __| '_ \ / _ \ | |_| |/ _` | '_ \ / _` | | | '_ \ / _` |
-    | |__| (_| | (__| | | |  __/ |  _  | (_| | | | | (_| | | | | | | (_| |
-     \____\__,_|\___|_| |_|\___| |_| |_|\__,_|_| |_|\__,_|_|_|_| |_|\__, |
-                                                                    |___/
+/*  Look up code and if it's small enough, replace the caller with the
+    function body, otherwise, replace with the branch to it and then execute it
+ */
+__attribute__((naked)) void lookup_opcode(void) {
+    static const uint8_t arm_bcc[16] = {
+        //       M68K OP Description    ARMcc
+        0xEB,  // 0000 T  Always         1110
+        0xFF,  // 0001 SR Subroutine     emulate
+        0xFF,  // 0010 HI Higher         emulate
+        0xFF,  // 0011 LS Lower/Same     emulate
+        0x3B,  // 0100 CC Carry Clear    0011
+        0x2B,  // 0101 CS Carry Set      0010
+        0x1B,  // 0110 NE Not Equal      0001
+        0x0B,  // 0111 EQ Equal          0000
+        0x7B,  // 1000 VC Overflow Clear 0111
+        0x6B,  // 1001 VS Overflow Set   0110
+        0x5B,  // 1010 PL Plus           0101
+        0x4B,  // 1011 MI Minus          0100
+        0xAB,  // 1100 GE Greater/Equal  1010
+        0xBB,  // 1101 LT Lesser         1011
+        0xCB,  // 1110 GT Greater        1100
+        0xDB,  // 1111 LE Lesser/Equal   1101
+    };
+    register uint32_t *out asm("lr");
 
-    EXPLANATION
+    save_cpu();
 
-    The PJIT cache is scalable from 256KB to 32MB in powers of 2 or a number of
-    bits. A 256KB cache is 18 bits and 32MB is 25 bits.
+    /* Back step to the original branch and calculate our 68K Program Counter */
+    uint16_t *pc = (uint16_t *)cache_reverse((uint32_t)--out);
 
-    The cache is divided into a number of equal sized pages. Smaller pages will
-    provide for more total pages improving the cache-hit ratio. Larger pages
-    reduce the chance that a branch will cross a page boundary. The default page
-    size is 2048KB or 512 ARM instructions equivalent to 1KB of 68K program
-   memory. In terms of bits, this is 10 bits for either 68K or ARM; in ARM it
-   would be 10-bits with 2 offset bits and in 68K it would be 10-bits with 1
-   offset bit.
+    uint32_t i      = 0;
+    uint32_t opcode = pc[i++];
+    uint32_t opaddr = optab[opcode];
+    uint32_t opea   = oplen[opcode];
 
-    The cache is cleared with three look up routines. The default routine that
-    uses most of the cache will always assume that branches are safe within the
-    page and will always inline routines. At each border of the pages, within
-    +128 or -126 bytes, the cache clear will use a look up routine that will
-   still inline all instructions except for branches as they are no longer
-   "safe".
+    /* Handle Extension Words */
+    // if (opea & EXT_WORD_SRC_EXT) {
+    //     out[i] = emit_src_ext((uint32_t)out, pc[i]);
+    //     i += 1;
+    // } else {
+    //     if (opea & EXT_WORD_SRC_16B) {
+    //         out[i] = emit_movw(1, pc[i]);
+    //         i += 1;
+    //     }
+    //     if (opea & EXT_WORD_SRC_32B) {
+    //         out[i] = emit_movt(1, pc[i]);
+    //         i += 1;
+    //     }
+    // }
 
-    The tag store has a size which is determined by the size of the PJIT cache
-    divided by the size of the page. For example, a 1MB PJIT cache with a 2KB
-   page size will contain 512 pages. The tag itself is the high bits of the
-   original address, not including the page bits and offset bits (1 in 68K and 2
-   in ARM), to a maximum size of 16-bits. This the tag store would take 1KB.
+    // if (opea & EXT_WORD_DST_EXT) {
+    //     out[i] = emit_dst_ext((uint32_t)out, pc[i]);
+    //     i += 1;
+    // } else {
+    //     if (opea & EXT_WORD_DST_16B) {
+    //         out[i] = emit_movw(2, pc[i]);
+    //         i += 1;
+    //     }
+    //     if (opea & EXT_WORD_DST_32B) {
+    //         out[i] = emit_movt(2, pc[i]);
+    //         i += 1;
+    //     }
+    // }
 
-    The mapping between a 68K instruction and the PJIT cache is by the 68K
-    program counter (PC). For example, with our 1MB PJIT cache and corresponding
-    1KB tag cache store, the least significant bit is first discarded, the next
-    10 bits comprise the Page Index into the page and the next 10 bits comprise
-   the Page Selector.
+    uint32_t opcode_out = 0;
 
-    Each long word in the PJIT cache corresponds to one word of 68K instruction
-    memory thus the Index must be shifted left by one bit when performing the
-   Index.
+    if ((opea & 0xFF) == 1) {
+        /*  Can we inline? If so, then just copy it here.
+            Note that the subroutine Bcc should NEVER report 1 line. */
+        opcode_out = *(uint32_t *)opaddr;
 
-    The remaining most significant bits comprise the tag. This is checked with
-    the tag store before entry. If the tags match, then execution into the
-    PJIT cache can begin immediately. If the tags do not match, then the page
-    is cleared first before executing into the PJIT cache.
-*/
+    } else if ((opcode & 0xF001) == 0x6000) {
+        /*  Check if we can in-line Bcc
+            1. we cannot BSR, BHI or BLS, those need to be handled
+            2. we cannot inline branch if the offset if out-of-page */
+        uint32_t cc = arm_bcc[(opcode & 0x0F00) >> 8];
+        if (cc != 0xFF)
+            opcode_out =
+                emit_cc_branch(cc, (uint32_t)(int32_t)(int8_t)(opcode & 0xFE));
+    }
+    if (opcode_out)
+        out[i] = opcode_out;
+    else
+        out[i] = emit_branch((uint32_t)out, opaddr);
 
-#define INDEXLEN 11  // Bit Length of Index
-#define BLOCKLEN 7   // Bit Length of Block Size
-
-typedef uint16_t cache_tags_t[(1 << INDEXLEN)];
-typedef uint32_t cache_data_t[(1 << INDEXLEN)][(1 << BLOCKLEN)];
-
-static cache_tags_t *const cache_tags = (cache_tags_t *const)0x9FDF0000;
-static cache_data_t *const cache_data = (cache_data_t *const)0x9FE00000;
-
-/*  Given a point within the PJIT cache, determine the 68K PC
-    WARNING: this assumes that the cache_tag is valid and makes
-    no attempt to verify that it is not */
-static inline uint32_t cache_reverse(uint32_t arm_addr) {
-    // arm_addr -= (uint32_t)pjit_cache;
-    uint16_t index = (arm_addr >> 2) & ((1 << PAGE_SIZE) - 1);
-    uint16_t page  = (arm_addr >> (2 + PAGE_SIZE)) & ((1 << PAGE_COUNT) - 1);
-    uint32_t set =
-        (arm_addr >> (2 + PAGE_SIZE + PAGE_COUNT)) & ((1 << SET_BITS) - 1);
-    return pjit_tag_cache[set][page] | (index << 1);
+    restore_cpu();
+    asm("bx\t%0" ::"r"(out));
 }
 
-static void __cache_clear(uint32_t *block) {
-    static const uint32_t add_r0_2 = 0xE2800002;
-    static const uint32_t blx_r5   = 0xE12FFF35;
-    for (int i = 0; i < (1 << BLOCKLEN); i += 2) {
-        block[i
-        // do { *block++ = add_r0_2; *block++ = blx_r5; } while(block < end);
-    }
+// /*  Look up code and if it's small enough and replace our
+//     branch to jump to the opcode; this omits branch inlining. We use
+//     this version to pad the 'edges' of each page to avoid having to
+//     check if our 8-bit branch is outside of the page.  */
+// __attribute__((naked)) void cpu_lookup_noinline(void) {
+//     register uint32_t *out asm("lr");
 
-    /*  Wipe out the whole enchilada */
-    void cache_clear(uint32_t * block, uint32_t * end) {
-        __cache_clear(&(*cache_data)[0][0], &(*cache_data)[(1 << INDEXLEN)][(1 << BLOCKLEN)]);
-    }
+//     save_cpu();
 
-    /*  Given a 68K address return the exact instruction to enter
-        if the tags don't match, clear the cache first */
-    uint32_t *cache_find_entry(uint32_t m68k_addr) {
-        uint32_t tag = ((m68k_addr >> 1) >> (BLOCKLEN + INDEXLEN));
-        uint32_t idx = ((m68k_addr >> 1) >> BLOCKLEN) & ((1 << INDEXLEN) - 1);
-        uint32_t off = ((m68k_addr >> 1) & ((1 << BLOCKLEN) - 1));
+//     /* Back step to the original branch and calculate our 68K Program Counter */
+//     uint16_t *pc = (uint16_t *)cache_reverse((uint32_t)--out);
 
-        if ((*cache_tags)[idx] != tag) {  // MISS!
-            /*  Wipe out a single cache page */
-            __cache_clear(&(*cache_data)[idx][0], &(*cache_data)[idx][(1 << BLOCKLEN) - 2]);
-            (*cache_tags)[idx] = tag;
-        }
-        return &(*cache_data)[idx][off];
-    }
+//     uint32_t i      = 0;
+//     uint32_t opcode = pc[i++];
+//     uint32_t opaddr = optab[opcode];
+//     uint32_t opea   = oplen[opcode];
 
-    static uint8_t pjit_cache_lru[1 << PAGE_COUNT] = {0};
+//     /* Handle Extension Words */
+//     if (opea & EXT_WORD_SRC_EXT) {
+//         out[i] = emit_src_ext((uint32_t)out, pc[i]);
+//         i += 1;
+//     } else {
+//         if (opea & EXT_WORD_SRC_16B) {
+//             out[i] = emit_movw(1, pc[i]);
+//             i += 1;
+//         }
+//         if (opea & EXT_WORD_SRC_32B) {
+//             out[i] = emit_movt(1, pc[i]);
+//             i += 1;
+//         }
+//     }
 
-    __attribute__((aligned(1 << PAGE_COUNT))) static uint32_t
-        pjit_tag_cache[1 << SET_BITS][1 << PAGE_COUNT] = {0};
+//     if (opea & EXT_WORD_DST_EXT) {
+//         out[i] = emit_dst_ext((uint32_t)out, pc[i]);
+//         i += 1;
+//     } else {
+//         if (opea & EXT_WORD_DST_16B) {
+//             out[i] = emit_movw(2, pc[i]);
+//             i += 1;
+//         }
+//         if (opea & EXT_WORD_DST_32B) {
+//             out[i] = emit_movt(2, pc[i]);
+//             i += 1;
+//         }
+//     }
 
-    __attribute__((aligned(1 << PAGE_SIZE))) static uint32_t
-        pjit_cache[1 << SET_BITS][1 << PAGE_COUNT][1 << PAGE_SIZE] = {0};
+//     /*  Can we inline? If so, then just copy it here */
+//     if ((opea & 0xFF) == 1)
+//         out[i] = *(uint32_t *)opaddr;
+//     else
+//         out[i] = emit_branch((uint32_t)out, opaddr);
 
-    /*  Look up code and if it's small enough, replace the caller with the
-        function body, otherwise, replace with the branch to it and then execute it
-     */
-    __attribute__((naked)) void cpu_lookup_inline(void) {
-        static const uint8_t arm_bcc[16] = {
-            //       M68K OP Description    ARMcc
-            0xEB,  // 0000 T  Always         1110
-            0xFF,  // 0001 SR Subroutine     emulate
-            0xFF,  // 0010 HI Higher         emulate
-            0xFF,  // 0011 LS Lower/Same     emulate
-            0x3B,  // 0100 CC Carry Clear    0011
-            0x2B,  // 0101 CS Carry Set      0010
-            0x1B,  // 0110 NE Not Equal      0001
-            0x0B,  // 0111 EQ Equal          0000
-            0x7B,  // 1000 VC Overflow Clear 0111
-            0x6B,  // 1001 VS Overflow Set   0110
-            0x5B,  // 1010 PL Plus           0101
-            0x4B,  // 1011 MI Minus          0100
-            0xAB,  // 1100 GE Greater/Equal  1010
-            0xBB,  // 1101 LT Lesser         1011
-            0xCB,  // 1110 GT Greater        1100
-            0xDB,  // 1111 LE Lesser/Equal   1101
-        };
-        register uint32_t *out asm("lr");
+//     restore_cpu();
+//     asm("bx\t%0" ::"r"(out));
+// }
 
-        save_cpu();
+// /*  Look up code and execute it. This version will never replace the calling
+//    branch. This is not the most efficient way to do this, since it needs to
+//    waste a whole cache page. FIXME */
+// __attribute__((naked)) void cpu_lookup_nojit(void) {
+//     register uint32_t *entry asm("lr");
+//     static uint32_t    out[10];
 
-        /* Back step to the original branch and calculate our 68K Program Counter */
-        uint16_t *pc = (uint16_t *)cache_reverse((uint32_t)--out);
+//     save_cpu();
 
-        uint32_t i      = 0;
-        uint32_t opcode = pc[i++];
-        uint32_t opaddr = optab[opcode];
-        uint32_t opea   = oplen[opcode];
+//     /* Back step to the original branch and calculate our 68K Program Counter */
+//     uint16_t *pc = (uint16_t *)cache_reverse((uint32_t)(entry - 1));
 
-        /* Handle Extension Words */
-        if (opea & EXT_WORD_SRC_EXT) {
-            out[i] = emit_src_ext((uint32_t)out, pc[i]);
-            i += 1;
-        } else {
-            if (opea & EXT_WORD_SRC_16B) {
-                out[i] = emit_movw(1, pc[i]);
-                i += 1;
-            }
-            if (opea & EXT_WORD_SRC_32B) {
-                out[i] = emit_movt(1, pc[i]);
-                i += 1;
-            }
-        }
+//     uint32_t i      = 0;
+//     uint32_t opcode = pc[i++];
+//     uint32_t opaddr = optab[opcode];
+//     uint32_t opea   = oplen[opcode];
 
-        if (opea & EXT_WORD_DST_EXT) {
-            out[i] = emit_dst_ext((uint32_t)out, pc[i]);
-            i += 1;
-        } else {
-            if (opea & EXT_WORD_DST_16B) {
-                out[i] = emit_movw(2, pc[i]);
-                i += 1;
-            }
-            if (opea & EXT_WORD_DST_32B) {
-                out[i] = emit_movt(2, pc[i]);
-                i += 1;
-            }
-        }
+//     /* Handle Extension Words */
+//     if (opea & EXT_WORD_SRC_EXT) {
+//         out[i] = emit_src_ext((uint32_t)out, pc[i]);
+//         i += 1;
+//     } else {
+//         if (opea & EXT_WORD_SRC_16B) {
+//             out[i] = emit_movw(1, pc[i]);
+//             i += 1;
+//         }
+//         if (opea & EXT_WORD_SRC_32B) {
+//             out[i] = emit_movt(1, pc[i]);
+//             i += 1;
+//         }
+//     }
 
-        uint32_t opcode_out = 0;
+//     if (opea & EXT_WORD_DST_EXT) {
+//         out[i] = emit_dst_ext((uint32_t)out, pc[i]);
+//         i += 1;
+//     } else {
+//         if (opea & EXT_WORD_DST_16B) {
+//             out[i] = emit_movw(2, pc[i]);
+//             i += 1;
+//         }
+//         if (opea & EXT_WORD_DST_32B) {
+//             out[i] = emit_movt(2, pc[i]);
+//             i += 1;
+//         }
+//     }
 
-        if ((opea & 0xFF) == 1) {
-            /*  Can we inline? If so, then just copy it here.
-                Note that the subroutine Bcc should NEVER report 1 line. */
-            opcode_out = *(uint32_t *)opaddr;
+//     /*  Can we inline? If so, then just copy it here */
+//     if ((opea & 0xFF) == 1)
+//         out[i++] = *(uint32_t *)opaddr;
+//     else
+//         out[i++] = emit_branch((uint32_t)out, opaddr);
+//     out[i++] = emit_return();
 
-        } else if ((opcode & 0xF001) == 0x6000) {
-            /*  Check if we can in-line Bcc
-                1. we cannot BSR, BHI or BLS, those need to be handled
-                2. we cannot inline branch if the offset if out-of-page */
-            uint32_t cc = arm_bcc[(opcode & 0x0F00) >> 8];
-            if (cc != 0xFF)
-                opcode_out =
-                    emit_cc_branch(cc, (uint32_t)(int32_t)(int8_t)(opcode & 0xFE));
-        }
-        if (opcode_out)
-            out[i] = opcode_out;
-        else
-            out[i] = emit_branch((uint32_t)out, opaddr);
+//     restore_cpu();
+//     asm("bx\t%0" ::"r"(out));
+// }
 
-        restore_cpu();
-        asm("bx\t%0" ::"r"(out));
-    }
+__attribute__((naked)) void cpu_jump(uint32_t m68k_pc) {
+    register uint32_t *out asm("lr");
+    // save_cpu();
+    out = cache_find_entry(m68k_pc);
+    // restore_cpu();
+    asm("bx\t%0" ::"r"(out));
+}
 
-    /*  Look up code and if it's small enough and replace our
-        branch to jump to the opcode; this omits branch inlining. We use
-        this version to pad the 'edges' of each page to avoid having to
-        check if our 8-bit branch is outside of the page.  */
-    __attribute__((naked)) void cpu_lookup_noinline(void) {
-        register uint32_t *out asm("lr");
+__attribute__((naked)) void cpu_subroutine(uint32_t m68k_pc) {
+    register uint32_t *out asm("lr");
+    uint16_t          *pc = (uint16_t *)cache_reverse((uint32_t)(out - 1));
+    asm("str\t%0, [sp, #-4]!" ::"r"(pc));
+    // save_cpu();
+    out = cache_find_entry(m68k_pc);
+    // restore_cpu();
+    asm("bx\t%0" ::"r"(out));
+}
 
-        save_cpu();
+__attribute__((naked)) void branch_normal(uint32_t nothing, int32_t offset) {
+    register uint32_t *out asm("lr");
+    uint32_t           m68k_pc = offset + cache_reverse((uint32_t)(out - 1));
+    // save_cpu();
+    out = cache_find_entry(m68k_pc);
+    // restore_cpu();
+    asm("bx\t%0" ::"r"(out));
+}
 
-        /* Back step to the original branch and calculate our 68K Program Counter */
-        uint16_t *pc = (uint16_t *)cache_reverse((uint32_t)--out);
+__attribute__((naked)) void branch_subroutine(uint32_t nothing,
+                                              int32_t  offset) {
+    register uint32_t *out asm("lr");
+    uint32_t           m68k_pc = cache_reverse((uint32_t)(out - 1));
+    asm("str\t%0, [sp, #-4]!" ::"r"(m68k_pc));
+    m68k_pc += offset;
+    // save_cpu();
+    out = cache_find_entry(m68k_pc);
+    // restore_cpu();
+    asm("bx\t%0" ::"r"(out));
+}
 
-        uint32_t i      = 0;
-        uint32_t opcode = pc[i++];
-        uint32_t opaddr = optab[opcode];
-        uint32_t opea   = oplen[opcode];
-
-        /* Handle Extension Words */
-        if (opea & EXT_WORD_SRC_EXT) {
-            out[i] = emit_src_ext((uint32_t)out, pc[i]);
-            i += 1;
-        } else {
-            if (opea & EXT_WORD_SRC_16B) {
-                out[i] = emit_movw(1, pc[i]);
-                i += 1;
-            }
-            if (opea & EXT_WORD_SRC_32B) {
-                out[i] = emit_movt(1, pc[i]);
-                i += 1;
-            }
-        }
-
-        if (opea & EXT_WORD_DST_EXT) {
-            out[i] = emit_dst_ext((uint32_t)out, pc[i]);
-            i += 1;
-        } else {
-            if (opea & EXT_WORD_DST_16B) {
-                out[i] = emit_movw(2, pc[i]);
-                i += 1;
-            }
-            if (opea & EXT_WORD_DST_32B) {
-                out[i] = emit_movt(2, pc[i]);
-                i += 1;
-            }
-        }
-
-        /*  Can we inline? If so, then just copy it here */
-        if ((opea & 0xFF) == 1)
-            out[i] = *(uint32_t *)opaddr;
-        else
-            out[i] = emit_branch((uint32_t)out, opaddr);
-
-        restore_cpu();
-        asm("bx\t%0" ::"r"(out));
-    }
-
-    /*  Look up code and execute it. This version will never replace the calling
-       branch. This is not the most efficient way to do this, since it needs to
-       waste a whole cache page. FIXME */
-    __attribute__((naked)) void cpu_lookup_nojit(void) {
-        register uint32_t *entry asm("lr");
-        static uint32_t    out[10];
-
-        save_cpu();
-
-        /* Back step to the original branch and calculate our 68K Program Counter */
-        uint16_t *pc = (uint16_t *)cache_reverse((uint32_t)(entry - 1));
-
-        uint32_t i      = 0;
-        uint32_t opcode = pc[i++];
-        uint32_t opaddr = optab[opcode];
-        uint32_t opea   = oplen[opcode];
-
-        /* Handle Extension Words */
-        if (opea & EXT_WORD_SRC_EXT) {
-            out[i] = emit_src_ext((uint32_t)out, pc[i]);
-            i += 1;
-        } else {
-            if (opea & EXT_WORD_SRC_16B) {
-                out[i] = emit_movw(1, pc[i]);
-                i += 1;
-            }
-            if (opea & EXT_WORD_SRC_32B) {
-                out[i] = emit_movt(1, pc[i]);
-                i += 1;
-            }
-        }
-
-        if (opea & EXT_WORD_DST_EXT) {
-            out[i] = emit_dst_ext((uint32_t)out, pc[i]);
-            i += 1;
-        } else {
-            if (opea & EXT_WORD_DST_16B) {
-                out[i] = emit_movw(2, pc[i]);
-                i += 1;
-            }
-            if (opea & EXT_WORD_DST_32B) {
-                out[i] = emit_movt(2, pc[i]);
-                i += 1;
-            }
-        }
-
-        /*  Can we inline? If so, then just copy it here */
-        if ((opea & 0xFF) == 1)
-            out[i++] = *(uint32_t *)opaddr;
-        else
-            out[i++] = emit_branch((uint32_t)out, opaddr);
-        out[i++] = emit_return();
-
-        restore_cpu();
-        asm("bx\t%0" ::"r"(out));
-    }
-
-    __attribute__((naked)) void cpu_jump(uint32_t m68k_pc) {
-        register uint32_t *out asm("lr");
-        // save_cpu();
-        out = cache_find_entry(m68k_pc);
-        // restore_cpu();
-        asm("bx\t%0" ::"r"(out));
-    }
-
-    __attribute__((naked)) void cpu_subroutine(uint32_t m68k_pc) {
-        register uint32_t *out asm("lr");
-        uint16_t          *pc = (uint16_t *)cache_reverse((uint32_t)(out - 1));
-        asm("str\t%0, [sp, #-4]!" ::"r"(pc));
-        // save_cpu();
-        out = cache_find_entry(m68k_pc);
-        // restore_cpu();
-        asm("bx\t%0" ::"r"(out));
-    }
-
-    __attribute__((naked)) void branch_normal(uint32_t nothing, int32_t offset) {
-        register uint32_t *out asm("lr");
-        uint32_t           m68k_pc = offset + cache_reverse((uint32_t)(out - 1));
-        // save_cpu();
-        out = cache_find_entry(m68k_pc);
-        // restore_cpu();
-        asm("bx\t%0" ::"r"(out));
-    }
-
-    __attribute__((naked)) void branch_subroutine(uint32_t nothing,
-                                                  int32_t  offset) {
-        register uint32_t *out asm("lr");
-        uint32_t           m68k_pc = cache_reverse((uint32_t)(out - 1));
-        asm("str\t%0, [sp, #-4]!" ::"r"(m68k_pc));
-        m68k_pc += offset;
-        // save_cpu();
-        out = cache_find_entry(m68k_pc);
-        // restore_cpu();
-        asm("bx\t%0" ::"r"(out));
-    }
-
-    /*  Start PJIT */
-    void cpu_start(void *base) {
-        static cpu_t       cpu_state;
-        register uint32_t *out asm("lr");
-        uint32_t          *b = (uint32_t *)base;
-
-        cpu = &cpu_state;
-        memset(cpu, 0, sizeof(cpu_t));
-
-        cpu->a7 = b[4];
-        out     = cache_find_entry(b[0]);
-
-        restore_cpu();
-        asm("bx\t%0" ::"r"(out));
-    }

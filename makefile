@@ -11,9 +11,9 @@ CCFLAGS_CPU := \
 	-mbig-endian -ffreestanding -mbe8 \
 	-marm -mcpu=cortex-a8 -mfpu=vfpv3 -mfloat-abi=hard \
 	-ffunction-sections -fdata-sections -fomit-frame-pointer \
-	-std=gnu11 -MMD -fmax-errors=5 
+	-std=gnu11 -MMD -fmax-errors=5
 
-# Universally good compiler warnings	
+# Universally good compiler warnings
 CCFLAGS_WARN := \
 	-Wall -Wshadow -Wdouble-promotion -Wformat-overflow -Wformat-truncation \
 	-Wundef -Wno-unused-parameter
@@ -53,7 +53,7 @@ AR := $(QUIET)$(CROSS)ar
 SZ := $(QUIET)$(CROSS)size
 CC := $(QUIET)$(CROSS)gcc
 OC := $(QUIET)$(CROSS)objcopy
-DI := $(QUIET)$(CROSS)objdump --disassemble 
+DI := $(QUIET)$(CROSS)objdump --disassemble
 RM := $(QUIET)rm -rf
 RD := $(QUIET)rmdir
 MD := $(QUIET)mkdir -p
@@ -88,12 +88,12 @@ clean:
 	-$(RD) $(OBJDIR) 2>/dev/null
 	-$(RM) $(OUTPUT) 2>/dev/null
 	-$(RM) $(BINARY) 2>/dev/null
-	-$(RM) $(MAPFILE) 2>/dev/null	
-	-$(RM) $(MAPFILE).bak 2>/dev/null	
+	-$(RM) $(MAPFILE) 2>/dev/null
+	-$(RM) $(MAPFILE).bak 2>/dev/null
 	-$(RM) $(DISFILE) 2>/dev/null
 	-$(RM) $(OUTDIR)/$(BUILD) 2>/dev/null
 
-release debug: premake all 
+release debug: premake all
 all: $(OUTPUT)
 
 premake:
