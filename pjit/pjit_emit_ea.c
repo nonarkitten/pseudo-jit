@@ -118,26 +118,26 @@ uint8_t emit_EA_Load(uint32_t** emit, uint8_t sEA, uint8_t dReg, uint8_t iReg, i
                 uint8_t reg = (sEA & 7) + 3;
                 switch (width) {
                     case 1:
-                        *(*emit)++ = 0xE6AF0070 | (dReg << 12) | reg;
-                        return dReg;  // sxtb dReg, r3/r4
+                        *(*emit)++ = sxtb(dReg, reg, 0);
+                        return dReg;
                     case 2:
-                        *(*emit)++ = 0xE6BF0070 | (dReg << 12) | reg;
-                        return dReg;  // sxth dReg, r3/r4
+                        *(*emit)++ = sxth(dReg, reg, 0);
+                        return dReg;
                     case 4:
-                        return reg;  // return r3/r4 directly
+                        return reg;
                 }
             } else {  // D2 to D7
-                uint16_t offset = (width == 4) ? ((sEA & 0x7) << 2) : (((sEA & 0x3) << 2) + ((sEA & 0x4) << 6));
+                uint16_t offset = (sEA & 0x7) * 4 + (4 - width);
                 switch (width) {
                     case 1:
-                        *(*emit)++ = 0xE1D510D3 | (dReg << 12) | offset;
-                        return dReg;  // ldrsb dReg, [r5, #offset + 3]
+                        *(*emit)++ = ldrsb(dReg, 5, index_imm(1, 0, offset));
+                        return dReg;
                     case 2:
-                        *(*emit)++ = 0xE1D510F2 | (dReg << 12) | offset;
-                        return dReg;  // ldrsh dReg, [r5, #offset + 2]
+                        *(*emit)++ = ldrsh(dReg, 5, index_imm(1, 0, offset));
+                        return dReg;
                     case 4:
-                        *(*emit)++ = 0xE5950000 | (dReg << 12) | offset;
-                        return dReg;  // ldr   dReg, [r5, #offset]
+                        *(*emit)++ = ldr(dReg, 5, index_imm(1, 0, offset));
+                        return dReg;  
                 }
             }
             break;
@@ -148,10 +148,10 @@ uint8_t emit_EA_Load(uint32_t** emit, uint8_t sEA, uint8_t dReg, uint8_t iReg, i
             uint8_t reg = (sEA & 7) + 6;
             switch (width) {
                 case 2:
-                    *(*emit)++ = 0xE6BF0070 | (dReg << 12) | reg;
-                    return dReg;  // sxth dReg, r6-r13
+                    *(*emit)++ = sxth(dReg, reg, 0);
+                    return dReg;
                 case 4:
-                    return reg;  // return r6-r13 directly
+                    return reg;
             }
             break;
         }
@@ -162,14 +162,14 @@ uint8_t emit_EA_Load(uint32_t** emit, uint8_t sEA, uint8_t dReg, uint8_t iReg, i
             uint8_t reg = (sEA & 7) + 6;
             switch (width) {
                 case 1:
-                    *(*emit)++ = 0xE1D000D0 | (dReg << 12) | (reg << 16);
-                    return dReg;  // ldrsb dReg, [Ax]
+                    *(*emit)++ = ldrsb(dReg, reg, 0);
+                    return dReg;
                 case 2:
-                    *(*emit)++ = 0xE1D000F0 | (dReg << 12) | (reg << 16);
-                    return dReg;  // ldrsh dReg, [Ax]
+                    *(*emit)++ = ldrsh(dReg, reg, 0);
+                    return dReg;
                 case 4:
-                    *(*emit)++ = 0xE5900000 | (dReg << 12) | (reg << 16);
-                    return dReg;  // ldr   dReg, [Ax]
+                    *(*emit)++ = ldr(dReg, reg, 0);
+                    return dReg;
             }
             break;
         }
@@ -180,14 +180,14 @@ uint8_t emit_EA_Load(uint32_t** emit, uint8_t sEA, uint8_t dReg, uint8_t iReg, i
             uint8_t reg = (sEA & 7) + 6;
             switch (width) {
                 case 1:
-                    *(*emit)++ = 0xE0D000D1 | (dReg << 12) | (reg << 16);
-                    return dReg;  // ldrsb dReg, [Ax], #1
+                    *(*emit)++ = ldrsb(dReg, reg, index_imm(0, 1, 1));
+                    return dReg;
                 case 2:
-                    *(*emit)++ = 0xE0D000F2 | (dReg << 12) | (reg << 16);
-                    return dReg;  // ldrsh dReg, [Ax], #2
+                    *(*emit)++ = ldrsh(dReg, reg, index_imm(0, 1, 2));
+                    return dReg;
                 case 4:
-                    *(*emit)++ = 0xE4900004 | (dReg << 12) | (reg << 16);
-                    return dReg;  // ldr   dReg, [Ax], #4
+                    *(*emit)++ = ldr(dReg, reg, index_imm(0, 1, 4));
+                    return dReg;
             }
             break;
         }
@@ -197,14 +197,14 @@ uint8_t emit_EA_Load(uint32_t** emit, uint8_t sEA, uint8_t dReg, uint8_t iReg, i
             uint8_t reg = (sEA & 7) + 6;
             switch (width) {
                 case 1:
-                    *(*emit)++ = 0xE17000D1 | (dReg << 12) | (reg << 16);
-                    return dReg;  // ldrsb dREg, [Ax, #-1]!
+                    *(*emit)++ = ldrsb(dReg, reg, index_imm(1, 1, -1));
+                    return dReg;
                 case 2:
-                    *(*emit)++ = 0xE17000F2 | (dReg << 12) | (reg << 16);
-                    return dReg;  // ldrsh dREg, [Ax, #-2]!
+                    *(*emit)++ = ldrsh(dReg, reg, index_imm(0, 1, -2));
+                    return dReg;
                 case 4:
-                    *(*emit)++ = 0xE5300004 | (dReg << 12) | (reg << 16);
-                    return dReg;  // ldr   dREg, [Ax, #-4]!
+                    *(*emit)++ = ldr(dReg, reg, index_imm(0, 1, -4));
+                    return dReg;
             }
             break;
         }
@@ -215,14 +215,14 @@ uint8_t emit_EA_Load(uint32_t** emit, uint8_t sEA, uint8_t dReg, uint8_t iReg, i
             uint8_t reg = (sEA & 7) + 6;
             switch (width) {
                 case 1:
-                    *(*emit)++ = 0xE19000D0 | (dReg << 12) | (reg << 16) | iReg;
-                    return dReg;  // ldrsb dReg, [Ix, Ax]
+                    *(*emit)++ = ldrsb(dReg, reg, index_add_reg(1, 0, iReg));
+                    return dReg;
                 case 2:
-                    *(*emit)++ = 0xE19000F0 | (dReg << 12) | (reg << 16) | iReg;
-                    return dReg;  // ldrsh dReg, [Ix, Ax]
+                    *(*emit)++ = ldrsh(dReg, reg, index_add_reg(1, 0, iReg));
+                    return dReg;
                 case 4:
-                    *(*emit)++ = 0xE7900000 | (dReg << 12) | (reg << 16) | iReg;
-                    return dReg;  // ldr   dReg, [Ix, Ax]
+                    *(*emit)++ = ldr(dReg, reg, index_add_reg(1, 0, iReg));
+                    return dReg;
             }
             break;
         }
@@ -236,14 +236,14 @@ uint8_t emit_EA_Load(uint32_t** emit, uint8_t sEA, uint8_t dReg, uint8_t iReg, i
 
             switch (width) {
                 case 1:
-                    *(*emit)++ = 0xE1D000D0 | (dReg << 12) | (iReg << 16);
-                    return dReg;  // ldrsb dReg, [Ix]
+                    *(*emit)++ = ldrsb(dReg, iReg, 0);
+                    return dReg;
                 case 2:
-                    *(*emit)++ = 0xE1D000F0 | (dReg << 12) | (iReg << 16);
-                    return dReg;  // ldrsh dReg, [Ix]
+                    *(*emit)++ = ldrsh(dReg, iReg, 0);
+                    return dReg;
                 case 4:
-                    *(*emit)++ = 0xE5900000 | (dReg << 12) | (iReg << 16);
-                    return dReg;  // ldr   dReg, [Ix]
+                    *(*emit)++ = ldr(dReg, iReg, 0);
+                    return dReg;
             }
             break;
         }
@@ -271,27 +271,27 @@ void emit_EA_Store(uint32_t** emit, uint8_t dEA, uint8_t sReg, uint8_t iReg, int
                 dReg += 3;
                 switch (width) {
                     case 1:
-                        *(*emit)++ = 0xE7C70010 | (dReg << 12) | sReg;
-                        return;  // bfi dReg, sReg, 0, 8
+                        *(*emit)++ = bfi(dReg, sReg, 0, 8);
+                        return;
                     case 2:
-                        *(*emit)++ = 0xE7CF0010 | (dReg << 12) | sReg;
-                        return;  // bfi dReg, sReg, 0, 16
+                        *(*emit)++ = bfi(dReg, sReg, 0, 16);
+                        return;
                     case 4:
-                        *(*emit)++ = 0xE1A00000 | (dReg << 12) | sReg;
-                        return;  // mov dReg, sReg
+                        *(*emit)++ = mov(dReg, sReg);
+                        return;
                 }
             } else {  // D2 to D7
-                uint16_t offset = (width == 2) ? ((dEA & 0x3) << 2) + ((dEA & 0x4) << 6) : (dEA & 0x7) << 2;
+                uint16_t offset = (dEA & 0x7) * 4 + (4 - width);
                 switch (width) {
                     case 1:
-                        *(*emit)++ = 0xE5C50003 | (sReg << 12) | offset;
-                        return;  // strb sReg, [r5, #dReg_offset]
+                        *(*emit)++ = strb(sReg, 5, index_imm(1, 0, offset));
+                        return;
                     case 2:
-                        *(*emit)++ = 0xE1C500B2 | (sReg << 12) | offset;
-                        return;  // strh sReg, [r5, #dReg_offset]
+                        *(*emit)++ = strh(sReg, 5, index_imm(1, 0, offset));
+                        return;
                     case 4:
-                        *(*emit)++ = 0xE5850000 | (sReg << 12) | offset;
-                        return;  // str  sReg, [r5, #dReg_offset]
+                        *(*emit)++ = str(sReg, 5, index_imm(1, 0, offset));
+                        return;
                 }
             }
             break;
@@ -303,10 +303,10 @@ void emit_EA_Store(uint32_t** emit, uint8_t dEA, uint8_t sReg, uint8_t iReg, int
             dReg += 6;
             switch (width) {
                 case 2:
-                    *(*emit)++ = 0xE6BF0070 | (dReg << 12) | sReg;
+                    *(*emit)++ = sxth(dReg, sReg, 0);
                     return;  // sxth dReg, sReg
                 case 4:
-                    *(*emit)++ = 0xE1A00000 | (dReg << 12) | sReg;
+                    *(*emit)++ = mov(dReg, sReg);
                     return;  // mov dReg, sReg
             }
             break;
@@ -318,14 +318,14 @@ void emit_EA_Store(uint32_t** emit, uint8_t dEA, uint8_t sReg, uint8_t iReg, int
             dReg += 6;
             switch (width) {
                 case 1:
-                    *(*emit)++ = 0xE5C00000 | (sReg << 12) | (dReg << 16);
-                    return;  // strb sReg, [dReg]
+                    *(*emit)++ = strb(sReg, dReg, 0);
+                    return;
                 case 2:
-                    *(*emit)++ = 0xE1C000B0 | (sReg << 12) | (dReg << 16);
-                    return;  // strh sReg, [dReg]
+                    *(*emit)++ = strh(sReg, dReg, 0);
+                    return;
                 case 4:
-                    *(*emit)++ = 0xE5800000 | (sReg << 12) | (dReg << 16);
-                    return;  // str  sReg, [dReg]
+                    *(*emit)++ = str(sReg, dReg, 0);
+                    return;
             }
             break;
         }
@@ -335,14 +335,14 @@ void emit_EA_Store(uint32_t** emit, uint8_t dEA, uint8_t sReg, uint8_t iReg, int
             dReg += 6;
             switch (width) {
                 case 1:
-                    *(*emit)++ = 0xE4C00001 | (sReg << 12) | (dReg << 16);
-                    return;  // strb sReg, [dReg], #1
+                    *(*emit)++ = strb(sReg, dReg, index_imm(0, 1, 1));
+                    return;
                 case 2:
-                    *(*emit)++ = 0xE0C000B2 | (sReg << 12) | (dReg << 16);
-                    return;  // strh sReg, [dReg], #2
+                    *(*emit)++ =  strh(sReg, dReg, index_imm(0, 1, 2));
+                    return;
                 case 4:
-                    *(*emit)++ = 0xE4800004 | (sReg << 12) | (dReg << 16);
-                    return;  // str  sReg, [dReg], #4
+                    *(*emit)++ =  str(sReg, dReg, index_imm(0, 1, 4));
+                    return;
             }
             break;
         }
@@ -353,14 +353,14 @@ void emit_EA_Store(uint32_t** emit, uint8_t dEA, uint8_t sReg, uint8_t iReg, int
             dReg += 6;
             switch (width) {
                 case 1:
-                    *(*emit)++ = 0xE5600001 | (sReg << 12) | (dReg << 16);
-                    return;  // strb sReg, [dReg, #-1]!
+                    *(*emit)++ = strb(sReg, dReg, index_imm(1, 1, -1));
+                    return;
                 case 2:
-                    *(*emit)++ = 0xE16000B2 | (sReg << 12) | (dReg << 16);
-                    return;  // strh sReg, [dReg, #-2]!
+                    *(*emit)++ = strh(sReg, dReg, index_imm(1, 1, -2));
+                    return;
                 case 4:
-                    *(*emit)++ = 0xE5200004 | (sReg << 12) | (dReg << 16);
-                    return;  // str  sReg, [dReg, #-4]!
+                    *(*emit)++ = str(sReg, dReg, index_imm(1, 1, -4));
+                    return;
             }
             break;
         }
@@ -371,13 +371,13 @@ void emit_EA_Store(uint32_t** emit, uint8_t dEA, uint8_t sReg, uint8_t iReg, int
             dReg += 6;
             switch (width) {
                 case 1:
-                    *(*emit)++ = 0xE7C00000 | (sReg << 12) | (dReg << 16) | iReg;
+                    *(*emit)++ = strb(sReg, dReg, index_add_reg(1, 0, iReg));
                     return;  // strb sReg, [dReg, iReg]
                 case 2:
-                    *(*emit)++ = 0xE18000B0 | (sReg << 12) | (dReg << 16) | iReg;
+                    *(*emit)++ = strh(sReg, dReg, index_add_reg(1, 0, iReg));
                     return;  // strh sReg, [dReg, iReg]
                 case 4:
-                    *(*emit)++ = 0xE7800000 | (sReg << 12) | (dReg << 16) | iReg;
+                    *(*emit)++ = str(sReg, dReg, index_add_reg(1, 0, iReg));
                     return;  // str  sReg, [dReg, iReg]
             }
             break;
@@ -387,14 +387,14 @@ void emit_EA_Store(uint32_t** emit, uint8_t dEA, uint8_t sReg, uint8_t iReg, int
         case 0x38: {
             switch (width) {
                 case 1:
-                    *(*emit)++ = 0xE5C00000 | (sReg << 12) | (iReg << 16);
-                    return;  // strb sReg, [dReg]
+                    *(*emit)++ = strb(sReg, iReg, 0);
+                    return;
                 case 2:
-                    *(*emit)++ = 0xE1C000B0 | (sReg << 12) | (iReg << 16);
-                    return;  // strh sReg, [dReg]
+                    *(*emit)++ = strh(sReg, iReg, 0);
+                    return;
                 case 4:
-                    *(*emit)++ = 0xE5800000 | (sReg << 12) | (iReg << 16);
-                    return;  // str  sReg, [dReg]
+                    *(*emit)++ = str(sReg, iReg, 0);
+                    return;
             }
             break;
         }
