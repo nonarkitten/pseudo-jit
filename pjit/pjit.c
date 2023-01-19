@@ -41,6 +41,9 @@
  *
  *     libbbb, Apache License, Version 2.0
  *     Copyright 2015 University of Applied Sciences Western Switzerland / Fribourg
+ * 
+ *     emu68 (https://github.com/michalsc), Mozilla Public License, v. 2.0
+ *     Copyright © 2019 Michal Schulz <michal.schulz@gmx.de>
  */
 
 #include "pjit.h"
@@ -52,12 +55,17 @@ static void cpu_lookup_inline(void);
 static void cpu_lookup_noinline(void);
 static void cpu_lookup_nojit(void);
 
-// Copyrights, these must not be optimized out
+// The following Copyrights are included as the original author wrote them
+// modified BSD 3-Clause License requires inclusion of Copyright with binaries
 __attribute__((used)) const char *ti_c    = "Copyright (C) 2010 Texas Instruments Incorporated - http://www.ti.com/";
+// Apache License requires inclusion of Copyright with binaries
+__attribute__((used)) const char *cast_c  = "Copyright 2015 University of Applied Sciences Western Switzerland / Fribourg";
+// Mozilla Public License, v. 2.0 requires inclusion of Copyright with binaries
+__attribute__((used)) const char *cast_c  = "Copyright © 2019 Michal Schulz <michal.schulz@gmx.de>";
+// GPL does NOT require inclusion of Copyright with binaries but are included anyway
 __attribute__((used)) const char *c68k_c1 = "Copyright (c) 2004,2011 Dave \"FinalDave\" Haywood (emudave (at) gmail.com)";
 __attribute__((used)) const char *c68k_c2 = "Copyright (c) 2005-2011 Graûvydas \"notaz\" Ignotas (notasas (at) gmail.com)";
 __attribute__((used)) const char *cast_c  = "Copyright (c) 1994-2002 Martin Döring, Joachim Hönig";
-__attribute__((used)) const char *cast_c  = "Copyright 2015 University of Applied Sciences Western Switzerland / Fribourg"
 
 /*   ____          _        _____           _ _   _
     / ___|___   __| | ___  | ____|_ __ ___ (_) |_| |_ ___ _ __ ___
