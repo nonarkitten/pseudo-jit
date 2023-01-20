@@ -81,14 +81,14 @@ static cache_data_t *const cache_data = (cache_data_t *const)0x9FE00000;
 /*  Given a point within the PJIT cache, determine the 68K PC
     WARNING: this assumes that the cache_tag is valid and makes
     no attempt to verify that it is not */
-// static inline uint32_t cache_reverse(uint32_t arm_addr) {
+uint32_t cache_reverse(uint32_t arm_addr) {
 //     // arm_addr -= (uint32_t)pjit_cache;
 //     uint16_t index = (arm_addr >> 2) & ((1 << PAGE_SIZE) - 1);
 //     uint16_t page  = (arm_addr >> (2 + PAGE_SIZE)) & ((1 << PAGE_COUNT) - 1);
 //     uint32_t set =
 //         (arm_addr >> (2 + PAGE_SIZE + PAGE_COUNT)) & ((1 << SET_BITS) - 1);
 //     return pjit_tag_cache[set][page] | (index << 1);
-// }
+}
 
 static inline void __cache_clear(uint32_t* block, uint32_t* end) {
     static const uint32_t cache_ops[2] = { 0xE2800002, 0xE12FFF35 };

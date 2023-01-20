@@ -98,9 +98,9 @@ all: $(OUTPUT)
 
 premake:
 	$(MD) $(OBJDIR)
-	@make -C pru -f pru.mk
+	-@make -C pru -f pru.mk
 
-$(OUTPUT): $(OBJECTS) pru/main.c
+$(OUTPUT): $(OBJECTS)
 	@echo Building PJIT Bootloader...
 	$(CC) $(CFLAGS) $(LDFLAGS) $(OBJECTS) -o $@
 	$(DI) $@ > $(DISFILE) &

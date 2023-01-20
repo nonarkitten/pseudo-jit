@@ -388,7 +388,7 @@ int main(void) {
     printf("[BOOT] Image %p ~ %p (%d bytes)\n", &_image_start, &_image_end, (&_image_end - &_image_start));
 
     am335x_clock_enable_i2c_module(AM335X_CLOCK_I2C0);
-    I2C0Init( 400000 );
+    // I2C0Init( 400000 );
     SPIInit( 12000000 );
 
     cpu = &cpu_state;
