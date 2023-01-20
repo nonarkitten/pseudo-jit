@@ -52,6 +52,28 @@
 #include <stdint.h>
 
 typedef enum {
+    // Lower case are index
+    r0,
+    r1,
+    r2,
+    r3,
+    r4,
+    r5,
+    r6,
+    r7,
+    r8,
+    r9,
+    r10,
+    r11,
+    r12,
+    r13,
+    r14,
+    r15,
+    ip  = r12,
+    sp  = r13,
+    lr  = r14,
+    pc  = r15,
+    // Upper case are masks
     R0  = 0x0001,
     R1  = 0x0002,
     R2  = 0x0004,
@@ -195,14 +217,6 @@ static inline uint32_t adc_cc(condition_t cc, uint8_t d, uint8_t s, uint32_t op2
 static inline uint32_t sbc_cc(condition_t cc, uint8_t d, uint8_t s, uint32_t op2) { return alu_cc(ARM_OP_SBC, cc, 0, d, s, op2); }
 // Rd := Op2 - Rn + C - 1
 static inline uint32_t rsc_cc(condition_t cc, uint8_t d, uint8_t s, uint32_t op2) { return alu_cc(ARM_OP_RSC, cc, 0, d, s, op2); }
-// set condition codes on Rn & Op2
-static inline uint32_t tst_cc(condition_t cc, uint8_t d, uint8_t s, uint32_t op2) { return alu_cc(ARM_OP_TST, cc, 0, d, s, op2); }
-// set condition codes on Rn | Op2
-static inline uint32_t teq_cc(condition_t cc, uint8_t d, uint8_t s, uint32_t op2) { return alu_cc(ARM_OP_TEQ, cc, 0, d, s, op2); }
-// set condition codes on Rn - Op2
-static inline uint32_t cmp_cc(condition_t cc, uint8_t d, uint8_t s, uint32_t op2) { return alu_cc(ARM_OP_CMP, cc, 0, d, s, op2); }
-// set condition codes on Rn + Op2
-static inline uint32_t cmn_cc(condition_t cc, uint8_t d, uint8_t s, uint32_t op2) { return alu_cc(ARM_OP_CMN, cc, 0, d, s, op2); }
 // Rd := Rn | Op2
 static inline uint32_t orr_cc(condition_t cc, uint8_t d, uint8_t s, uint32_t op2) { return alu_cc(ARM_OP_ORR, cc, 0, d, s, op2); }
 // Rd := Op2
@@ -213,9 +227,8 @@ static inline uint32_t bic_cc(condition_t cc, uint8_t d, uint8_t s, uint32_t op2
 static inline uint32_t mvn_cc(condition_t cc, uint8_t d, uint32_t op2) { return alu_cc(ARM_OP_MVN, cc, 0, d, 0, op2); }
 
 // alu non-conditional operations
-#define and __and
 // Rd := Rn & Op2
-static inline uint32_t __and(uint8_t d, uint8_t s, uint32_t op2) { return alu_cc(ARM_OP_AND, ARM_CC_AL, 0, d, s, op2); }
+static inline uint32_t and(uint8_t d, uint8_t s, uint32_t op2) { return alu_cc(ARM_OP_AND, ARM_CC_AL, 0, d, s, op2); }
 // Rd := Rn ^ Op2
 static inline uint32_t eor(uint8_t d, uint8_t s, uint32_t op2) { return alu_cc(ARM_OP_EOR, ARM_CC_AL, 0, d, s, op2); }
 // Rd := Rn - Op2
@@ -230,14 +243,6 @@ static inline uint32_t adc(uint8_t d, uint8_t s, uint32_t op2) { return alu_cc(A
 static inline uint32_t sbc(uint8_t d, uint8_t s, uint32_t op2) { return alu_cc(ARM_OP_SBC, ARM_CC_AL, 0, d, s, op2); }
 // Rd := Op2 - Rn + C - 1
 static inline uint32_t rsc(uint8_t d, uint8_t s, uint32_t op2) { return alu_cc(ARM_OP_RSC, ARM_CC_AL, 0, d, s, op2); }
-// set condition codes on Rn & Op2
-static inline uint32_t tst(uint8_t d, uint8_t s, uint32_t op2) { return alu_cc(ARM_OP_TST, ARM_CC_AL, 0, d, s, op2); }
-// set condition codes on Rn | Op2
-static inline uint32_t teq(uint8_t d, uint8_t s, uint32_t op2) { return alu_cc(ARM_OP_TEQ, ARM_CC_AL, 0, d, s, op2); }
-// set condition codes on Rn - Op2
-static inline uint32_t cmp(uint8_t d, uint8_t s, uint32_t op2) { return alu_cc(ARM_OP_CMP, ARM_CC_AL, 0, d, s, op2); }
-// set condition codes on Rn + Op2
-static inline uint32_t cmn(uint8_t d, uint8_t s, uint32_t op2) { return alu_cc(ARM_OP_CMN, ARM_CC_AL, 0, d, s, op2); }
 // Rd := Rn | Op2
 static inline uint32_t orr(uint8_t d, uint8_t s, uint32_t op2) { return alu_cc(ARM_OP_ORR, ARM_CC_AL, 0, d, s, op2); }
 // Rd := Op2
@@ -265,13 +270,13 @@ static inline uint32_t sbcs_cc(condition_t cc, uint8_t d, uint8_t s, uint32_t op
 // Rd := Op2 - Rn + C - 1, updates NZCV
 static inline uint32_t rscs_cc(condition_t cc, uint8_t d, uint8_t s, uint32_t op2) { return alu_cc(ARM_OP_RSC, cc, 1, d, s, op2); }
 // set condition codes on Rn & Op2, updates NZ
-static inline uint32_t tsts_cc(condition_t cc, uint8_t d, uint8_t s, uint32_t op2) { return alu_cc(ARM_OP_TST, cc, 1, d, s, op2); }
+static inline uint32_t tst_cc(condition_t cc, uint8_t s, uint32_t op2) { return alu_cc(ARM_OP_TST, cc, 1, 0, s, op2); }
 // set condition codes on Rn | Op2, updates NZ
-static inline uint32_t teqs_cc(condition_t cc, uint8_t d, uint8_t s, uint32_t op2) { return alu_cc(ARM_OP_TEQ, cc, 1, d, s, op2); }
+static inline uint32_t teq_cc(condition_t cc, uint8_t s, uint32_t op2) { return alu_cc(ARM_OP_TEQ, cc, 1, 0, s, op2); }
 // set condition codes on Rn - Op2, updates NZCV
-static inline uint32_t cmps_cc(condition_t cc, uint8_t d, uint8_t s, uint32_t op2) { return alu_cc(ARM_OP_CMP, cc, 1, d, s, op2); }
+static inline uint32_t cmp_cc(condition_t cc, uint8_t s, uint32_t op2) { return alu_cc(ARM_OP_CMP, cc, 1, 0, s, op2); }
 // set condition codes on Rn + Op2, updates NZCV
-static inline uint32_t cmns_cc(condition_t cc, uint8_t d, uint8_t s, uint32_t op2) { return alu_cc(ARM_OP_CMN, cc, 1, d, s, op2); }
+static inline uint32_t cmn_cc(condition_t cc, uint8_t s, uint32_t op2) { return alu_cc(ARM_OP_CMN, cc, 1, 0, s, op2); }
 // Rd := Rn | Op2, updates NZ
 static inline uint32_t orrs_cc(condition_t cc, uint8_t d, uint8_t s, uint32_t op2) { return alu_cc(ARM_OP_ORR, cc, 1, d, s, op2); }
 // Rd := Op2, updates NZC
@@ -299,13 +304,13 @@ static inline uint32_t sbcs(uint8_t d, uint8_t s, uint32_t op2) { return alu_cc(
 // Rd := Op2 - Rn + C - 1, updates NZCV
 static inline uint32_t rscs(uint8_t d, uint8_t s, uint32_t op2) { return alu_cc(ARM_OP_RSC, ARM_CC_AL, 1, d, s, op2); }
 // set condition codes on Rn & Op2, updates NZ
-static inline uint32_t tsts(uint8_t d, uint8_t s, uint32_t op2) { return alu_cc(ARM_OP_TST, ARM_CC_AL, 1, d, s, op2); }
+static inline uint32_t tst(uint8_t s, uint32_t op2) { return alu_cc(ARM_OP_TST, ARM_CC_AL, 1, 0, s, op2); }
 // set condition codes on Rn | Op2, updates NZ
-static inline uint32_t teqs(uint8_t d, uint8_t s, uint32_t op2) { return alu_cc(ARM_OP_TEQ, ARM_CC_AL, 1, d, s, op2); }
+static inline uint32_t teq(uint8_t s, uint32_t op2) { return alu_cc(ARM_OP_TEQ, ARM_CC_AL, 1, 0, s, op2); }
 // set condition codes on Rn - Op2, updates NZCV
-static inline uint32_t cmps(uint8_t d, uint8_t s, uint32_t op2) { return alu_cc(ARM_OP_CMP, ARM_CC_AL, 1, d, s, op2); }
+static inline uint32_t cmp(uint8_t s, uint32_t op2) { return alu_cc(ARM_OP_CMP, ARM_CC_AL, 1, 0, s, op2); }
 // set condition codes on Rn + Op2, updates NZCV
-static inline uint32_t cmns(uint8_t d, uint8_t s, uint32_t op2) { return alu_cc(ARM_OP_CMN, ARM_CC_AL, 1, d, s, op2); }
+static inline uint32_t cmn(uint8_t s, uint32_t op2) { return alu_cc(ARM_OP_CMN, ARM_CC_AL, 1, 0, s, op2); }
 // Rd := Rn | Op2, updates NZ
 static inline uint32_t orrs(uint8_t d, uint8_t s, uint32_t op2) { return alu_cc(ARM_OP_ORR, ARM_CC_AL, 1, d, s, op2); }
 // Rd := Op2, updates NZC
@@ -378,7 +383,7 @@ static inline uint32_t blx_cc_reg(condition_t cc, uint8_t reg) { return LE(0x012
 static inline uint32_t blx_reg(uint8_t reg) { return blx_cc_reg(ARM_CC_AL, reg); }
 static inline uint32_t bx_cc(condition_t cc, uint8_t reg) { return LE(0x012fff10 | (cc << 28) | (reg)); }
 static inline uint32_t bx(uint8_t reg) { return bx_cc(ARM_CC_AL, reg); }
-static inline uint32_t bx_lr() { return bx(14); }
+static inline uint32_t bx_lr() { return bx(lr); }
 
 // Calculate the LDR/STR index for immediate offset
 static inline uint32_t index_imm(index_t pre, int wb, int32_t offset) {
@@ -390,21 +395,28 @@ static inline uint32_t index_imm(index_t pre, int wb, int32_t offset) {
     return LE(ls);
 }
 // Calculate the LDR/STR index for adding register and shift offset
-static inline uint32_t index_add_reg(index_t pre, int wb, uint8_t regModifed, shift_t shiftType, uint8_t shiftAmmount) {
+static inline uint32_t index_add_reg_shift(index_t pre, int wb, uint8_t regModifed, shift_t shiftType, uint8_t shiftAmmount) {
     uint32_t offset = 0xFFF & ((shiftAmmount << 7) | (shiftType << 5) | (regModifed));
     uint32_t ls     = 0x02800000;
     if (pre) ls |= 0x01000000;
     if (wb) ls |= 0x00200000;
     return LE(ls | offset);
 }
+static inline uint32_t index_add_reg(index_t pre, int wb, uint8_t reg) {
+    return index_add_reg_shift(pre, wb, reg, ARM_SHIFT_LSL, 0);
+}
 // Calculate the LDR/STR index for subtracting register and shift offset
-static inline uint32_t index_sub_reg(index_t pre, int wb, uint8_t regModifed, shift_t shiftType, uint8_t shiftAmmount) {
+static inline uint32_t index_sub_reg_shift(index_t pre, int wb, uint8_t regModifed, shift_t shiftType, uint8_t shiftAmmount) {
     uint32_t offset = 0xFFF & ((shiftAmmount << 7) | (shiftType << 5) | (regModifed));
     uint32_t ls     = 0x02000000;
     if (pre) ls |= 0x01000000;
     if (wb) ls |= 0x00200000;
     return LE(ls | offset);
 }
+static inline uint32_t index_sub_reg(index_t pre, int wb, uint8_t reg) {
+    return index_sub_reg_shift(pre, wb, reg, ARM_SHIFT_LSL, 0);
+}
+
 static inline uint32_t ldsr_cc(condition_t cc, int byte, int load, uint8_t regData, uint8_t regAddr, uint32_t index) {
     uint32_t ls = load ? 0x04000000 : 0x04100000;
     if (byte) ls |= 0x00400000;
@@ -414,14 +426,14 @@ static inline uint32_t ldsr_cc(condition_t cc, int byte, int load, uint8_t regDa
 }
 
 static inline uint32_t ldr_cc(condition_t cc, uint8_t d, uint8_t a, uint32_t idx) { return ldsr_cc(cc, 0, 1, d, a, idx); }
-static inline uint32_t ldr(condition_t cc, uint8_t d, uint8_t a, uint32_t idx) { return ldsr_cc(ARM_CC_AL, 0, 1, d, a, idx); }
+static inline uint32_t ldr(uint8_t d, uint8_t a, uint32_t idx) { return ldsr_cc(ARM_CC_AL, 0, 1, d, a, idx); }
 static inline uint32_t ldrb_cc(condition_t cc, uint8_t d, uint8_t a, uint32_t idx) { return ldsr_cc(cc, 1, 1, d, a, idx); }
-static inline uint32_t ldrb(condition_t cc, uint8_t d, uint8_t a, uint32_t idx) { return ldsr_cc(ARM_CC_AL, 1, 1, d, a, idx); }
+static inline uint32_t ldrb(uint8_t d, uint8_t a, uint32_t idx) { return ldsr_cc(ARM_CC_AL, 1, 1, d, a, idx); }
 
 static inline uint32_t str_cc(condition_t cc, uint8_t d, uint8_t a, uint32_t idx) { return ldsr_cc(cc, 0, 0, d, a, idx); }
-static inline uint32_t str(condition_t cc, uint8_t d, uint8_t a, uint32_t idx) { return ldsr_cc(ARM_CC_AL, 0, 0, d, a, idx); }
+static inline uint32_t str(uint8_t d, uint8_t a, uint32_t idx) { return ldsr_cc(ARM_CC_AL, 0, 0, d, a, idx); }
 static inline uint32_t strb_cc(condition_t cc, uint8_t d, uint8_t a, uint32_t idx) { return ldsr_cc(cc, 1, 0, d, a, idx); }
-static inline uint32_t strb(condition_t cc, uint8_t d, uint8_t a, uint32_t idx) { return ldsr_cc(ARM_CC_AL, 1, 0, d, a, idx); }
+static inline uint32_t strb(uint8_t d, uint8_t a, uint32_t idx) { return ldsr_cc(ARM_CC_AL, 1, 0, d, a, idx); }
 
 static inline uint32_t ldsr_hw_cc(condition_t cc, int sex, int word, int load, uint8_t regData, uint8_t regAddr, uint32_t index) {
     if (index & 0x02000000) {
@@ -675,6 +687,15 @@ static inline uint32_t rev_cc(condition_t cc, uint8_t d, uint8_t s) {
 }
 // Reverse byte order (change endianess)
 static inline uint32_t rev(uint8_t d, uint8_t s) { return rev_cc(ARM_CC_AL, d, s); }
+
+// Conditionally Reverse bit order
+static inline uint32_t rbit_cc(condition_t cc, uint8_t d, uint8_t s) {
+    return LE(0x06FF0F30 | (cc << 28) | (d << 12) | s);
+}
+// Reverse byte order (change endianess)
+static inline uint32_t rbit(uint8_t d, uint8_t s) { return rev_cc(ARM_CC_AL, d, s); }
+
+
 
 // Sign-Extend and transfer
 // Conditionally Sign-Extend and transfer byte
