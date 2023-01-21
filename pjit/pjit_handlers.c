@@ -48,6 +48,15 @@
 // #include "ops/m68k_emit_ea.h"
 // #include "ops/m68k_registers.h"
 
+#include <stdint.h>
+
+void handle_ABCD(uint32_t opccode) { }
+void handle_DIVS(uint32_t opccode) { }
+void handle_DIVU(uint32_t opccode) { }
+void handle_NBCD(uint32_t opccode) { }
+void handle_ROXd(uint32_t opccode) { }
+void handle_SBCD(uint32_t opccode) { }
+
 // __attribute__((always_inline)) static inline unsigned GET_X(void) {
 //     uint32_t x;
 //     asm volatile(
