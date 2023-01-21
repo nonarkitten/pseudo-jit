@@ -610,6 +610,11 @@ static inline uint32_t svc(uint32_t exception) { return svc_cc(ARM_CC_AL, except
 static inline uint32_t udf(uint16_t imm) {
     return LE(0xe7f000f0 | (imm & 0x0f) | ((imm & 0xfff0) << 4));
 }
+// Halt
+static inline uint32_t hlt_cc(condition_t cc, uint16_t immediate) {
+    return LE(0x01000070 | (cc << 28) | ((immediate & 0xFFF0) << 4) | (immediate & 0xF));
+}
+static inline uint32_t hlt(uint16_t immediate) { return svc_cc(ARM_CC_AL, immediate); }
 
 // Bit-field Instructions
 // Signed Bit-field Extract

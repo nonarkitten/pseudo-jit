@@ -31,11 +31,11 @@
  *
  *     Castaway (formerly FAST), GPL version 2 License
  *     Copyright (c) 1994-2002 Martin Döring, Joachim Hönig
- *    
+ *
  *     Cyclone 68K, GPL version 2 License
  *     Copyright (c) 2004,2011 Dave "FinalDave" Haywood
  *     Copyright (c) 2005-2011 Graûvydas "notaz" Ignotas
- *    
+ *
  *     TI StarterWare, modified BSD 3-Clause License
  *     Copyright (C) 2010 Texas Instruments Incorporated - http://www.ti.com/
  *
@@ -86,10 +86,8 @@ typedef enum {
     ALU_OP_NOP,
 
     // Adders
-    ALU_OP_ABCD,
     ALU_OP_ADD,
     ALU_OP_ADDX,
-    ALU_OP_SBCD,
     ALU_OP_SUB,
     ALU_OP_SUBX,
     ALU_OP_CMP,
@@ -100,8 +98,8 @@ typedef enum {
     ALU_OP_OR,
 
     // Multipliers
-    ALU_OP_DIVSW,
-    ALU_OP_DIVUW,
+    // ALU_OP_DIVSW,
+    // ALU_OP_DIVUW,
     ALU_OP_MULSW,
     ALU_OP_MULUW,
 
@@ -116,7 +114,6 @@ typedef enum {
     ALU_OP_ROXR,
 
     // Unary Ops
-    ALU_OP_NBCD,
     ALU_OP_CLR,
     ALU_OP_NEG,
     ALU_OP_NEGX,
@@ -129,10 +126,12 @@ typedef enum {
     ALU_OP_BTST,
 
     // Miscellaneous
+    // ALU_OP_EXG,
     ALU_OP_EXTBW,
     ALU_OP_EXTWL,
     ALU_OP_SWAP,
     ALU_OP_TAS,
+    ALU_OP_TST,
 
 } ALU_OP_t;
 
@@ -165,7 +164,7 @@ static void emit_load_X(uint32_t** emit) {
 // @brief save out C flag back into the X
 static void emit_save_X(uint32_t** emit) {
     // put C back into X, leave everything else
-    *(*emit)++ = ldrb(r0, r5, index_imm(1,0, (1 + OFFSETOF(cpu_t, sr))));
+    *(*emit)++ = ldrb(r0, r5, index_imm(1, 0, (1 + OFFSETOF(cpu_t, sr))));
     *(*emit)++ = orr_cc(ARM_CC_CS, r0, r0, imm(0x10));
     *(*emit)++ = bic_cc(ARM_CC_CC, r0, r0, imm(0x10));
     *(*emit)++ = strb(r0, r5, index_imm(1, 0, (1 + OFFSETOF(cpu_t, sr))));
@@ -182,7 +181,7 @@ static void emit_68k_to_arm_cc(uint32_t** emit, uint8_t reg) {
     // recompose flags -> MCR, reg has ...xnzvc
     *(*emit)++ = rbit(r0, reg);       // cvznx...0000
     *(*emit)++ = bfi(r0, reg, 2, 2);  // cvznx...00nz
-    *(*emit)++ = ror_imm(r0, r0, 2);      // nzcvznx...00
+    *(*emit)++ = ror_imm(r0, r0, 2);  // nzcvznx...00
     *(*emit)++ = msr(CPSR_f, r0);     // msr  CPSR_f, r0
 }
 // @brief get the ARM CPSR flags into the low 4-bit of reg
@@ -238,8 +237,6 @@ void emit_ALU(uint32_t** emit, ALU_OP_t op, uint8_t regS, uint8_t regD) {
             break;
 
         // Adders
-        case ALU_OP_ABCD:
-            break;
         case ALU_OP_ADD:
             cond   = 1;
             opcode = add(regD, regS, 0);
@@ -247,8 +244,6 @@ void emit_ALU(uint32_t** emit, ALU_OP_t op, uint8_t regS, uint8_t regD) {
         case ALU_OP_ADDX:
             cond   = 1;
             opcode = adc(regD, regS, 0);
-            break;
-        case ALU_OP_SBCD:
             break;
         case ALU_OP_SUB:
             cond   = 1;
@@ -278,9 +273,9 @@ void emit_ALU(uint32_t** emit, ALU_OP_t op, uint8_t regS, uint8_t regD) {
             break;
 
         // Unary
-        case ALU_OP_NBCD:
-            break;
         case ALU_OP_CLR:
+            cond   = 1;
+            opcode = mov(regD, imm(0));
             break;
         case ALU_OP_NEG:
             cond   = 1;
@@ -325,13 +320,19 @@ void emit_ALU(uint32_t** emit, ALU_OP_t op, uint8_t regS, uint8_t regD) {
             break;
 
         // Multipliers
-        case ALU_OP_DIVSW:
-            break;
-        case ALU_OP_DIVUW:
-            break;
+        // case ALU_OP_DIVSW:
+        //     break;
+        // case ALU_OP_DIVUW:
+        //     break;
         case ALU_OP_MULSW:
+            *(*emit)++ = sxth(regD, regD, 0);
+            *(*emit)++ = sxth(regS, regS, 0);
+            *(*emit)++ = mul(regD, regD, regS);
             break;
         case ALU_OP_MULUW:
+            *(*emit)++ = uxth(regD, regD, 0);
+            *(*emit)++ = uxth(regS, regS, 0);
+            *(*emit)++ = mul(regD, regD, regS);
             break;
 
         // Bitwise
@@ -359,9 +360,11 @@ void emit_ALU(uint32_t** emit, ALU_OP_t op, uint8_t regS, uint8_t regD) {
             opcode = sxth(regD, regS, 0);
             break;
         case ALU_OP_SWAP:
-            opcode = ror_imm(regS, regS, 16);
+            opcode = ror_imm(regD, regD, 16);
             break;
         case ALU_OP_TAS:
+            break;
+        case ALU_OP_TST:
             break;
     }
 
@@ -465,6 +468,23 @@ static void emit_ImmReg_Shift(uint32_t** emit, uint16_t opcode, ALU_OP_t op) {
     emit_EA_Store(emit, (opcode & 0xC7), regD, 2, 1);
     *(*emit)++ = bx(lr);
 }
+// @brief common routine for handling bitwise operators
+static void emit_Bit_Op(uint32_t** emit, uint16_t opcode, ALU_OP_t op) {
+    uint8_t regS = emit_EA_Load(emit, (opcode & 0x0100) ? ((opcode >> 9) & 7) : 0x3C, 1, 1, 0);
+    *(*emit)++   = mov(r0, imm(1));
+    *(*emit)++   = lsl_reg(regS, regS, r0);
+    uint8_t regD = emit_EA_Load(emit, opcode & 0x3F, 0, 2, 1);
+    emit_ALU(emit, op, regS, regD);
+    emit_EA_Store(emit, opcode & 0x3F, regD, 2, 1);
+    *(*emit)++ = bx(lr);
+}
+
+extern void handle_ABCD(uint32_t opccode);
+extern void handle_DIVS(uint32_t opccode);
+extern void handle_DIVU(uint32_t opccode);
+extern void handle_NBCD(uint32_t opccode);
+extern void handle_ROXd(uint32_t opccode);
+extern void handle_SBCD(uint32_t opccode);
 
 /***
  *       ___                      _        _____           _ _   _
@@ -474,8 +494,10 @@ static void emit_ImmReg_Shift(uint32_t** emit, uint16_t opcode, ALU_OP_t op) {
  *      \___/| .__/ \___\___/ \__,_|\___| |_____|_| |_| |_|_|\__|\__\___|_|  |___/
  *           |_|
  */
+
 void emit_ABCD(uint32_t** emit, uint16_t opcode) {
-    emit_BCD_XOP_ALU(emit, opcode, ALU_OP_ABCD);
+    *(*emit)++ = movw(r0, opcode);
+    *(*emit)++ = bl_imm(calc_offset(*emit, handle_ABCD));
 }
 void emit_ADDBW(uint32_t** emit, uint16_t opcode) {
     emit_EA_ALU(emit, opcode, ALU_OP_ADD);
@@ -554,29 +576,28 @@ void emit_ASdL(uint32_t** emit, uint16_t opcode) {
     emit_ImmReg_Shift(emit, opcode, (opcode & 0x0100) ? ALU_OP_ASL : ALU_OP_ASR);
 }
 void emit_ASd(uint32_t** emit, uint16_t opcode) {
-    // Memory shift
     emit_Mem_Shift(emit, opcode, (opcode & 0x0100) ? ALU_OP_ASL : ALU_OP_ASR);
 }
 void emit_Bcc(uint32_t** emit, uint16_t opcode) {
 #warning UNIMPLEMENTED
 }
 void emit_BCHG(uint32_t** emit, uint16_t opcode) {
-#warning UNIMPLEMENTED
+    emit_Bit_Op(emit, opcode, ALU_OP_BCHG);
 }
 void emit_BCLR(uint32_t** emit, uint16_t opcode) {
-#warning UNIMPLEMENTED
+    emit_Bit_Op(emit, opcode, ALU_OP_BCLR);
 }
 void emit_BRA(uint32_t** emit, uint16_t opcode) {
 #warning UNIMPLEMENTED
 }
 void emit_BSET(uint32_t** emit, uint16_t opcode) {
-#warning UNIMPLEMENTED
+    emit_Bit_Op(emit, opcode, ALU_OP_BSET);
 }
 void emit_BSR(uint32_t** emit, uint16_t opcode) {
 #warning UNIMPLEMENTED
 }
 void emit_BTST(uint32_t** emit, uint16_t opcode) {
-#warning UNIMPLEMENTED
+    emit_Bit_Op(emit, opcode, ALU_OP_BTST);
 }
 void emit_CHK(uint32_t** emit, uint16_t opcode) {
 #warning UNIMPLEMENTED
@@ -609,13 +630,18 @@ void emit_CMPIL(uint32_t** emit, uint16_t opcode) {
     emit_IMD_ALU(emit, opcode, ALU_OP_CMP);
 }
 void emit_CMPML(uint32_t** emit, uint16_t opcode) {
-#warning UNIMPLEMENTED
+    uint8_t dEA = 0x18 | (opcode & 0xC0) | ((opcode >> 9) & 0x7);
+    uint8_t sEA = 0x18 | (opcode & 0xC7);
+    uint8_t regS = emit_EA_Load(emit, sEA, 1, 1, 0);
+    uint8_t regD = emit_EA_Load(emit, dEA, 0, 2, 1);
+    emit_ALU(emit, ALU_OP_CMP, regS, regD);
+    *(*emit)++ = bx(lr);    
 }
 void emit_CMPMB(uint32_t** emit, uint16_t opcode) {
-#warning UNIMPLEMENTED
+    emit_CMPML(emit, opcode);
 }
 void emit_CMPMW(uint32_t** emit, uint16_t opcode) {
-#warning UNIMPLEMENTED
+    emit_CMPML(emit, opcode);
 }
 void emit_CMPW(uint32_t** emit, uint16_t opcode) {
     emit_EA_ALU(emit, opcode, ALU_OP_CMP);
@@ -627,10 +653,12 @@ void emit_DBRA(uint32_t** emit, uint16_t opcode) {
 #warning UNIMPLEMENTED
 }
 void emit_DIVS(uint32_t** emit, uint16_t opcode) {
-#warning UNIMPLEMENTED
+    *(*emit)++ = movw(r0, opcode);
+    *(*emit)++ = bl_imm(calc_offset(*emit, handle_DIVS));
 }
 void emit_DIVU(uint32_t** emit, uint16_t opcode) {
-#warning UNIMPLEMENTED
+    *(*emit)++ = movw(r0, opcode);
+    *(*emit)++ = bl_imm(calc_offset(*emit, handle_DIVU));
 }
 void emit_EORBW(uint32_t** emit, uint16_t opcode) {
     emit_EA_ALU(emit, opcode, ALU_OP_EOR);
@@ -658,13 +686,59 @@ void emit_EORI_TO_SR(uint32_t** emit, uint16_t opcode) {
     *(*emit)++ = bx(lr);
 }
 void emit_EXG(uint32_t** emit, uint16_t opcode) {
-#warning UNIMPLEMENTED
+    // If the exchange is between data and address registers,
+    // this field always specifies the data register.
+    uint8_t Rx = (opcode >> 9) & 7;
+    // If the exchange is between data and address registers,
+    // this field always specifies the address register.
+    uint8_t Ry = (opcode >> 0) & 7;
+
+    switch ((opcode >> 3) & 0x1F) {
+        default:
+        case 0x08:
+            break;  // data
+        case 0x09:
+            Rx |= 0x8;  // fallthru
+        case 0x11:
+            Ry |= 0x8;
+            break;  // address
+    }
+
+    // if we're swapping between D2-D* and any of D0/D1, A0-A7, use SWP
+    if ((Rx > 1 && Rx < 8) || (Ry > 1 && Ry < 8)) {
+        if (Rx > 1 && Rx < 8) {
+            *(*emit)++ = ldr(r0, r5, index_imm(1, 0, Rx * 4));
+            if (Ry > 1 && Ry < 8) {
+                *(*emit)++ = ldr(r1, r5, index_imm(1, 0, Ry * 4));
+                *(*emit)++ = str(r1, r5, index_imm(1, 0, Rx * 4));
+                *(*emit)++ = str(r0, r5, index_imm(1, 0, Ry * 4));
+            } else {
+                Ry         = (Ry < 2) ? (Ry + 3) : (Ry - 2);
+                *(*emit)++ = str(Ry, r5, index_imm(1, 0, Rx * 4));
+                *(*emit)++ = mov(Ry, r0);
+            }
+        } else {
+            Rx         = (Rx < 2) ? (Rx + 3) : (Rx - 2);
+            *(*emit)++ = mov(r0, Rx);
+            *(*emit)++ = ldr(Rx, r5, index_imm(1, 0, Ry * 4));
+            *(*emit)++ = ldr(r0, r5, index_imm(1, 0, Ry * 4));
+        }
+    }
+    // if we're swapping among D0/D1, A0-A7 then we need three moves
+    else {
+        Rx         = (Rx < 2) ? (Rx + 3) : (Rx - 2);
+        Ry         = (Ry < 2) ? (Ry + 3) : (Ry - 2);
+        *(*emit)++ = mov(r0, Rx);
+        *(*emit)++ = mov(Rx, Ry);
+        *(*emit)++ = mov(Ry, r0);
+    }
+    *(*emit)++ = bx(lr);
 }
 void emit_EXTL(uint32_t** emit, uint16_t opcode) {
-#warning UNIMPLEMENTED
+    emit_IMD_ALU(emit, opcode, ALU_OP_EXTWL);
 }
 void emit_EXTW(uint32_t** emit, uint16_t opcode) {
-#warning UNIMPLEMENTED
+    emit_IMD_ALU(emit, opcode, ALU_OP_EXTBW);
 }
 void emit_FLINE(uint32_t** emit, uint16_t opcode) {
     emit_SVC(emit, LINE_F);
@@ -771,13 +845,14 @@ void emit_MOVEL(uint32_t** emit, uint16_t opcode) {
     *(*emit)++ = bx(lr);
 }
 void emit_MULS(uint32_t** emit, uint16_t opcode) {
-#warning UNIMPLEMENTED
+    emit_EA_ALU(emit, (opcode & 0xFEFF), ALU_OP_MULSW);
 }
 void emit_MULU(uint32_t** emit, uint16_t opcode) {
-#warning UNIMPLEMENTED
+    emit_EA_ALU(emit, (opcode & 0xFEFF), ALU_OP_MULUW);
 }
 void emit_NBCD(uint32_t** emit, uint16_t opcode) {
-    emit_BCD_XOP_EA_ALU(emit, opcode, ALU_OP_NBCD);
+    *(*emit)++ = movw(r0, opcode);
+    *(*emit)++ = bl_imm(calc_offset(*emit, handle_NBCD));
 }
 void emit_NEGBW(uint32_t** emit, uint16_t opcode) {
     emit_UNARY_EA_ALU(emit, opcode, ALU_OP_NEG);
@@ -845,10 +920,12 @@ void emit_ROd(uint32_t** emit, uint16_t opcode) {
     emit_Mem_Shift(emit, opcode, (opcode & 0x0100) ? ALU_OP_ROL : ALU_OP_ROR);
 }
 void emit_ROXdBW(uint32_t** emit, uint16_t opcode) {
-    emit_ImmReg_Shift(emit, opcode, (opcode & 0x0100) ? ALU_OP_ROXL : ALU_OP_ROXR);
+    *(*emit)++ = movw(r0, opcode);
+    *(*emit)++ = bl_imm(calc_offset(*emit, handle_ROXd));
 }
 void emit_ROXdL(uint32_t** emit, uint16_t opcode) {
-    emit_ImmReg_Shift(emit, opcode, (opcode & 0x0100) ? ALU_OP_ROXL : ALU_OP_ROXR);
+    *(*emit)++ = movw(r0, opcode);
+    *(*emit)++ = bl_imm(calc_offset(*emit, handle_ROXd));
 }
 void emit_ROXd(uint32_t** emit, uint16_t opcode) {
     emit_Mem_Shift(emit, opcode, (opcode & 0x0100) ? ALU_OP_ROXL : ALU_OP_ROXR);
@@ -863,13 +940,18 @@ void emit_RTS(uint32_t** emit, uint16_t opcode) {
 #warning UNIMPLEMENTED
 }
 void emit_SBCD(uint32_t** emit, uint16_t opcode) {
-    emit_BCD_XOP_ALU(emit, opcode, ALU_OP_SBCD);
+    *(*emit)++ = movw(r0, opcode);
+    *(*emit)++ = bl_imm(calc_offset(*emit, handle_SBCD));
 }
 void emit_Scc(uint32_t** emit, uint16_t opcode) {
 #warning UNIMPLEMENTED
 }
 void emit_STOP(uint32_t** emit, uint16_t opcode) {
-#warning UNIMPLEMENTED
+    emit_load_SR(emit, 2);
+    emit_is_SVC(emit);
+    emit_save_SR(emit, 1);
+    *(*emit)++ = hlt(0);
+    *(*emit)++ = bx(lr);
 }
 void emit_SUBBW(uint32_t** emit, uint16_t opcode) {
     emit_EA_ALU(emit, opcode, ALU_OP_SUB);
@@ -911,7 +993,7 @@ void emit_SUBXL(uint32_t** emit, uint16_t opcode) {
     emit_BCD_XOP_ALU(emit, opcode, ALU_OP_SUBX);
 }
 void emit_SWAP(uint32_t** emit, uint16_t opcode) {
-#warning UNIMPLEMENTED
+    emit_IMD_ALU(emit, opcode, ALU_OP_SWAP);
 }
 void emit_TAS(uint32_t** emit, uint16_t opcode) {
 #warning UNIMPLEMENTED
@@ -924,10 +1006,10 @@ void emit_TRAPV(uint32_t** emit, uint16_t opcode) {
     *(*emit)++ = bx(lr);
 }
 void emit_TSTBW(uint32_t** emit, uint16_t opcode) {
-#warning UNIMPLEMENTED
+    emit_IMD_ALU(emit, opcode, ALU_OP_TST);
 }
 void emit_TSTL(uint32_t** emit, uint16_t opcode) {
-#warning UNIMPLEMENTED
+    emit_IMD_ALU(emit, opcode, ALU_OP_TST);
 }
 void emit_UNLK(uint32_t** emit, uint16_t opcode) {
 #warning UNIMPLEMENTED
@@ -1541,7 +1623,7 @@ const uint32_t optab_size = sizeof(optab) / sizeof(struct op_details);
  */
 static void emit_op(uint32_t** emit, uint16_t opcode) {
     struct op_details* op = optab;
-    opcode                = optimize_op(opcode);
+    //opcode                = optimize_op(opcode);
     while (1) {
         if ((opcode & op->match) == op->equal) {
             return op->emit(emit, opcode);
@@ -1579,17 +1661,18 @@ void emit_opcode_table() {
             // Search previous stubs, each stub is prefixed with
             // a pointer to the previous stub
             uint32_t* ss = stubs;
+            uint32_t* from = &cpu->opcode_table[opcode * 2 + 1];
             while ((ss = (uint32_t*)*ss)) {
                 if (0 == memcmp(&ss[1], &buffer[1], (len - 1) * 4)) break;
             }
             if (ss) {
                 // Found duplicate stub
-                cpu->opcode_table[opcode * 2 + 1] = emit_branch(&ss[1]);
+                cpu->opcode_table[opcode * 2 + 1] = b_imm(calc_offset(from, &ss[1]));
             } else {
                 // Create new stub
                 *stubs                            = prior_stub;
                 prior_stub                        = stubs++;
-                cpu->opcode_table[opcode * 2 + 1] = emit_branch(stubs);
+                cpu->opcode_table[opcode * 2 + 1] = b_imm(calc_offset(from, stubs));
                 memcpy(stubs, &buffer[1], (len - 1) * 4);
             }
         }

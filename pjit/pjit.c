@@ -46,6 +46,7 @@
  *     Copyright © 2019 Michal Schulz <michal.schulz@gmx.de>
  */
 
+#include "arm.h"
 #include "pjit.h"
 #include "pjit_extword.h"
 
@@ -92,128 +93,47 @@ void restore_cpu(void) {
     asm __volatile("ldm\t%0!, {r6-r13}" ::"r"(base));  // + 4 cycles
 }
 
-// return ARM32 opcodes for various instructions
-uint32_t emit_cc_branch(uint8_t cc, int32_t offset) {
-    return (cc << 24) | (0x00FFFFFF & (offset >> 2));
-}
-uint32_t emit_branch(uint32_t current, uint32_t target) {
-    return emit_cc_branch(0xEB, target - current - 8);
-}
-uint32_t emit_movw(uint32_t reg, uint16_t value) {
-    return 0xE3000000 | ((value & 0xF000) << 4) | (reg << 12) | (value & 0xFFF);
-}
-uint32_t emit_movt(uint32_t reg, uint16_t value) {
-    return 0xE3400000 | ((value & 0xF000) << 4) | (reg << 12) | (value & 0xFFF);
-}
-uint32_t emit_src_ext(uint32_t current, uint16_t opcode) {
+static inline uint32_t emit_src_ext(uint32_t current, uint16_t opcode) {
     static const uint32_t ext_handler[32] = {
-        (uint32_t)extword_src_0000,
-        (uint32_t)extword_src_1000,
-        (uint32_t)extword_src_2000,
-        (uint32_t)extword_src_3000,
-        (uint32_t)extword_src_4000,
-        (uint32_t)extword_src_5000,
-        (uint32_t)extword_src_6000,
-        (uint32_t)extword_src_7000,
-        (uint32_t)extword_src_8000,
-        (uint32_t)extword_src_9000,
-        (uint32_t)extword_src_A000,
-        (uint32_t)extword_src_B000,
-        (uint32_t)extword_src_C000,
-        (uint32_t)extword_src_D000,
-        (uint32_t)extword_src_E000,
-        (uint32_t)extword_src_F000,
-        (uint32_t)extword_src_0800,
-        (uint32_t)extword_src_1800,
-        (uint32_t)extword_src_2800,
-        (uint32_t)extword_src_3800,
-        (uint32_t)extword_src_4800,
-        (uint32_t)extword_src_5800,
-        (uint32_t)extword_src_6800,
-        (uint32_t)extword_src_7800,
-        (uint32_t)extword_src_8800,
-        (uint32_t)extword_src_9800,
-        (uint32_t)extword_src_A800,
-        (uint32_t)extword_src_B800,
-        (uint32_t)extword_src_C800,
-        (uint32_t)extword_src_D800,
-        (uint32_t)extword_src_E800,
-        (uint32_t)extword_src_F800,
-    };
+        (uint32_t)extword_src_0000,(uint32_t)extword_src_1000,(uint32_t)extword_src_2000,(uint32_t)extword_src_3000,
+        (uint32_t)extword_src_4000,(uint32_t)extword_src_5000,(uint32_t)extword_src_6000,(uint32_t)extword_src_7000,
+        (uint32_t)extword_src_8000,(uint32_t)extword_src_9000,(uint32_t)extword_src_A000,(uint32_t)extword_src_B000,
+        (uint32_t)extword_src_C000,(uint32_t)extword_src_D000,(uint32_t)extword_src_E000,(uint32_t)extword_src_F000,
+        (uint32_t)extword_src_0800,(uint32_t)extword_src_1800,(uint32_t)extword_src_2800,(uint32_t)extword_src_3800,
+        (uint32_t)extword_src_4800,(uint32_t)extword_src_5800,(uint32_t)extword_src_6800,(uint32_t)extword_src_7800,
+        (uint32_t)extword_src_8800,(uint32_t)extword_src_9800,(uint32_t)extword_src_A800,(uint32_t)extword_src_B800,
+        (uint32_t)extword_src_C800,(uint32_t)extword_src_D800,(uint32_t)extword_src_E800,(uint32_t)extword_src_F800,
+    };  
+    return b_imm(calc_offset(current, ext_handler[opcode >> 11] + ((opcode & 0xFF) * 8)));
+}
+static inline uint32_t emit_src_ext_pc(uint32_t current, uint16_t opcode) {
     static const uint32_t ext_pc_handler[32] = {
-        (uint32_t)extword_src_0000_pc,
-        (uint32_t)extword_src_1000_pc,
-        (uint32_t)extword_src_2000_pc,
-        (uint32_t)extword_src_3000_pc,
-        (uint32_t)extword_src_4000_pc,
-        (uint32_t)extword_src_5000_pc,
-        (uint32_t)extword_src_6000_pc,
-        (uint32_t)extword_src_7000_pc,
-        (uint32_t)extword_src_8000_pc,
-        (uint32_t)extword_src_9000_pc,
-        (uint32_t)extword_src_A000_pc,
-        (uint32_t)extword_src_B000_pc,
-        (uint32_t)extword_src_C000_pc,
-        (uint32_t)extword_src_D000_pc,
-        (uint32_t)extword_src_E000_pc,
-        (uint32_t)extword_src_F000_pc,
-        (uint32_t)extword_src_0800_pc,
-        (uint32_t)extword_src_1800_pc,
-        (uint32_t)extword_src_2800_pc,
-        (uint32_t)extword_src_3800_pc,
-        (uint32_t)extword_src_4800_pc,
-        (uint32_t)extword_src_5800_pc,
-        (uint32_t)extword_src_6800_pc,
-        (uint32_t)extword_src_7800_pc,
-        (uint32_t)extword_src_8800_pc,
-        (uint32_t)extword_src_9800_pc,
-        (uint32_t)extword_src_A800_pc,
-        (uint32_t)extword_src_B800_pc,
-        (uint32_t)extword_src_C800_pc,
-        (uint32_t)extword_src_D800_pc,
-        (uint32_t)extword_src_E800_pc,
-        (uint32_t)extword_src_F800_pc,
+        (uint32_t)extword_src_0000_pc,(uint32_t)extword_src_1000_pc,(uint32_t)extword_src_2000_pc,
+        (uint32_t)extword_src_3000_pc,(uint32_t)extword_src_4000_pc,(uint32_t)extword_src_5000_pc,
+        (uint32_t)extword_src_6000_pc,(uint32_t)extword_src_7000_pc,(uint32_t)extword_src_8000_pc,
+        (uint32_t)extword_src_9000_pc,(uint32_t)extword_src_A000_pc,(uint32_t)extword_src_B000_pc,
+        (uint32_t)extword_src_C000_pc,(uint32_t)extword_src_D000_pc,(uint32_t)extword_src_E000_pc,
+        (uint32_t)extword_src_F000_pc,(uint32_t)extword_src_0800_pc,(uint32_t)extword_src_1800_pc,
+        (uint32_t)extword_src_2800_pc,(uint32_t)extword_src_3800_pc,(uint32_t)extword_src_4800_pc,
+        (uint32_t)extword_src_5800_pc,(uint32_t)extword_src_6800_pc,(uint32_t)extword_src_7800_pc,
+        (uint32_t)extword_src_8800_pc,(uint32_t)extword_src_9800_pc,(uint32_t)extword_src_A800_pc,
+        (uint32_t)extword_src_B800_pc,(uint32_t)extword_src_C800_pc,(uint32_t)extword_src_D800_pc,
+        (uint32_t)extword_src_E800_pc,(uint32_t)extword_src_F800_pc,
     };    
-    return emit_branch(current,
-                       ext_handler[opcode >> 11] + ((opcode & 0xFF) * 8));
+    return b_imm(calc_offset(current, ext_pc_handler[opcode >> 11] + ((opcode & 0xFF) * 8)));
 }
 static inline uint32_t emit_dst_ext(uint32_t current, uint16_t opcode) {
     static const uint32_t ext_handler[32] = {
-        (uint32_t)extword_dst_0000,
-        (uint32_t)extword_dst_1000,
-        (uint32_t)extword_dst_2000,
-        (uint32_t)extword_dst_3000,
-        (uint32_t)extword_dst_4000,
-        (uint32_t)extword_dst_5000,
-        (uint32_t)extword_dst_6000,
-        (uint32_t)extword_dst_7000,
-        (uint32_t)extword_dst_8000,
-        (uint32_t)extword_dst_9000,
-        (uint32_t)extword_dst_A000,
-        (uint32_t)extword_dst_B000,
-        (uint32_t)extword_dst_C000,
-        (uint32_t)extword_dst_D000,
-        (uint32_t)extword_dst_E000,
-        (uint32_t)extword_dst_F000,
-        (uint32_t)extword_dst_0800,
-        (uint32_t)extword_dst_1800,
-        (uint32_t)extword_dst_2800,
-        (uint32_t)extword_dst_3800,
-        (uint32_t)extword_dst_4800,
-        (uint32_t)extword_dst_5800,
-        (uint32_t)extword_dst_6800,
-        (uint32_t)extword_dst_7800,
-        (uint32_t)extword_dst_8800,
-        (uint32_t)extword_dst_9800,
-        (uint32_t)extword_dst_A800,
-        (uint32_t)extword_dst_B800,
-        (uint32_t)extword_dst_C800,
-        (uint32_t)extword_dst_D800,
-        (uint32_t)extword_dst_E800,
-        (uint32_t)extword_dst_F800,
+        (uint32_t)extword_dst_0000,(uint32_t)extword_dst_1000,(uint32_t)extword_dst_2000,(uint32_t)extword_dst_3000,
+        (uint32_t)extword_dst_4000,(uint32_t)extword_dst_5000,(uint32_t)extword_dst_6000,(uint32_t)extword_dst_7000,
+        (uint32_t)extword_dst_8000,(uint32_t)extword_dst_9000,(uint32_t)extword_dst_A000,(uint32_t)extword_dst_B000,
+        (uint32_t)extword_dst_C000,(uint32_t)extword_dst_D000,(uint32_t)extword_dst_E000,(uint32_t)extword_dst_F000,
+        (uint32_t)extword_dst_0800,(uint32_t)extword_dst_1800,(uint32_t)extword_dst_2800,(uint32_t)extword_dst_3800,
+        (uint32_t)extword_dst_4800,(uint32_t)extword_dst_5800,(uint32_t)extword_dst_6800,(uint32_t)extword_dst_7800,
+        (uint32_t)extword_dst_8800,(uint32_t)extword_dst_9800,(uint32_t)extword_dst_A800,(uint32_t)extword_dst_B800,
+        (uint32_t)extword_dst_C800,(uint32_t)extword_dst_D800,(uint32_t)extword_dst_E800,(uint32_t)extword_dst_F800,
     };
-    return emit_branch(current,
-                       ext_handler[opcode >> 11] + ((opcode & 0xFF) * 8));
+    return b_imm(calc_offset(current, ext_handler[opcode >> 11] + ((opcode & 0xFF) * 8)));
 }
 static inline uint32_t emit_return(void) { return 0xE12FFF1E; }
 
@@ -523,10 +443,20 @@ uint8_t get_ext(uint16_t opcode) {
 }
 #endif    
 
+typedef enum {
+    EXT_NONE,
+    EXT_I16,
+    EXT_I32,
+    EXT_D8_XAREG,
+    EXT_D16_PC,
+    EXT_D8_XPC,
+    EXT_COUNT
+} ext_t;
+
 /*  Look up code and if it's small enough, replace the caller with the
     function body, otherwise, replace with the branch to it and then execute it
  */
-__attribute__((naked)) void lookup_opcode(void) {
+__attribute__((naked,used)) void lookup_opcode(void) {
     static const uint8_t arm_bcc[16] = {
         //       M68K OP Description    ARMcc
         0xEB,  // 0000 T  Always         1110
@@ -559,34 +489,61 @@ __attribute__((naked)) void lookup_opcode(void) {
     //uint32_t opea   = oplen[opcode];
 
     uint8_t ext = get_ext(opcode);
-    /* Handle Extension Words */
-    // if (opea & EXT_WORD_SRC_EXT) {
-    //     out[i] = emit_src_ext((uint32_t)out, pc[i]);
-    //     i += 1;
-    // } else {
-    //     if (opea & EXT_WORD_SRC_16B) {
-    //         out[i] = emit_movw(1, pc[i]);
-    //         i += 1;
-    //     }
-    //     if (opea & EXT_WORD_SRC_32B) {
-    //         out[i] = emit_movt(1, pc[i]);
-    //         i += 1;
-    //     }
-    // }
 
-    // if (opea & EXT_WORD_DST_EXT) {
-    //     out[i] = emit_dst_ext((uint32_t)out, pc[i]);
-    //     i += 1;
-    // } else {
-    //     if (opea & EXT_WORD_DST_16B) {
-    //         out[i] = emit_movw(2, pc[i]);
-    //         i += 1;
-    //     }
-    //     if (opea & EXT_WORD_DST_32B) {
-    //         out[i] = emit_movt(2, pc[i]);
-    //         i += 1;
-    //     }
-    // }
+    switch((ext_t)(ext & 0x0F)) {
+    case EXT_I16:
+        out[i*2+0] = movw(r1, pc[i]);
+        out[i*2+1] = nop();
+        i++;
+        break;
+    case EXT_I32:
+        out[i*2+0] = movw(r1, pc[i]);
+        out[i*2+1] = nop();
+        i++;
+        out[i*2+0] = movt(r1, pc[i]);
+        out[i*2+1] = nop();
+        i++;
+        break;
+    case EXT_D8_XAREG:
+        out[i*2+0] = mov_signed(r1, (int8_t)opcode);
+        out[i*2+1] = emit_src_ext((uint32_t)out, pc[i]);
+        i++;
+        break;
+    case EXT_D16_PC:
+        out[i*2+0] = movw(r1, pc[i]);i++;
+        out[i*2+1] = emit_src_ext_pc((uint32_t)out, pc[i]);
+        i++;
+        break;
+    case EXT_D8_XPC:       
+        out[i*2+0] = mov_signed(r1, (int8_t)opcode);
+        out[i*2+1] = emit_src_ext_pc((uint32_t)out, pc[i]);
+        i++;
+    default:
+        break;
+    }
+
+    switch((ext_t)(ext & 0x0F)) {
+    case EXT_I16:
+        out[i*2+0] = movw(r2, pc[i]);
+        out[i*2+1] = nop();
+        i++;
+        break;
+    case EXT_I32:
+        out[i*2+0] = movw(r2, pc[i]);
+        out[i*2+1] = nop();
+        i++;
+        out[i*2+0] = movt(r2, pc[i]);
+        out[i*2+1] = nop();
+        i++;
+        break;
+    case EXT_D8_XAREG:
+        out[i*2+0] = mov_signed(r2, (int8_t)opcode);
+        out[i*2+1] = emit_src_ext((uint32_t)out, pc[i]);
+        i++;
+        break;
+    default:
+        break;
+    }    
 
     // uint32_t opcode_out = 0;
 

@@ -424,6 +424,8 @@ int main(void) {
 	make_i2c_good();
 	printf("[BOOT] Completed in %0.5f seconds.\n", am335x_dmtimer1_get_time());
 
+	emit_opcode_table();
+
 	// TODO Release RESET
 
 	// 4. finally, start PJIT

@@ -44,6 +44,8 @@
  */
 
 #include <arm_neon.h>
+
+#include "arm.h"
 #include "pjit.h"
 
 config_t config = {
@@ -167,7 +169,7 @@ pjit_cache_init(uint32_t top) {
     memset(memory, 0, (uint8_t*)0xA0000000 - memory);
 
     // Clear CPU state
-    cpu->b_lookup = emit_branch(cpu, &lookup_opcode);
+    cpu->b_lookup = b_imm(calc_offset(cpu, &lookup_opcode));
 
     // Clear caches
     cache_clear();
