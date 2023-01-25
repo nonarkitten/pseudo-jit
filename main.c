@@ -43,6 +43,7 @@
  *     Copyright 2015 University of Applied Sciences Western Switzerland / Fribourg
  */
 
+#include "cp15.h"
 #include "main.h"
 
 uint32_t xm_start = 0, xm_end = 0;
@@ -365,13 +366,17 @@ int main(void) {
 	//    i.e. Power-On Self Test or POST
     am335x_clock_init_core_pll();
     am335x_clock_init_per_pll();
-
-	// Todo, assert RESET
-
     am335x_dmtimer1_init();
+
+	// sets baud (default) to 115200
+    am335x_uart_init( AM335X_UART0 ); 
+	//	am335x_uart_set_baudrate(AM335X_UART0, 115200);
+
     InitPRU();
 
-    InitUART( 115200 );
+    // RESET
+    am335x_gpio_init(AM335X_GPIO3);
+    am335x_gpio_change_state(AM335X_GPIO3, 16, 0);
 
 	// flush XMODEM
 	printf("%c%c%c%c", NAK, CANCEL, CANCEL, CANCEL);
@@ -387,9 +392,8 @@ int main(void) {
     printf("[BOOT] Build Date %s, Time %s\n", __DATE__, __TIME__);
     printf("[BOOT] Image %p ~ %p (%d bytes)\n", &_image_start, &_image_end, (&_image_end - &_image_start));
 
-    am335x_clock_enable_i2c_module(AM335X_CLOCK_I2C0);
-    // I2C0Init( 400000 );
-    SPIInit( 12000000 );
+	am335x_i2c_init( AM335X_I2C0, 400000 );
+	am335x_spi_init( AM335X_SPI0, AM335X_CHAN0, 12000000, 8 );
 
     cpu = &cpu_state;
     cpu->config = &config;
@@ -409,6 +413,28 @@ int main(void) {
         am335x_clock_init_mpu_pll(300, 24);
     }
 
+	// set CPU caches
+	CP15ICacheFlush();
+    if(config.cpu_features & cpu_enable_icache) {
+        CP15ICacheEnable();
+    } else {
+		CP15ICacheDisable();
+	}
+
+	CP15DCacheFlush();
+    if(config.cpu_features & cpu_enable_dcache) {
+        CP15DCacheEnable();
+    } else {
+        CP15DCacheDisable();
+	}
+
+	/* For Cortex A8, L2EN has to be enabled for L2 Cache */
+	if(config.cpu_features & (cpu_enable_icache | cpu_enable_dcache)) {
+		CP15AuxControlFeatureEnable(__builtin_bswap32(0x02));
+	} else {
+		CP15AuxControlFeatureDisable(__builtin_bswap32(0x02));
+	}
+
     InitGPMC();
 
 	DDRInit();	
@@ -416,19 +442,35 @@ int main(void) {
 
 	// 3. based on EEPROM settings, initialize PJIT cache and opcode jump tables
 	pjit_cache_init(0xA0000000); // has to come after DDR init, before MMU init
+	emit_opcode_table();
 
 	if(config.post_enable_t & post_enable_checkclk) check_clock();
 
     InitMMU();
 
+
+	// Set and save the last boot good flag
 	make_i2c_good();
 	printf("[BOOT] Completed in %0.5f seconds.\n", am335x_dmtimer1_get_time());
 
-	emit_opcode_table();
-
-	// TODO Release RESET
+    // am335x_dmtimer1_wait_us(150);
+    am335x_gpio_change_state(AM335X_GPIO3, 16, 1);
 
 	// 4. finally, start PJIT
 	print_menu();
 }
 
+// TO-DO:
+
+// - MMU init uses old tables; need to rework
+// - menu needs to live in an interrupt, not main()
+// - GPIO interrupts are not enabled (BG/BGACK/BR)
+// - PJIT lookup routine still needs work
+// - need to finish the PJIT ops (about 24 left)
+// - need to check the BCD handlers
+// - need to add the ROX handlers
+// - implement the 68K interrupt/exception handler
+// - 24-bit address cleaning
+// - 68030 and FPU instructions
+// - 68030 extended EA modes
+// - 68040 MMU instructions (partial)

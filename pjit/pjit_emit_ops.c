@@ -1026,7 +1026,8 @@ typedef struct {
     uint16_t match, equal;
     void (*emit)(uint32_t**, uint16_t);
 } op_details_t;
-__attribute__((used)) const op_details_t optab[] = {
+
+__attribute__((used)) const op_details_t optab_68000[] = {
     {0xFFB8, 0x0000, &emit_ORIBW      },
     {0xFFB0, 0x0010, &emit_ORIBW      },
     {0xFFB0, 0x0020, &emit_ORIBW      },
@@ -1605,7 +1606,25 @@ __attribute__((used)) const op_details_t optab[] = {
  // Leave last
     {0x0000, 0x0000, emit_ILLEGAL    }
 };
-const uint32_t optab_size = sizeof(optab) / sizeof(op_details_t);
+
+__attribute__((used)) const op_details_t optab_68020[] = {
+};
+
+__attribute__((used)) const op_details_t optab_68030[] = {
+};
+
+__attribute__((used)) const op_details_t optab_68040[] = {
+};
+
+__attribute__((used)) const op_details_t optab_68882[] = {
+};
+
+__attribute__((used)) const op_details_t optab_040fpu[] = {
+};
+
+__attribute__((used)) const op_details_t optab_040mmu[] = {
+};
+
 
 /***
  *      __  __       _          ___                      _
@@ -1621,9 +1640,7 @@ const uint32_t optab_size = sizeof(optab) / sizeof(op_details_t);
  *     |_____|_| |_| |_|_|\__|\__\___|_|    |_| \_\___/ \__,_|\__|_|_| |_|\___|
  *
  */
-static void emit_op(uint32_t** emit, uint16_t opcode) {
-    op_details_t* op = optab;
-    //opcode                = optimize_op(opcode);
+static void emit_op(uint32_t** emit, op_details_t* op, uint16_t opcode) {
     while (1) {
         if ((opcode & op->match) == op->equal) {
             op->emit(emit, opcode);
@@ -1639,13 +1656,66 @@ void emit_opcode_table() {
     uint32_t* prior_stub = 0;
     uint16_t  stub_count = 0;
 
+    // check opcode mode
+    uint8_t c = config.cpu_features;
+
+    // We can only be one CPU at a time
+         if(c & cpu_enable_68040) c &= ~(cpu_enable_68000 | cpu_enable_68020 | cpu_enable_68030);
+    else if(c & cpu_enable_68030) c &= ~(cpu_enable_68000 | cpu_enable_68020 | cpu_enable_68040);
+    else if(c & cpu_enable_68020) c &= ~(cpu_enable_68000 | cpu_enable_68030 | cpu_enable_68040);
+    else                          c &= ~(cpu_enable_68020 | cpu_enable_68030 | cpu_enable_68040);
+
+    // 24 bit mode is only allowed with 68EC020 and 68000
+    if(!(c & (cpu_enable_68000 | cpu_enable_68020)))
+        c |= cpu_enable_32bits;
+
+    // Instruction cache is allowed on 020+
+    if(~(c & (cpu_enable_68020 | cpu_enable_68030 | cpu_enable_68040)))
+        c &= ~cpu_enable_icache;
+
+    // Data cache is allowed on 030+
+    if(~(c & (cpu_enable_68030 | cpu_enable_68040)))
+        c &= ~cpu_enable_icache;
+
+    // MMU is only permitted on the 68040
+    if(~(c & cpu_enable_68040))
+        c &= ~cpu_enable_mmu;
+
+    if(c != config.cpu_features) {
+        config.cpu_features = c;
+        config.is_dirty = 1;
+    }
+
     for (int opcode = 0; opcode < 65536; opcode++) {
         static uint32_t buffer[32];  // big enough?
         uint32_t*       b;
         uint32_t        len;
 
         b = buffer;
-        emit_op(&b, opcode);
+
+        // Start with the 68000 (common base)
+        emit_op(&b, optab_68000, opcode);
+
+        // Add applicable 680x0 opcodes
+             if(c & cpu_enable_68040) emit_op(&b, optab_68040, opcode);
+        else if(c & cpu_enable_68030) emit_op(&b, optab_68030, opcode);
+        else if(c & cpu_enable_68020) emit_op(&b, optab_68020, opcode);
+
+        // Add applicable FPU opcodes
+        if(c & cpu_enable_fpu) {
+            // 68040 has a very different FPU
+            if(c & cpu_enable_68040)
+                emit_op(&b, optab_040fpu, opcode);
+            // ...than the 68020 and 68030 (the 68882)
+            else if(c & (cpu_enable_68020 | cpu_enable_68030))
+                emit_op(&b, optab_68882, opcode);
+            // and the 68000 does not have an FPU
+        }
+
+        // Add applicable MMU opcodes
+        if(c & cpu_enable_mmu)
+            emit_op(&b, optab_040mmu, opcode);
+
         len = b - buffer;
 
         if (len <= 2) {

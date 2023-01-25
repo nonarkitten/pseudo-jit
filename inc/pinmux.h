@@ -58,11 +58,19 @@
  * M0   - Mode 0
  * The commented string gives the final mux configuration for that pin
  */
+// Slow down transition
+#define PIN_CFG_SLEW    (1 << 6)
+// Input Enable
 #define PIN_CFG_IEN     (1 << 5)
+// Input disable
 #define PIN_CFG_IDIS    (0 << 5)
+// Configure as Pull-Up
 #define PIN_CFG_PTU     (1 << 4)
+// Configure as Pull-Down
 #define PIN_CFG_PTD     (0 << 4)
+// Pull Up/Down Enable
 #define PIN_CFG_EN      (1 << 3)
+// Pull Up/Down Disable
 #define PIN_CFG_DIS     (0 << 3)
 
 #define PIN_CFG_M0      (0 << 0)

@@ -47,19 +47,6 @@
 #include "hw_flash.h"
 #include "pinmux.h"
 
-static const pin_muxing_t spi_pins[] = {
-	{ CONF_SPI0_SCLK, PIN_CFG_M0 | 			 	 PIN_CFG_EN },
-	{ CONF_SPI0_D0,   PIN_CFG_M0 | PIN_CFG_PTU | PIN_CFG_EN },
-	{ CONF_SPI0_D1,   PIN_CFG_M0 | 				 PIN_CFG_EN },
-	{ CONF_SPI0_CS0,  PIN_CFG_M0 | PIN_CFG_PTU | PIN_CFG_EN },
-	{ 0xFFFFFFFF },
-};
-
-void SPIInit(int bps) {
-    config_mux(spi_pins);
-    am335x_spi_init( AM335X_SPI0, AM335X_CHAN0, bps, 8 );
-}
-
 static uint8_t spi_xfer[256];
 extern uint8_t TransferSPI(uint8_t *io_buffer, uint8_t len);
 

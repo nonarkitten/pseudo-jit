@@ -150,13 +150,15 @@ typedef enum {
 } vector_t;
 
 typedef enum {
-    cpu_enable_68020  = 0x01,  // Enable 68020/030 Instructions
-    cpu_enable_32bits = 0x02,  // Enable 32-bit Addressing
-    cpu_enable_68882  = 0x04,  // Enable 68882 FPU Instructions
-    cpu_enable_040fpu = 0x08,  // Enable 68040 FPU Instructions
-    cpu_enable_040mmu = 0x10,  // Enable MMU Emulation
-    cpu_enable_icache = 0x40,  // Enable Instruction Cache
-    cpu_enable_dcache = 0x80,  // Enable Data Cache
+    cpu_enable_68000  = 0x00,  // Enable 68000 Instructions
+    cpu_enable_68020  = 0x01,  // Enable 68020 Instructions
+    cpu_enable_68030  = 0x02,  // Enable 68030 Instructions
+    cpu_enable_68040  = 0x04,  // Enable 68040 Instructions and MMU
+    cpu_enable_32bits = 0x08,  // Enable 32-bit Addressing (68000/68EC020)
+    cpu_enable_fpu    = 0x10,  // Enable FPU Instructions (68882 w/ 68030 or 040)
+    cpu_enable_icache = 0x20,  // Enable Instruction Cache Support
+    cpu_enable_dcache = 0x40,  // Enable Data Cache Support
+    cpu_enable_mmu    = 0x80,  // Enable 68K MMU
 } cpu_feature_t;
 
 typedef enum {
@@ -201,6 +203,9 @@ typedef struct {
 
     // MapROM page from 24-bit RAM (single 512KB), 0xFF to disable
     uint8_t maprom_page;
+
+    // Do we need to resave
+    uint8_t is_dirty;
 
 } config_t;
 
