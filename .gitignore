@@ -97,3 +97,7 @@ dead/
 
 # Output
 bin/
+
+# Not fit for human consumption
+pru/
+*.gp6
