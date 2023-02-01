@@ -81,6 +81,11 @@ extern uint32_t emit_EA_Store(uint32_t** emit, uint8_t dEA, uint8_t sReg, uint8_
 #pragma GCC diagnostic push
 #pragma GCC diagnostic error "-Wswitch"
 
+extern void branch_normal(int,int);
+extern void branch_subroutine(int,int);
+extern void jump_normal(int,int);
+extern void jump_subroutine(int,int);
+
 typedef enum {
     // Do nothing
     ALU_OP_NOP,
@@ -214,6 +219,29 @@ static void emit_save_CR(uint32_t** emit, uint8_t reg) {
     *(*emit)++ = strb(reg, r5, index_imm(1, 0, 1 + OFFSETOF(cpu_t, sr)));
     emit_68k_to_arm_cc(emit, reg);
 }
+// @brief return the ARM condition code based on the 68K cc field
+// @note HI and LS should not be used directly in any _cc opcode!
+static int arm_cc(uint16_t opcode) {
+    switch(opcode & 0x0F00) {
+    case 0x0000: return ARM_CC_AL; break; // 0000 T  True           1110
+    case 0x0100: return ARM_CC_NV; break; // 0001 F  False          1111
+    case 0x0200: return ARM_CC_HI; break; // 0010 HI Higher         1001
+    case 0x0300: return ARM_CC_LS; break; // 0011 LS Lower/Same     1000
+    case 0x0400: return ARM_CC_CC; break; // 0100 CC Carry Clear    0011
+    case 0x0500: return ARM_CC_CS; break; // 0101 CS Carry Set      0010
+    case 0x0600: return ARM_CC_NE; break; // 0110 NE Not Equal      0001
+    case 0x0700: return ARM_CC_EQ; break; // 0111 EQ Equal          0000
+    case 0x0800: return ARM_CC_VC; break; // 1000 VC Overflow Clear 0111
+    case 0x0900: return ARM_CC_VS; break; // 1001 VS Overflow Set   0110
+    case 0x0A00: return ARM_CC_PL; break; // 1010 PL Plus           0101
+    case 0x0B00: return ARM_CC_MI; break; // 1011 MI Minus          0100
+    case 0x0C00: return ARM_CC_GE; break; // 1100 GE Greater/Equal  1010
+    case 0x0D00: return ARM_CC_LT; break; // 1101 LT Lesser         1011
+    case 0x0E00: return ARM_CC_GT; break; // 1110 GT Greater        1100
+    case 0x0F00: return ARM_CC_LE; break; // 1111 LE Lesser/Equal   1101
+    } // end switch
+}
+
 
 // @brief Main arithmetic routine; does not add BX LR
 // @param uint32_t** emit stram to output opcodes
@@ -578,7 +606,51 @@ void emit_ASd(uint32_t** emit, uint16_t opcode) {
     emit_Mem_Shift(emit, opcode, (opcode & 0x0100) ? ALU_OP_ASL : ALU_OP_ASR);
 }
 void emit_Bcc(uint32_t** emit, uint16_t opcode) {
-#warning UNIMPLEMENTED
+    int8_t offset = (int8_t)(opcode & 0xFF);
+    if((offset == 0) || (offset == -1)) { 
+        *(*emit)++ = nop();
+    } else if(offset & 1) {
+        *(*emit)++ = nop();
+        *(*emit)++ = svc(ADDRESSERR);
+    } else {
+        *(*emit)++ = mov_signed(r1, offset);
+    }
+
+    uint8_t cc = arm_cc(opcode);
+    if(cc == ARM_CC_HI) {
+        /* ARM C=1 & Z=0, 68K C=0 | Z = 0
+         * C Z ARM 68K
+         * 0 0  0   1
+         * 0 1  0   1
+         * 1 0  1   1
+         * 1 1  0   0
+         */
+        **emit = b_cc_imm(ARM_CC_CC, calc_offset((uint32_t)*emit, (uint32_t)branch_normal));
+        *emit += 1;
+        **emit = b_cc_imm(ARM_CC_NE, calc_offset((uint32_t)*emit, (uint32_t)branch_normal));
+        *emit += 1;
+
+    } else if(cc == ARM_CC_LS) {
+        /* ARM C=0 & Z=1, 68K C=1 & Z=1
+         * C Z ARM 68K
+         * 0 0  0   0
+         * 0 1  1   0
+         * 1 0  0   0
+         * 1 1  0   1
+         */
+        uint32_t skip = (uint32_t)(*emit + 3);
+        **emit = b_cc_imm(ARM_CC_CC, calc_offset((uint32_t)*emit, skip));
+        *emit += 1;
+        **emit = b_cc_imm(ARM_CC_NE, calc_offset((uint32_t)*emit, skip));
+        *emit += 1;
+        **emit = b_imm(calc_offset((uint32_t)*emit, (uint32_t)branch_normal));
+        *emit += 1;
+
+    } else {
+        **emit = b_cc_imm(cc, calc_offset((uint32_t)*emit, (uint32_t)branch_normal));
+        *emit += 1;
+    }
+    *(*emit)++ = bx(lr);
 }
 void emit_BCHG(uint32_t** emit, uint16_t opcode) {
     emit_Bit_Op(emit, opcode, ALU_OP_BCHG);
@@ -587,19 +659,28 @@ void emit_BCLR(uint32_t** emit, uint16_t opcode) {
     emit_Bit_Op(emit, opcode, ALU_OP_BCLR);
 }
 void emit_BRA(uint32_t** emit, uint16_t opcode) {
-#warning UNIMPLEMENTED
+    emit_Bcc(emit, opcode);
 }
 void emit_BSET(uint32_t** emit, uint16_t opcode) {
     emit_Bit_Op(emit, opcode, ALU_OP_BSET);
 }
 void emit_BSR(uint32_t** emit, uint16_t opcode) {
-#warning UNIMPLEMENTED
+    *(*emit)++ = nop();
+    **emit = b_imm(calc_offset((uint32_t)*emit, (uint32_t)branch_subroutine));
+    *emit += 1;
 }
 void emit_BTST(uint32_t** emit, uint16_t opcode) {
     emit_Bit_Op(emit, opcode, ALU_OP_BTST);
 }
 void emit_CHK(uint32_t** emit, uint16_t opcode) {
-#warning UNIMPLEMENTED
+    uint8_t sEA  = (opcode & 0xFF);
+    uint8_t dEA  = (opcode & 0xC0) | ((opcode >> 9) & 7);
+    uint8_t regD = emit_EA_Load(emit, dEA, 0, 2, 0);
+    *(*emit)++ = svc_cc(ARM_CC_MI, TRAPCHK);
+    uint8_t regS = emit_EA_Load(emit, sEA, 1, 1, 0);
+    *(*emit)++ = cmp(regD, reg(regS));
+    *(*emit)++ = svc_cc(ARM_CC_GT, TRAPCHK);
+    *(*emit)++ = bx(lr);
 }
 void emit_CLRBW(uint32_t** emit, uint16_t opcode) {
     emit_UNARY_EA_ALU(emit, opcode, ALU_OP_CLR);
@@ -646,10 +727,49 @@ void emit_CMPW(uint32_t** emit, uint16_t opcode) {
     emit_EA_ALU(emit, opcode, ALU_OP_CMP);
 }
 void emit_DBcc(uint32_t** emit, uint16_t opcode) {
-#warning UNIMPLEMENTED
+    // If Condition True Then Exit
+    uint8_t cc = arm_cc(opcode);
+    *(*emit)++ = nop();
+    if(cc == ARM_CC_HI) {
+        /* ARM C=1 & Z=0, 68K C=0 | Z = 0
+         * C Z ARM 68K
+         * 0 0  0   1
+         * 0 1  0   1
+         * 1 0  1   1
+         * 1 1  0   0
+         */
+        *(*emit)++ = bx_cc(ARM_CC_CC, lr);
+        *(*emit)++ = bx_cc(ARM_CC_NE, lr);
+
+    } else if(cc == ARM_CC_LS) {
+        /* ARM C=0 & Z=1, 68K C=1 & Z=1
+         * C Z ARM 68K
+         * 0 0  0   0
+         * 0 1  1   0
+         * 1 0  0   0
+         * 1 1  0   1
+         */
+        uint32_t skip = (uint32_t)(*emit + 3);
+        **emit = b_cc_imm(ARM_CC_CC, calc_offset((uint32_t)*emit, skip));
+        *emit += 1;
+        **emit = b_cc_imm(ARM_CC_NE, calc_offset((uint32_t)*emit, skip));
+        *emit += 1;
+        *(*emit)++ = bx(lr);
+
+    } else {
+        *(*emit)++ = bx_cc(cc, lr);
+    }
+    // Else (Dn – 1 → Dn; If Dn ≠ – 1 Then PC + dn → PC)
+    uint8_t sEA = 0xC0 | (opcode & 0x7);
+    uint8_t sReg = emit_EA_Load(emit, sEA, 0, 0, 1);
+    *(*emit)++ = sub(sReg, sReg, 1);
+    emit_EA_Store(emit, sEA, sReg, 0, 1);
+    *(*emit)++ = cmn(sReg, imm(1));
+    *(*emit)++ = bx_cc(ARM_CC_EQ, lr);
+    *(*emit)++ = b_imm(calc_offset((uint32_t)*emit, (uint32_t)branch_normal));
 }
 void emit_DBRA(uint32_t** emit, uint16_t opcode) {
-#warning UNIMPLEMENTED
+    emit_DBcc(emit, opcode);
 }
 void emit_DIVS(uint32_t** emit, uint16_t opcode) {
     *(*emit)++ = movw(r0, opcode);
@@ -755,7 +875,11 @@ void emit_LEA(uint32_t** emit, uint16_t opcode) {
 #warning UNIMPLEMENTED
 }
 void emit_LINK(uint32_t** emit, uint16_t opcode) {
-#warning UNIMPLEMENTED
+    // SP – 4 -> SP; An -> (SP); SP -> An; SP + dn -> SP
+    uint8_t aReg = 6 + (opcode & 7);
+    *(*emit)++ = str(aReg, sp, index_imm(1, 1, -4));
+    *(*emit)++ = add(sp, aReg, reg(r1));
+    *(*emit)++ = bx(lr);
 }
 void emit_LSdBW(uint32_t** emit, uint16_t opcode) {
     emit_ImmReg_Shift(emit, opcode, (opcode & 0x0100) ? ALU_OP_LSL : ALU_OP_LSR);
@@ -942,8 +1066,40 @@ void emit_SBCD(uint32_t** emit, uint16_t opcode) {
     *(*emit)++ = movw(r0, opcode);
     *(*emit)++ = bl_imm(calc_offset(*emit, handle_SBCD));
 }
+
 void emit_Scc(uint32_t** emit, uint16_t opcode) {
-#warning UNIMPLEMENTED
+    uint8_t cc = arm_cc(opcode);
+    if(cc == ARM_CC_HI) {
+        /* ARM C=1 & Z=0, 68K C=0 | Z = 0
+         * C Z ARM 68K
+         * 0 0  0   1
+         * 0 1  0   1
+         * 1 0  1   1
+         * 1 1  0   0
+         */
+        *(*emit)++ = mov(r0, imm(0));
+        *(*emit)++ = mov_cc(ARM_CC_CC, r0, imm(0xFF));
+        *(*emit)++ = mov_cc(ARM_CC_NE, r0, imm(0xFF));
+
+    } else if(cc == ARM_CC_LS) {
+        /* ARM C=0 & Z=1, 68K C=1 & Z=1
+         * C Z ARM 68K
+         * 0 0  0   0
+         * 0 1  1   0
+         * 1 0  0   0
+         * 1 1  0   1
+         */
+        *(*emit)++ = mov(r0, imm(0xFF));
+        *(*emit)++ = mov_cc(ARM_CC_CC, r0, imm(0));
+        *(*emit)++ = mov_cc(ARM_CC_NE, r0, imm(0));
+
+    } else {
+        *(*emit)++ = mov_cc(cc, r0, imm(0xFF));
+        *(*emit)++ = mov_cc(cc ^ 1, r0, imm(0));
+    }
+    uint8_t dEA = (opcode & 0x3F);
+    emit_EA_Store(emit, dEA, r0, 2, 0);
+    *(*emit)++ = bx(lr);
 }
 void emit_STOP(uint32_t** emit, uint16_t opcode) {
     emit_load_SR(emit, 2);
@@ -995,7 +1151,13 @@ void emit_SWAP(uint32_t** emit, uint16_t opcode) {
     emit_IMD_ALU(emit, opcode, ALU_OP_SWAP);
 }
 void emit_TAS(uint32_t** emit, uint16_t opcode) {
-#warning UNIMPLEMENTED
+    // Destination Tested -> Condition Codes; 1 -> Bit 7 of Destination
+    uint8_t sEA = (opcode & 0x3F);
+    uint8_t sReg = emit_EA_Load(emit, sEA, 1, 1, 1);
+    *(*emit)++ = cmp(sReg, imm(0));
+    *(*emit)++ = orr(sReg, sReg, imm(0x80));
+    emit_EA_Store(emit, sEA, sReg, 1, 1);
+    *(*emit)++ = bx(lr);
 }
 void emit_TRAP(uint32_t** emit, uint16_t opcode) {
     return emit_SVC(emit, TRAP0 + (opcode & 0xF));
@@ -1011,7 +1173,11 @@ void emit_TSTL(uint32_t** emit, uint16_t opcode) {
     emit_IMD_ALU(emit, opcode, ALU_OP_TST);
 }
 void emit_UNLK(uint32_t** emit, uint16_t opcode) {
-#warning UNIMPLEMENTED
+    // An -> SP; (SP) -> An; SP + 4 -> SP
+    uint8_t aReg = 6 + (opcode & 7);
+    *(*emit)++ = mov(sp, reg(aReg));
+    *(*emit)++ = ldr(aReg, sp, index_imm(0, 1, 4));
+    *(*emit)++ = bx(lr);
 }
 
 /***

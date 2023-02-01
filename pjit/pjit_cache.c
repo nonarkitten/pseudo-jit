@@ -66,6 +66,7 @@ config_t config = {
     11,                          // cache_index_bits, Cache size = 8 << (cache_index_bits + cache_block_bits)
     7,                           // cache_block_bits
     0xFF,                        // MapROM page from 24-bit RAM (single 512KB), 0xFF to disable
+    0,                           // we're clean (for now)
 };
 
 cpu_t cpu_state = {0};

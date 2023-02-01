@@ -112,6 +112,7 @@ typedef enum {
     ARM_CC_GT, /* Z=0 && N=V */
     ARM_CC_LE, /* Z=1 || N != V */
     ARM_CC_AL, /* Always */
+    ARM_CC_NV, /* Never */
 } condition_t;
 
 typedef enum {
