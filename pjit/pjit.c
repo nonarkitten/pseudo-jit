@@ -683,7 +683,7 @@ __attribute__((naked,used)) void lookup_opcode(void) {
 //     asm("bx\t%0" ::"r"(out));
 // }
 
-__attribute__((naked)) void cpu_jump(uint32_t m68k_pc) {
+__attribute__((naked)) void jump_normal(uint32_t m68k_pc) {
     register uint32_t *out asm("lr");
     // save_cpu();
     out = cache_find_entry(m68k_pc);
@@ -691,7 +691,7 @@ __attribute__((naked)) void cpu_jump(uint32_t m68k_pc) {
     asm("bx\t%0" ::"r"(out));
 }
 
-__attribute__((naked)) void cpu_subroutine(uint32_t m68k_pc) {
+__attribute__((naked)) void jump_subroutine(uint32_t m68k_pc) {
     register uint32_t *out asm("lr");
     uint16_t          *pc = (uint16_t *)cache_reverse((uint32_t)(out - 1));
     asm("str\t%0, [sp, #-4]!" ::"r"(pc));
@@ -701,7 +701,7 @@ __attribute__((naked)) void cpu_subroutine(uint32_t m68k_pc) {
     asm("bx\t%0" ::"r"(out));
 }
 
-__attribute__((naked)) void branch_normal(uint32_t nothing, int32_t offset) {
+__attribute__((naked)) void branch_normal(uint32_t _, int32_t offset) {
     register uint32_t *out asm("lr");
     uint32_t           m68k_pc = offset + cache_reverse((uint32_t)(out - 1));
     // save_cpu();
@@ -710,8 +710,7 @@ __attribute__((naked)) void branch_normal(uint32_t nothing, int32_t offset) {
     asm("bx\t%0" ::"r"(out));
 }
 
-__attribute__((naked)) void branch_subroutine(uint32_t nothing,
-                                              int32_t  offset) {
+__attribute__((naked)) void branch_subroutine(uint32_t _, int32_t  offset) {
     register uint32_t *out asm("lr");
     uint32_t           m68k_pc = cache_reverse((uint32_t)(out - 1));
     asm("str\t%0, [sp, #-4]!" ::"r"(m68k_pc));

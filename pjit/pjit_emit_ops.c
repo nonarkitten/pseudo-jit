@@ -86,6 +86,18 @@ extern void branch_subroutine(int,int);
 extern void jump_normal(int,int);
 extern void jump_subroutine(int,int);
 
+extern void r2m_word(void);
+extern void r2m_long(void);
+extern void m2r_word(void);
+extern void m2r_long(void);
+
+extern void handle_ABCD(uint32_t opccode);
+extern void handle_DIVS(uint32_t opccode);
+extern void handle_DIVU(uint32_t opccode);
+extern void handle_NBCD(uint32_t opccode);
+extern void handle_ROXd(uint32_t opccode);
+extern void handle_SBCD(uint32_t opccode);
+
 typedef enum {
     // Do nothing
     ALU_OP_NOP,
@@ -506,13 +518,6 @@ static void emit_Bit_Op(uint32_t** emit, uint16_t opcode, ALU_OP_t op) {
     *(*emit)++ = bx(lr);
 }
 
-extern void handle_ABCD(uint32_t opccode);
-extern void handle_DIVS(uint32_t opccode);
-extern void handle_DIVU(uint32_t opccode);
-extern void handle_NBCD(uint32_t opccode);
-extern void handle_ROXd(uint32_t opccode);
-extern void handle_SBCD(uint32_t opccode);
-
 /***
  *       ___                      _        _____           _ _   _
  *      / _ \ _ __   ___ ___   __| | ___  | ____|_ __ ___ (_) |_| |_ ___ _ __ ___
@@ -866,13 +871,33 @@ void emit_ILLEGAL(uint32_t** emit, uint16_t opcode) {
     emit_SVC(emit, ILLINSTR);
 }
 void emit_JMP(uint32_t** emit, uint16_t opcode) {
-#warning UNIMPLEMENTED
+    uint8_t sEA = 0xC0 | (opcode & 0x3F);
+    uint8_t sReg = emit_EA_Load(emit, sEA, 1, 1, 0);
+    *(*emit)++ = nop();
+    **emit = b_imm(calc_offset((uint32_t)*emit, jump_normal));
+    *emit += 1;
 }
 void emit_JSR(uint32_t** emit, uint16_t opcode) {
-#warning UNIMPLEMENTED
+    uint8_t sEA = 0xC0 | (opcode & 0x3F);
+    uint8_t sReg = emit_EA_Load(emit, sEA, 1, 1, 0);
+    *(*emit)++ = nop();
+    **emit = b_imm(calc_offset((uint32_t)*emit, jump_subroutine));
+    *emit += 1;
 }
 void emit_LEA(uint32_t** emit, uint16_t opcode) {
-#warning UNIMPLEMENTED
+    // < ea > → An
+    uint8_t dReg = 6 + ((opcode >> 9) & 0x7);
+    uint8_t sReg = 6 + ((opcode) & 0x7);
+
+    switch(opcode & 0x3C) {
+    case 0x0C:
+        *(*emit)++ = mov(dReg, sReg); break;
+    case 0x14: case 0x18:
+        *(*emit)++ = add(dReg, sReg, reg(r1)); break;
+    default:
+        *(*emit)++ = mov(dReg, r1); break;
+    }
+    *(*emit)++ = bx(lr);
 }
 void emit_LINK(uint32_t** emit, uint16_t opcode) {
     // SP – 4 -> SP; An -> (SP); SP -> An; SP + dn -> SP
@@ -910,10 +935,18 @@ void emit_MOVE_TO_SR(uint32_t** emit, uint16_t opcode) {
     *(*emit)++ = bx(lr);
 }
 void emit_MOVE_TO_USP(uint32_t** emit, uint16_t opcode) {
-#warning UNIMPLEMENTED
+    emit_load_SR(emit, 2);  // r2=sr, r1=imm
+    emit_is_SVC(emit);
+    uint8_t aReg = 6 + (opcode & 0x7);
+    *(*emit)++ = str(aReg, r5, index_imm(1, 0, OFFSETOF(cpu_t, usp)));
+    *(*emit)++ = bx(lr);
 }
 void emit_MOVE_USP_TO(uint32_t** emit, uint16_t opcode) {
-#warning UNIMPLEMENTED
+    emit_load_SR(emit, 2);  // r2=sr, r1=imm
+    emit_is_SVC(emit);
+    uint8_t aReg = 6 + (opcode & 0x7);
+    *(*emit)++ = ldr(aReg, r5, index_imm(1, 0, OFFSETOF(cpu_t, usp)));
+    *(*emit)++ = bx(lr);
 }
 void emit_MOVEAL(uint32_t** emit, uint16_t opcode) {
     uint8_t sEA  = 0x80 | (opcode & 0x3F);
@@ -935,11 +968,127 @@ void emit_MOVEB(uint32_t** emit, uint16_t opcode) {
     emit_EA_Store(emit, dEA, regS, 2, 0);
     *(*emit)++ = bx(lr);
 }
+
 void emit_MOVEM(uint32_t** emit, uint16_t opcode) {
-#warning UNIMPLEMENTED
+    
+    if((opcode & 0x3C) == 0x0C) { 
+        // r2m, (An)+, unique per opcode, mask in r1
+        uint8_t aReg = 6 + opcode & 0x7;
+        int word = !(opcode & 0x0040);
+        for(int i=0; i<2; i++) {
+            *(*emit)++ = ror_imm(r1, r1, 1);
+            *(*emit)++ = word
+                ? strh_cc(ARM_CC_CS, r3 + i, aReg, index_imm(0, 1, 2))
+                : str_cc(ARM_CC_CS, r3 + i, aReg, index_imm(0, 1, 4));
+        }
+        for(int i=2; i<8; i++) {
+            *(*emit)++ = ror_imm(r1, r1, 1);
+            *(*emit)++ = word
+                ? ldrh_cc(ARM_CC_CS, r0, r5, index_imm(0, 0, OFFSETOF(cpu_t, d0) + 2 + i * 4))
+                : ldr_cc(ARM_CC_CS, r0, r5, index_imm(0, 0, OFFSETOF(cpu_t, d0) + i * 4));
+            *(*emit)++ = word
+                ? strh_cc(ARM_CC_CS, r0, aReg, index_imm(0, 1, 2))
+                : str_cc(ARM_CC_CS, r0, aReg, index_imm(0, 1, 4));
+        }
+        for(int i=0; i<8; i++) {
+            *(*emit)++ = ror_imm(r1, r1, 1);
+            *(*emit)++ = word
+                ? strh_cc(ARM_CC_CS, r6 + i, aReg, index_imm(0, 1, 2))
+                : str_cc(ARM_CC_CS, r6 + i, aReg, index_imm(0, 1, 4));
+        }
+
+    } else if((opcode & 0x3C) == 0x10) {
+        // m2r, -(An), unique per opcode, mask in r2
+        uint8_t aReg = 6 + opcode & 0x7;
+        int word = !(opcode & 0x0040);
+        for(int i=7; i!=-1; i--) {
+            *(*emit)++ = ror_imm(r2, r2, 1);
+            *(*emit)++ = word
+                ? ldrh_cc(ARM_CC_CS, r6 + i, aReg, index_imm(1, 1, -2))
+                : ldr_cc(ARM_CC_CS, r6 + i, aReg, index_imm(1, 1, -4));
+        }
+        for(int i=7; i!=1; i--) {
+            *(*emit)++ = ror_imm(r2, r2, 1);
+            *(*emit)++ = word
+                ? ldrh_cc(ARM_CC_CS, r0, aReg, index_imm(1, 1, -2))
+                : ldr_cc(ARM_CC_CS, r0, aReg, index_imm(1, 1, -4));
+            *(*emit)++ = word
+                ? strh_cc(ARM_CC_CS, r0, r5, index_imm(0, 0, OFFSETOF(cpu_t, d0) + 2 + i * 4))
+                : str_cc(ARM_CC_CS, r0, r5, index_imm(0, 0, OFFSETOF(cpu_t, d0) + i * 4));
+        }
+        for(int i=0; i<2; i++) {
+            *(*emit)++ = ror_imm(r2, r2, 1);
+            *(*emit)++ = word
+                ? strh_cc(ARM_CC_CS, r4 - i, aReg, index_imm(1, 1, -2))
+                : str_cc(ARM_CC_CS, r4 - i, aReg, index_imm(1, 1, -4));
+        }
+
+    } else {
+        // common routines
+        uint8_t aReg = 6 + opcode & 0x7;
+        uint8_t tReg = (opcode & 0x0400) ? r1 : r2;
+        switch(opcode & 0x3C) {
+        case 0x08: // (An)
+            *(*emit)++ = mov(tReg, aReg); break;
+        case 0x14: case 0x18: // (d16,An), (d8,An,Xn)
+            *(*emit)++ = add(tReg, aReg, reg(tReg)); break;
+        default: // asb.w, abs.l, (d16,PC), (d8,PC,Xn)
+            *(*emit)++ = nop(); break;
+        }
+
+        switch(opcode & 0x0440) {
+        case 0x0000: **emit = b_imm(calc_offset((uint32_t)emit, (uint32_t)r2m_word)); break;
+        case 0x0040: **emit = b_imm(calc_offset((uint32_t)emit, (uint32_t)r2m_long)); break;
+        case 0x0400: **emit = b_imm(calc_offset((uint32_t)emit, (uint32_t)m2r_word)); break;
+        case 0x0440: **emit = b_imm(calc_offset((uint32_t)emit, (uint32_t)m2r_long)); break;
+        }
+    }        
 }
 void emit_MOVEP(uint32_t** emit, uint16_t opcode) {
-#warning UNIMPLEMENTED
+    // MOVEP Dx,(d16,Ay)
+    // MOVEP (d16,Ay),Dx
+    uint8_t aReg = (opcode & 0x7);
+    *(*emit)++ = add(r2, aReg, reg(r1)); // r2 contains address
+    uint8_t dEA = (opcode >> 9) & 0x7;
+    uint8_t dReg = emit_EA_Load(emit, dEA, 0, 0, 0); // 0, 3 or 4
+
+    switch(opcode & 0x00C0) {
+    case 0x00: // Transfer word from memory to register
+        *(*emit)++ = ldrb(r1, r2, index_imm(1, 0, 0));
+        *(*emit)++ = bfi(dReg, r1, 8, 8);
+        *(*emit)++ = ldrb(r1, r2, index_imm(1, 0, 2));
+        *(*emit)++ = bfi(dReg, r1, 0, 8);
+        emit_EA_Store(emit, dEA, dReg, 0, 0);
+        break;
+    case 0x40: // Transfer long from memory to register
+        *(*emit)++ = ldrb(r1, r2, index_imm(1, 0, 0));
+        *(*emit)++ = bfi(dReg, r1, 24, 8);
+        *(*emit)++ = ldrb(r1, r2, index_imm(1, 0, 2));
+        *(*emit)++ = bfi(dReg, r1, 16, 8);
+        *(*emit)++ = ldrb(r1, r2, index_imm(1, 0, 4));
+        *(*emit)++ = bfi(dReg, r1, 8, 8);
+        *(*emit)++ = ldrb(r1, r2, index_imm(1, 0, 6));
+        *(*emit)++ = bfi(dReg, r1, 0, 8);
+        emit_EA_Store(emit, dEA, dReg, 0, 0);
+        break;
+    case 0x80: // Transfer word from register to memory
+        *(*emit)++ = strb(dReg, r2, index_imm(1, 0, 2));
+        *(*emit)++ = ror_imm(dReg, dReg, 8);
+        *(*emit)++ = strb(dReg, r2, index_imm(1, 0, 0));
+        *(*emit)++ = ror_imm(dReg, dReg, 24);
+        break;
+    case 0xC0: // Transfer long from register to memory
+        *(*emit)++ = strb(dReg, r2, index_imm(1, 0, 6));
+        *(*emit)++ = ror_imm(dReg, dReg, 8);
+        *(*emit)++ = strb(dReg, r2, index_imm(1, 0, 4));
+        *(*emit)++ = ror_imm(dReg, dReg, 8);
+        *(*emit)++ = strb(dReg, r2, index_imm(1, 0, 2));
+        *(*emit)++ = ror_imm(dReg, dReg, 8);
+        *(*emit)++ = strb(dReg, r2, index_imm(1, 0, 0));
+        *(*emit)++ = ror_imm(dReg, dReg, 8);
+        break;
+    }
+    *(*emit)++ = bx(lr);
 }
 void emit_MOVEQ(uint32_t** emit, uint16_t opcode) {
     int n = (int8_t)opcode;
@@ -1028,7 +1177,20 @@ void emit_ORW(uint32_t** emit, uint16_t opcode) {
     emit_EA_ALU(emit, opcode, ALU_OP_OR);
 }
 void emit_PEA(uint32_t** emit, uint16_t opcode) {
-#warning UNIMPLEMENTED
+    // SP – 4 → SP; < ea > → (SP)
+    uint8_t sReg = 6 + ((opcode) & 0x7);
+
+    switch(opcode & 0x3C) {
+    case 0x0C:
+        *(*emit)++ = str(sReg, sp, index_imm(1, 1, -4));
+        break;
+    case 0x14: case 0x18:
+        *(*emit)++ = add(r1, sReg, reg(r1));
+    default:
+        *(*emit)++ = str(r1, sp, index_imm(1, 1, -4));
+        break;
+    }
+    *(*emit)++ = bx(lr);
 }
 void emit_RESET(uint32_t** emit, uint16_t opcode) {
     emit_SVC(emit, RESET_SP);
@@ -1054,19 +1216,38 @@ void emit_ROXd(uint32_t** emit, uint16_t opcode) {
     emit_Mem_Shift(emit, opcode, (opcode & 0x0100) ? ALU_OP_ROXL : ALU_OP_ROXR);
 }
 void emit_RTE(uint32_t** emit, uint16_t opcode) {
-#warning UNIMPLEMENTED
+    // If Not Supervisor State Then TRAP
+    emit_load_SR(emit, r2);
+    emit_is_SVC(emit);
+    // Else
+    //    (SP) → SR
+    //    SP + 2 → SP
+    //    (SP) → PC
+    //    SP + 4 → SP
+    *(*emit)++ = ldrh(r2, sp, index_imm(0, 1, 2));
+    emit_save_SR(emit, r2);
+    *(*emit)++ = ldr(r0, sp, index_imm(0, 1, 4));
+    **emit = b_imm(calc_offset((uint32_t)*emit, jump_normal));
+    *emit += 1;
 }
 void emit_RTR(uint32_t** emit, uint16_t opcode) {
-#warning UNIMPLEMENTED
+    // (SP) → CCR; SP + 2 → SP; (SP) → PC; SP + 4 → SP
+    *(*emit)++ = ldrh(r2, sp, index_imm(0, 1, 2));
+    emit_save_CR(emit, r2);
+    *(*emit)++ = ldr(r0, sp, index_imm(0, 1, 4));
+    **emit = b_imm(calc_offset((uint32_t)*emit, jump_normal));
+    *emit += 1;
 }
 void emit_RTS(uint32_t** emit, uint16_t opcode) {
-#warning UNIMPLEMENTED
+    // (SP) → PC; SP + 4 → SP
+    *(*emit)++ = ldr(r0, sp, index_imm(0, 1, 4));
+    **emit = b_imm(calc_offset((uint32_t)*emit, jump_normal));
+    *emit += 1;
 }
 void emit_SBCD(uint32_t** emit, uint16_t opcode) {
     *(*emit)++ = movw(r0, opcode);
     *(*emit)++ = bl_imm(calc_offset(*emit, handle_SBCD));
 }
-
 void emit_Scc(uint32_t** emit, uint16_t opcode) {
     uint8_t cc = arm_cc(opcode);
     if(cc == ARM_CC_HI) {

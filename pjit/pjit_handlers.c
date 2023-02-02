@@ -57,6 +57,12 @@ void handle_NBCD(uint32_t opccode) { }
 void handle_ROXd(uint32_t opccode) { }
 void handle_SBCD(uint32_t opccode) { }
 
+void r2m_word(void) { }
+void r2m_long(void) { }
+void m2r_word(void) { }
+void m2r_long(void) { }
+
+
 // __attribute__((always_inline)) static inline unsigned GET_X(void) {
 //     uint32_t x;
 //     asm volatile(
