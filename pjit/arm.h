@@ -168,7 +168,7 @@ typedef enum {
 #define LE(X) __builtin_bswap32(X)
 
 /* Calculate flexible second operand -- Immediate with Rotation */
-static inline uint32_t imm(uint16_t value) {
+static inline uint32_t imm(uint32_t value) {
     int shift;
     for (shift = 0; shift < 16; shift++) {
         if (!(value & 0xffffff00)) break;

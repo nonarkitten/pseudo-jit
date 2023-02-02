@@ -78,19 +78,18 @@ __attribute__((used)) const char *buffe_c = "Copyright (c) 2020-2023 Renee Cousi
     \____\___/ \__,_|\___| |_____|_| |_| |_|_|\__|\__\___|_|  |___/ */
 
 // save and restore the CPU registers
-void save_cpu(void) {
-    asm __volatile("str\tr3, [%0,%1]" ::"r"(cpu), "i"(OFFSETOF(cpu_t, d0)));
-    asm __volatile("str\tr4, [%0,%1]" ::"r"(cpu), "i"(OFFSETOF(cpu_t, d1)));
+INLINE void save_cpu(void) {
+    asm __volatile("str\tr3, [%0,%1]" ::"r"(cpu), "i"(offsetof(cpu_t, d0)));
+    asm __volatile("str\tr4, [%0,%1]" ::"r"(cpu), "i"(offsetof(cpu_t, d1)));
     uint32_t *base = &cpu->a0;
     asm __volatile("stm\t%0!, {r6-r13}" ::"r"(base));
 }
-void restore_cpu(void) {
-    asm __volatile("ldr\tr3, [%0,%1]" ::"r"(cpu),
-                   "i"(OFFSETOF(cpu_t, d0)));  // + 1 cycle
-    asm __volatile("ldr\tr4, [%0,%1]" ::"r"(cpu),
-                   "i"(OFFSETOF(cpu_t, d1)));          // + 1 cycle
-    uint32_t *base = &cpu->a0;                         // + 1 cycle
-    asm __volatile("ldm\t%0!, {r6-r13}" ::"r"(base));  // + 4 cycles
+
+INLINE void restore_cpu(void) {
+    asm __volatile("ldr\tr3, [%0,%1]" ::"r"(cpu), "i"(offsetof(cpu_t, d0)));
+    asm __volatile("ldr\tr4, [%0,%1]" ::"r"(cpu), "i"(offsetof(cpu_t, d1)));
+    uint32_t *base = &cpu->a0;
+    asm __volatile("ldm\t%0!, {r6-r13}" ::"r"(base));
 }
 
 static inline uint32_t emit_src_ext(uint32_t current, uint16_t opcode) {

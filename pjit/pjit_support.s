@@ -54,6 +54,7 @@
 	.text 
 	.code 32
 	.global ICacheFlush
+	.syntax unified
 ICacheFlush:
     DMB
     MRC     p15, #0, r2, c0, c0, #1   @ Read Cache Type Register
@@ -122,7 +123,173 @@ UDiv32x16:
 	BX		lr
 
 
+//void r2m_word(int _, uint16_t* addr, uint16_t mask)
+	.text 
+	.code 32
+	.global r2m_word
+r2m_word:
+	ror 	r2, r2, #1
+	strhcs	r3, [r1], #2
+	ror 	r2, r2, #1
+	strhcs	r4, [r1], #2
+	ror 	r2, r2, #1
+	ldrhcs  r0, [r5, #10]
+	strhcs	r0, [r1], #2
+	ror 	r2, r2, #1
+	ldrhcs  r0, [r5, #14]
+	strhcs	r0, [r1], #2
+	ror 	r2, r2, #1
+	ldrhcs  r0, [r5, #18]
+	strhcs	r0, [r1], #2
+	ror 	r2, r2, #1
+	ldrhcs  r0, [r5, #22]
+	strhcs	r0, [r1], #2
+	ror 	r2, r2, #1
+	ldrhcs  r0, [r5, #26]
+	strhcs	r0, [r1], #2
+	ror 	r2, r2, #1
+	strhcs	r6, [r1], #2
+	ror 	r2, r2, #1
+	strhcs	r7, [r1], #2
+	ror 	r2, r2, #1
+	strhcs	r8, [r1], #2
+	ror 	r2, r2, #1
+	strhcs	r9, [r1], #2
+	ror 	r2, r2, #1
+	strhcs	r10, [r1], #2
+	ror 	r2, r2, #1
+	strhcs	r11, [r1], #2
+	ror 	r2, r2, #1
+	strhcs	r12, [r1], #2
+	ror 	r2, r2, #1
+	strhcs	r13, [r1], #2
+	bx   	lr
 
+//void r2m_long(int _, uint32_t* addr, uint16_t mask) { 
+	.text 
+	.code 32
+	.global r2m_long
+r2m_long:
+	ror 	r2, r2, #1
+	strcs	r3, [r1], #4
+	ror 	r2, r2, #1
+	strcs	r4, [r1], #4
+	ror 	r2, r2, #1
+	ldrcs   r0, [r5, #8]
+	strcs	r0, [r1], #4
+	ror 	r2, r2, #1
+	ldrcs   r0, [r5, #12]
+	strcs	r0, [r1], #4
+	ror 	r2, r2, #1
+	ldrcs   r0, [r5, #16]
+	strcs	r0, [r1], #4
+	ror 	r2, r2, #1
+	ldrcs   r0, [r5, #20]
+	strcs	r0, [r1], #4
+	ror 	r2, r2, #1
+	ldrcs   r0, [r5, #24]
+	strcs	r0, [r1], #4
+	ror 	r2, r2, #1
+	strcs	r6, [r1], #4
+	ror 	r2, r2, #1
+	strcs	r7, [r1], #4
+	ror 	r2, r2, #1
+	strcs	r8, [r1], #4
+	ror 	r2, r2, #1
+	strcs	r9, [r1], #4
+	ror 	r2, r2, #1
+	strcs	r10, [r1], #4
+	ror 	r2, r2, #1
+	strcs	r11, [r1], #4
+	ror 	r2, r2, #1
+	strcs	r12, [r1], #4
+	ror 	r2, r2, #1
+	strcs	r13, [r1], #4
+	bx   	lr
+
+//void m2r_word(int _, uint16_t mask, uint16_t* addr)
+	.text 
+	.code 32
+	.global m2r_word
+m2r_word:
+	ror 	r1, r1, #1
+	ldrhcs	r3, [r2], #2
+	ror 	r1, r1, #1
+	ldrhcs	r4, [r2], #2
+	ror 	r1, r1, #1
+	strhcs  r0, [r5, #10]
+	ldrhcs	r0, [r2], #2
+	ror 	r1, r1, #1
+	strhcs  r0, [r5, #14]
+	ldrhcs	r0, [r2], #2
+	ror 	r1, r1, #1
+	strhcs  r0, [r5, #18]
+	ldrhcs	r0, [r2], #2
+	ror 	r1, r1, #1
+	strhcs  r0, [r5, #22]
+	ldrhcs	r0, [r2], #2
+	ror 	r1, r1, #1
+	strhcs  r0, [r5, #26]
+	ldrhcs	r0, [r2], #2
+	ror 	r1, r1, #1
+	ldrhcs	r6, [r2], #2
+	ror 	r1, r1, #1
+	ldrhcs	r7, [r2], #2
+	ror 	r1, r1, #1
+	ldrhcs	r8, [r2], #2
+	ror 	r1, r1, #1
+	ldrhcs	r9, [r2], #2
+	ror 	r1, r1, #1
+	ldrhcs	r10, [r2], #2
+	ror 	r1, r1, #1
+	ldrhcs	r11, [r2], #2
+	ror 	r1, r1, #1
+	ldrhcs	r12, [r2], #2
+	ror 	r1, r1, #1
+	ldrhcs	r13, [r2], #2
+	bx   	lr
+
+//void m2r_long(int _, uint16_t mask, uint32_t* addr)
+	.text 
+	.code 32
+	.global m2r_long
+m2r_long:
+	ror 	r1, r1, #1
+	ldrcs	r3, [r2], #4
+	ror 	r1, r1, #1
+	ldrcs	r4, [r2], #4
+	ror 	r1, r1, #1
+	strcs   r0, [r5, #8]
+	ldrcs	r0, [r2], #4
+	ror 	r1, r1, #1
+	strcs   r0, [r5, #12]
+	ldrcs	r0, [r2], #4
+	ror 	r1, r1, #1
+	strcs   r0, [r5, #16]
+	ldrcs	r0, [r2], #4
+	ror 	r1, r1, #1
+	strcs   r0, [r5, #20]
+	ldrcs	r0, [r2], #4
+	ror 	r1, r1, #1
+	strcs   r0, [r5, #24]
+	ldrcs	r0, [r2], #4
+	ror 	r1, r1, #1
+	ldrcs	r6, [r2], #4
+	ror 	r1, r1, #1
+	ldrcs	r7, [r2], #4
+	ror 	r1, r1, #1
+	ldrcs	r8, [r2], #4
+	ror 	r1, r1, #1
+	ldrcs	r9, [r2], #4
+	ror 	r1, r1, #1
+	ldrcs	r10, [r2], #4
+	ror 	r1, r1, #1
+	ldrcs	r11, [r2], #4
+	ror 	r1, r1, #1
+	ldrcs	r12, [r2], #4
+	ror 	r1, r1, #1
+	ldrcs	r13, [r2], #4
+	bx   	lr
 
 
 

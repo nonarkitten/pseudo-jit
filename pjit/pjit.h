@@ -213,48 +213,38 @@ typedef struct {
     // this is replace with a branch to the lookup routine
     uint32_t b_lookup;
 
-    // offsets 0 thru 7
-    uint32_t d0;
-    uint32_t d1;
-    uint32_t d2;
-    uint32_t d3;
-    uint32_t d4;
-    uint32_t d5;
-    uint32_t d6;
-    uint32_t d7;
-
-    // offsets 8 thru 15
-    uint32_t a0;
-    uint32_t a1;
-    uint32_t a2;
-    uint32_t a3;
-    uint32_t a4;
-    uint32_t a5;
-    uint32_t a6;
-    uint32_t a7;
-
-    uint32_t sfc;    // 16 Source Function Code
-    uint32_t usp;    // 17 User Stack Pointer
-    uint32_t dfc;    // 18 Destination Function Code
-    uint32_t vbr;    // 19 Vector Base Register
-    uint32_t cacr;   // 20 Cache Control Register
-    uint32_t caar;   // 21 Cache Address Register
-    uint32_t tc;     // 22 MMU Translation Control Register
-    uint32_t msp;    // 23 Master Stack Pointer
-    uint32_t itt0;   // 24 Instruction Transparent Translation Register 0
-    uint32_t isp;    // 25 Interrupt Stack Pointer
-    uint32_t itt1;   // 26 Instruction Transparent Translation Register 1
-    uint32_t mmusr;  // 27 MMU Status Register
-    uint32_t dtt0;   // 28 Data Transparent Translation Register 0
-    uint32_t urp;    // 29 User Root Pointer
-    uint32_t dtt1;   // 30 Data Transparent Translation Register 1
-    uint32_t srp;    // 31 Supervisor Root Pointer
-
     // Status register
     uint16_t sr;
 
     // 68K Program Counter
     uint16_t* pc;
+
+    // LR Backup
+    uint32_t* lr;
+
+    // Data registers
+    uint32_t d0, d1, d2, d3, d4, d5, d6, d7;
+
+    // Address registers
+    uint32_t a0, a1, a2, a3, a4, a5, a6, a7;
+
+    // CPU control registers
+    uint32_t sfc;    // Source Function Code
+    uint32_t usp;    // User Stack Pointer
+    uint32_t dfc;    // Destination Function Code
+    uint32_t vbr;    // Vector Base Register
+    uint32_t cacr;   // Cache Control Register
+    uint32_t caar;   // Cache Address Register
+    uint32_t tc;     // MMU Translation Control Register
+    uint32_t msp;    // Master Stack Pointer
+    uint32_t itt0;   // Instruction Transparent Translation Register 0
+    uint32_t isp;    // Interrupt Stack Pointer
+    uint32_t itt1;   // Instruction Transparent Translation Register 1
+    uint32_t mmusr;  // MMU Status Register
+    uint32_t dtt0;   // Data Transparent Translation Register 0
+    uint32_t urp;    // User Root Pointer
+    uint32_t dtt1;   // Data Transparent Translation Register 1
+    uint32_t srp;    // Supervisor Root Pointer
 
     // System configuration
     config_t* config;
@@ -273,23 +263,29 @@ typedef struct {
     uint32_t m68k_page;
 
     /* FPU regs: */
-    double   fp0;
-    double   fp1;
-    double   fp2;
-    double   fp3;
-    double   fp4;
-    double   fp5;
-    double   fp6;
-    double   fp7;
+    double   fp0, fp1, fp2, fp3, fp4, fp5, fp6, fp7;
     uint32_t fpsr;
     uint16_t fpcr;
 } cpu_t;
 
-#define OFFSETOF(TYPE, ELEMENT) ((size_t) & (((TYPE*)0)->ELEMENT))
+#define INLINE __attribute__((always_inline)) static inline 
 
 extern config_t config;
 extern cpu_t    cpu_state;
+
+register union { uint32_t L; uint16_t W; uint8_t B; } D0 asm("r3");
+register union { uint32_t L; uint16_t W; uint8_t B; } D1 asm("r4");
+
 register cpu_t* cpu asm("r5");
+
+register union { uint32_t L; uint16_t W; } A0 asm("r6");
+register union { uint32_t L; uint16_t W; } A1 asm("r7");
+register union { uint32_t L; uint16_t W; } A2 asm("r8");
+register union { uint32_t L; uint16_t W; } A3 asm("r9");
+register union { uint32_t L; uint16_t W; } A4 asm("r10");
+register union { uint32_t L; uint16_t W; } A5 asm("r11");
+register union { uint32_t L; uint16_t W; } A6 asm("r12");
+register union { uint32_t L; uint16_t W; } A7 asm("r13");
 
 extern void cpu_start(void* base);
 

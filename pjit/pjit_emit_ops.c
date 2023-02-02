@@ -91,12 +91,22 @@ extern void r2m_long(void);
 extern void m2r_word(void);
 extern void m2r_long(void);
 
-extern void handle_ABCD(uint32_t opccode);
 extern void handle_DIVS(uint32_t opccode);
 extern void handle_DIVU(uint32_t opccode);
-extern void handle_NBCD(uint32_t opccode);
+
 extern void handle_ROXd(uint32_t opccode);
-extern void handle_SBCD(uint32_t opccode);
+
+extern void abcd_d0(uint8_t b);
+extern void abcd_d1(uint8_t b);
+extern void abcd_an(uint8_t b, uint8_t *a);
+
+extern void sbcd_d0(uint8_t b);
+extern void sbcd_d1(uint8_t b);
+extern void sbcd_an(uint8_t b, uint8_t *a);
+
+extern void nbcd_d0(void);
+extern void nbcd_d1(void);
+extern void nbcd_an(uint8_t *a);
 
 typedef enum {
     // Do nothing
@@ -171,19 +181,19 @@ static void emit_is_SVC(uint32_t** emit) {
     *(*emit)++ = tst(r2, imm(0x2000));
     *(*emit)++ = svc_cc(ARM_CC_NE, PRIV);
 }
-// @brief load our X flag into the C flag
+// @brief load our X flag into the C flag, destroys r0
 static void emit_load_X(uint32_t** emit) {
     // restore X -> C
-    *(*emit)++ = ldrb(r0, r5, index_imm(1, 0, 1 + OFFSETOF(cpu_t, sr)));
+    *(*emit)++ = ldrb(r0, r5, index_imm(1, 0, (1 + offsetof(cpu_t, sr))));
     *(*emit)++ = rsbs(r0, r0, imm(0xf));
 }
-// @brief save out C flag back into the X
+// @brief save out C flag back into the X, destroys r0
 static void emit_save_X(uint32_t** emit) {
     // put C back into X, leave everything else
-    *(*emit)++ = ldrb(r0, r5, index_imm(1, 0, (1 + OFFSETOF(cpu_t, sr))));
+    *(*emit)++ = ldrb(r0, r5, index_imm(1, 0, (1 + offsetof(cpu_t, sr))));
     *(*emit)++ = orr_cc(ARM_CC_CS, r0, r0, imm(0x10));
     *(*emit)++ = bic_cc(ARM_CC_CC, r0, r0, imm(0x10));
-    *(*emit)++ = strb(r0, r5, index_imm(1, 0, (1 + OFFSETOF(cpu_t, sr))));
+    *(*emit)++ = strb(r0, r5, index_imm(1, 0, (1 + offsetof(cpu_t, sr))));
 }
 // @brief convert a value in r1 (e.g., 3) into a mask (e.g., 1<<3)
 static void emit_src_bit_to_mask(uint32_t** emit) {
@@ -211,24 +221,24 @@ static void emit_arm_to_68k_cc(uint32_t** emit, uint8_t reg) {
 }
 // @brief load the 68K SR into reg
 static void emit_load_SR(uint32_t** emit, uint8_t reg) {
-    *(*emit)++ = ldrh(reg, r5, index_imm(1, 0, OFFSETOF(cpu_t, sr)));
+    *(*emit)++ = ldrh(reg, r5, index_imm(1, 0, offsetof(cpu_t, sr)));
     emit_arm_to_68k_cc(emit, reg);
 }
 // @brief save the 68K SR in reg to cpu_t state
 static void emit_save_SR(uint32_t** emit, uint8_t reg) {
     // put reg -> sr
-    *(*emit)++ = strh(reg, r5, index_imm(1, 0, OFFSETOF(cpu_t, sr)));
+    *(*emit)++ = strh(reg, r5, index_imm(1, 0, offsetof(cpu_t, sr)));
     emit_68k_to_arm_cc(emit, reg);
 }
 // @brief load the 68K CCR into reg
 static void emit_load_CR(uint32_t** emit, uint8_t reg) {
-    *(*emit)++ = ldrb(reg, r5, index_imm(1, 0, 1 + OFFSETOF(cpu_t, sr)));
+    *(*emit)++ = ldrb(reg, r5, index_imm(1, 0, 1 + offsetof(cpu_t, sr)));
     emit_arm_to_68k_cc(emit, reg);
 }
 // @brief save the 68K CCR in reg to cpu_t state
 static void emit_save_CR(uint32_t** emit, uint8_t reg) {
     // put reg -> sr
-    *(*emit)++ = strb(reg, r5, index_imm(1, 0, 1 + OFFSETOF(cpu_t, sr)));
+    *(*emit)++ = strb(reg, r5, index_imm(1, 0, 1 + offsetof(cpu_t, sr)));
     emit_68k_to_arm_cc(emit, reg);
 }
 // @brief return the ARM condition code based on the 68K cc field
@@ -528,8 +538,30 @@ static void emit_Bit_Op(uint32_t** emit, uint16_t opcode, ALU_OP_t op) {
  */
 
 void emit_ABCD(uint32_t** emit, uint16_t opcode) {
-    *(*emit)++ = movw(r0, opcode);
-    *(*emit)++ = bl_imm(calc_offset(*emit, handle_ABCD));
+    uint8_t sReg = (opcode & 0x7);
+    uint8_t dReg = (opcode >> 9) & 0x7;
+
+    emit_load_X(emit);
+
+    if(opcode & 0x0008) {
+        // -(Ax), -(An)
+        *(*emit)++ = ldrb(r0, r6 + sReg, index_imm(0, 1, -1));
+        *(*emit)++ = sub(r1, r6 + dReg, imm(1));
+        *(*emit)++ = mov(r6 + dReg, reg(r1));
+        **emit = b_imm(calc_offset((uint32_t)emit, (uint32_t)abcd_an));
+
+    } else {
+        // Dx, Dy
+        if(sReg < 2) *(*emit)++ = uxtb(r0, r3 + sReg, 0);
+        else *(*emit)++ = ldrb(r0, r5, index_imm(1, 0, sReg * 4 + 3 + offsetof(cpu_t, d0)));
+        if(dReg == 0) **emit = b_imm(calc_offset((uint32_t)emit, (uint32_t)abcd_d0));
+        else if(dReg == 1) **emit = b_imm(calc_offset((uint32_t)emit, (uint32_t)abcd_d1));
+        else {
+            *(*emit)++ = add(r1, r5, imm(offsetof(cpu_t, d0) + dReg * 4 + 3));
+            **emit = b_imm(calc_offset((uint32_t)emit, (uint32_t)abcd_an));
+        }
+    }
+    *emit += 1;
 }
 void emit_ADDBW(uint32_t** emit, uint16_t opcode) {
     emit_EA_ALU(emit, opcode, ALU_OP_ADD);
@@ -938,14 +970,14 @@ void emit_MOVE_TO_USP(uint32_t** emit, uint16_t opcode) {
     emit_load_SR(emit, 2);  // r2=sr, r1=imm
     emit_is_SVC(emit);
     uint8_t aReg = 6 + (opcode & 0x7);
-    *(*emit)++ = str(aReg, r5, index_imm(1, 0, OFFSETOF(cpu_t, usp)));
+    *(*emit)++ = str(aReg, r5, index_imm(1, 0, offsetof(cpu_t, usp)));
     *(*emit)++ = bx(lr);
 }
 void emit_MOVE_USP_TO(uint32_t** emit, uint16_t opcode) {
     emit_load_SR(emit, 2);  // r2=sr, r1=imm
     emit_is_SVC(emit);
     uint8_t aReg = 6 + (opcode & 0x7);
-    *(*emit)++ = ldr(aReg, r5, index_imm(1, 0, OFFSETOF(cpu_t, usp)));
+    *(*emit)++ = ldr(aReg, r5, index_imm(1, 0, offsetof(cpu_t, usp)));
     *(*emit)++ = bx(lr);
 }
 void emit_MOVEAL(uint32_t** emit, uint16_t opcode) {
@@ -984,8 +1016,8 @@ void emit_MOVEM(uint32_t** emit, uint16_t opcode) {
         for(int i=2; i<8; i++) {
             *(*emit)++ = ror_imm(r1, r1, 1);
             *(*emit)++ = word
-                ? ldrh_cc(ARM_CC_CS, r0, r5, index_imm(0, 0, OFFSETOF(cpu_t, d0) + 2 + i * 4))
-                : ldr_cc(ARM_CC_CS, r0, r5, index_imm(0, 0, OFFSETOF(cpu_t, d0) + i * 4));
+                ? ldrh_cc(ARM_CC_CS, r0, r5, index_imm(0, 0, offsetof(cpu_t, d0) + 2 + i * 4))
+                : ldr_cc(ARM_CC_CS, r0, r5, index_imm(0, 0, offsetof(cpu_t, d0) + i * 4));
             *(*emit)++ = word
                 ? strh_cc(ARM_CC_CS, r0, aReg, index_imm(0, 1, 2))
                 : str_cc(ARM_CC_CS, r0, aReg, index_imm(0, 1, 4));
@@ -1013,8 +1045,8 @@ void emit_MOVEM(uint32_t** emit, uint16_t opcode) {
                 ? ldrh_cc(ARM_CC_CS, r0, aReg, index_imm(1, 1, -2))
                 : ldr_cc(ARM_CC_CS, r0, aReg, index_imm(1, 1, -4));
             *(*emit)++ = word
-                ? strh_cc(ARM_CC_CS, r0, r5, index_imm(0, 0, OFFSETOF(cpu_t, d0) + 2 + i * 4))
-                : str_cc(ARM_CC_CS, r0, r5, index_imm(0, 0, OFFSETOF(cpu_t, d0) + i * 4));
+                ? strh_cc(ARM_CC_CS, r0, r5, index_imm(0, 0, offsetof(cpu_t, d0) + 2 + i * 4))
+                : str_cc(ARM_CC_CS, r0, r5, index_imm(0, 0, offsetof(cpu_t, d0) + i * 4));
         }
         for(int i=0; i<2; i++) {
             *(*emit)++ = ror_imm(r2, r2, 1);
@@ -1123,8 +1155,41 @@ void emit_MULU(uint32_t** emit, uint16_t opcode) {
     emit_EA_ALU(emit, (opcode & 0xFEFF), ALU_OP_MULUW);
 }
 void emit_NBCD(uint32_t** emit, uint16_t opcode) {
-    *(*emit)++ = movw(r0, opcode);
-    *(*emit)++ = bl_imm(calc_offset(*emit, handle_NBCD));
+    uint8_t dEA = (opcode & 0x3F);
+
+    emit_load_X(emit);
+
+    if(dEA == 0) **emit = b_imm(calc_offset((uint32_t)emit, (uint32_t)nbcd_d0));
+    else if(dEA == 1) **emit = b_imm(calc_offset((uint32_t)emit, (uint32_t)nbcd_d0));
+    else {
+        switch(dEA & 0x38) {
+        case 0x00: /* Dx */ 
+            *(*emit)++ = add(r1, r5, imm(offsetof(cpu_t, d0) + (dEA & 7) * 4 + 3));
+            break;
+        case 0x08: /* Ax, INVALID */ break;
+        case 0x10: /* (Ax) */ 
+            *(*emit)++ = mov(r0, reg(r6 + (dEA & 7)));
+            break;
+        case 0x18: /* (Ax)+ */ 
+            *(*emit)++ = mov(r0, reg(r6 + (dEA & 7))); 
+            *(*emit)++ = add(r6 + (dEA & 7), r6 + (dEA & 7), imm(1)); 
+            break;
+        case 0x20: /* -(Ax) */
+            *(*emit)++ = sub(r6 + (dEA & 7), r6 + (dEA & 7), imm(1)); 
+            *(*emit)++ = mov(r0, reg(r6 + (dEA & 7))); 
+            break;
+        case 0x28: /* (d16,An) */ 
+        case 0x30: /* (d8,An,Xn) */
+            *(*emit)++ = add(r0, r6 + (dEA & 7), reg(r1)); 
+            break;
+        case 0x38:
+            *(*emit)++ = mov(r0, reg(r1));
+            break;
+        } // end switch
+        **emit = b_imm(calc_offset((uint32_t)emit, (uint32_t)abcd_an));
+    }
+    *emit += 1;
+
 }
 void emit_NEGBW(uint32_t** emit, uint16_t opcode) {
     emit_UNARY_EA_ALU(emit, opcode, ALU_OP_NEG);
@@ -1245,8 +1310,30 @@ void emit_RTS(uint32_t** emit, uint16_t opcode) {
     *emit += 1;
 }
 void emit_SBCD(uint32_t** emit, uint16_t opcode) {
-    *(*emit)++ = movw(r0, opcode);
-    *(*emit)++ = bl_imm(calc_offset(*emit, handle_SBCD));
+    uint8_t sReg = (opcode & 0x7);
+    uint8_t dReg = (opcode >> 9) & 0x7;
+
+    emit_load_X(emit);
+
+    if(opcode & 0x0008) {
+        // -(Ax), -(An)
+        *(*emit)++ = ldrb(r0, r6 + sReg, index_imm(0, 1, -1));
+        *(*emit)++ = sub(r1, r6 + dReg, imm(1));
+        *(*emit)++ = mov(r6 + dReg, reg(r1));
+        **emit = b_imm(calc_offset((uint32_t)emit, (uint32_t)sbcd_an));
+
+    } else {
+        // Dx, Dy
+        if(sReg < 2) *(*emit)++ = uxtb(r0, r3 + sReg, 0);
+        else *(*emit)++ = ldrb(r0, r5, index_imm(1, 0, sReg * 4 + 3 + offsetof(cpu_t, d0)));
+        if(dReg == 0) **emit = b_imm(calc_offset((uint32_t)emit, (uint32_t)sbcd_d0));
+        else if(dReg == 1) **emit = b_imm(calc_offset((uint32_t)emit, (uint32_t)sbcd_d1));
+        else {
+            *(*emit)++ = add(r1, r5, imm(offsetof(cpu_t, d0) + dReg * 4 + 3));
+            **emit = b_imm(calc_offset((uint32_t)emit, (uint32_t)sbcd_an));
+        }
+    }
+    *emit += 1;
 }
 void emit_Scc(uint32_t** emit, uint16_t opcode) {
     uint8_t cc = arm_cc(opcode);

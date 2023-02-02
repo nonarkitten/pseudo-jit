@@ -273,7 +273,7 @@ static void check_greenpak(void) {
 
 static void make_i2c_good(void) {
 	uint8_t good = 0x5A;
-	uint16_t addr = i2c_address + OFFSETOF(config_t, last_boot_good);
+	uint16_t addr = i2c_address + offsetof(config_t, last_boot_good);
 	am335x_i2c_write( AM335X_I2C0, 0x50, addr, &good, 1);
 }
 
