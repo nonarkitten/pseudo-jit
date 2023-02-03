@@ -320,6 +320,7 @@ static void print_menu(void) {
 		"MENU\n"
 		"E. Erase all SPI flash.\n"
 		"P. Write SRAM to SPI flash.\n"
+		"G. Start PJIT (GO!).\n"
 		"X. Reboot.\n"
 		"Ready.\n] "
 	);
@@ -336,6 +337,9 @@ static int confirm(void) {
 void monitor_break(void) {
 	static char option[32];
 	switch(gets(option)[0]) {
+	case 'G': case 'g':
+		asm("svc\t%0" :: "i"(RESET_PC));
+		break;
 	case 'E': case 'e':
 		if(confirm()) EraseSPI(0, ERASE_ALL);
 		else printf("Erase cancelled.\n");
@@ -457,7 +461,10 @@ int main(void) {
     am335x_gpio_change_state(AM335X_GPIO3, 16, 1);
 
 	// 4. finally, start PJIT
-	print_menu();
+	while(1) {
+		print_menu();
+		monitor_break();
+	}
 }
 
 // TO-DO:
