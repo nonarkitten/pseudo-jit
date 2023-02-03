@@ -338,7 +338,7 @@ void monitor_break(void) {
 	static char option[32];
 	switch(gets(option)[0]) {
 	case 'G': case 'g':
-		asm("svc\t%0" :: "i"(RESET_PC));
+		if(confirm()) asm("svc\t%0" :: "i"(RESET_PC));
 		break;
 	case 'E': case 'e':
 		if(confirm()) EraseSPI(0, ERASE_ALL);
@@ -473,7 +473,6 @@ int main(void) {
 // - menu needs to live in an interrupt, not main()
 // - GPIO interrupts are not enabled (BG/BGACK/BR)
 // - fixup inlining
-// - implement the 68K interrupt/exception handler
 // - 24-bit address cleaning
 // - 68030 and FPU instructions
 // - 68030 extended EA modes

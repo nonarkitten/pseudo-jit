@@ -49,7 +49,6 @@
 //     SetMemW(areg[7] + 8, sr);
 //     SetMemL(areg[7] + 10, GetPC());
 //     #endif
-
 //     SetPC(GetMemL((long)number * 4) + vbr);
 //     /* end exception processing */
 //     cpu_state = -1;
