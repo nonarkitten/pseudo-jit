@@ -465,10 +465,7 @@ int main(void) {
 // - MMU init uses old tables; need to rework
 // - menu needs to live in an interrupt, not main()
 // - GPIO interrupts are not enabled (BG/BGACK/BR)
-// - PJIT lookup routine still needs work
-// - need to finish the PJIT ops (about 24 left)
-// - need to check the BCD handlers
-// - need to add the ROX handlers
+// - fixup inlining
 // - implement the 68K interrupt/exception handler
 // - 24-bit address cleaning
 // - 68030 and FPU instructions
