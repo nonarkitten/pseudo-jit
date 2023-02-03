@@ -289,4 +289,9 @@ register union { uint32_t L; uint16_t W; } A7 asm("r13");
 
 extern void cpu_start(void* base);
 
+extern void jump_normal(uint32_t m68k_pc);
+extern void jump_subroutine(uint32_t m68k_pc);
+extern void branch_normal(uint32_t _, int32_t offset);
+extern void branch_subroutine(uint32_t _, int32_t  offset);
+
 #endif
