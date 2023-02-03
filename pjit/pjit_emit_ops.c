@@ -364,8 +364,14 @@ void emit_ALU(uint32_t** emit, ALU_OP_t op, uint8_t regS, uint8_t regD) {
             opcode = ror_reg(regD, regD, regS);
             break;
         case ALU_OP_ROXL:
+            cond   = 1;
+            opcode = adc(regD, regD, reg(regD));
             break;
         case ALU_OP_ROXR:
+            cond   = 0;
+            opcode = rbit(regD, regD);
+            opcode = adcs(regD, regD, reg(regD));
+            opcode = rbit(regD, regD);
             break;
 
         // Multipliers
@@ -1306,7 +1312,9 @@ void emit_ROXdL(uint32_t** emit, uint16_t opcode) {
     *(*emit)++ = bl_imm(calc_offset(*emit, handle_ROXd));
 }
 void emit_ROXd(uint32_t** emit, uint16_t opcode) {
+    emit_load_X(emit);
     emit_Mem_Shift(emit, opcode, (opcode & 0x0100) ? ALU_OP_ROXL : ALU_OP_ROXR);
+    emit_save_X(emit);
 }
 void emit_RTE(uint32_t** emit, uint16_t opcode) {
     // If Not Supervisor State Then TRAP
