@@ -125,8 +125,8 @@ typedef enum {
     ALU_OP_OR,
 
     // Multipliers
-    // ALU_OP_DIVSW,
-    // ALU_OP_DIVUW,
+    ALU_OP_DIVSW,
+    ALU_OP_DIVUW,
     ALU_OP_MULSW,
     ALU_OP_MULUW,
 
@@ -205,10 +205,10 @@ static void emit_src_bit_to_mask(uint32_t** emit) {
 // @brief given a 68K SR value in reg, set ARM CPSR flags
 static void emit_68k_to_arm_cc(uint32_t** emit, uint8_t reg) {
     // recompose flags -> MCR, reg has ...xnzvc
-    *(*emit)++ = rbit(r0, reg);       // cvznx...0000
-    *(*emit)++ = bfi(r0, reg, 2, 2);  // cvznx...00nz
-    *(*emit)++ = ror_imm(r0, r0, 2);  // nzcvznx...00
-    *(*emit)++ = msr(CPSR_f, r0);     // msr  CPSR_f, r0
+    *(*emit)++ = rbit(reg, reg);       // cvznx...0000
+    *(*emit)++ = bfi(reg, reg, 2, 2);  // cvznx...00nz
+    *(*emit)++ = ror_imm(reg, reg, 2); // nzcvznx...00
+    *(*emit)++ = msr(CPSR_f, reg);     // msr  CPSR_f, r0
 }
 // @brief get the ARM CPSR flags into the low 4-bit of reg
 static void emit_arm_to_68k_cc(uint32_t** emit, uint8_t reg) {
@@ -369,10 +369,12 @@ void emit_ALU(uint32_t** emit, ALU_OP_t op, uint8_t regS, uint8_t regD) {
             break;
 
         // Multipliers
-        // case ALU_OP_DIVSW:
-        //     break;
-        // case ALU_OP_DIVUW:
-        //     break;
+        case ALU_OP_DIVSW: {
+            break; }
+
+        case ALU_OP_DIVUW: {
+            break; }
+
         case ALU_OP_MULSW:
             *(*emit)++ = sxth(regD, regD, 0);
             *(*emit)++ = sxth(regS, regS, 0);
@@ -527,6 +529,34 @@ static void emit_Bit_Op(uint32_t** emit, uint16_t opcode, ALU_OP_t op) {
     emit_EA_Store(emit, opcode & 0x3F, regD, 2, 1);
     *(*emit)++ = bx(lr);
 }
+
+static void emit_DIV(uint32_t** emit, uint16_t opcode, ALU_OP_t op) {
+    uint8_t sEA = (opcode & 0xC0), dEA = (opcode & 0xC0);
+    if ((op == ALU_OP_CMP) || !(op == ALU_OP_EOR) || !(opcode & 0x0100)) {
+        // m->r
+        dEA |= (opcode & 0x0E00) >> 9;
+        sEA |= (opcode & 0x003F);
+    } else {
+        // r->m
+        sEA |= (opcode & 0x0E00) >> 9;
+        dEA |= (opcode & 0x003F);
+    }
+    uint8_t regS = emit_EA_Load(emit, sEA, 1, 1, 0);
+    uint8_t regD = emit_EA_Load(emit, dEA, 0, 2, 1);
+    *(*emit)++ = push(LR);
+    if(regD != 0) *(*emit)++ = mov(r0, reg(regD));
+    if(regS != 1) *(*emit)++ = mov(r1, reg(regD));
+    *(*emit)++ = sxth(r1, r1, 0);
+    *(*emit)++ = cmp(r1, imm(0));
+    *(*emit)++ = svc_cc(ARM_CC_EQ, DIVZ);
+    if(op == ALU_OP_DIVSW) {
+        **emit = bl_imm(calc_offset(emit, handle_DIVS)); *emit += 1;
+    } else {
+        **emit = bl_imm(calc_offset(emit, handle_DIVU)); *emit += 1;
+    }
+    emit_EA_Store(emit, dEA, regD, 2, 1);
+    *(*emit)++ = pop(PC);
+}    
 
 /***
  *       ___                      _        _____           _ _   _
@@ -809,12 +839,10 @@ void emit_DBRA(uint32_t** emit, uint16_t opcode) {
     emit_DBcc(emit, opcode);
 }
 void emit_DIVS(uint32_t** emit, uint16_t opcode) {
-    *(*emit)++ = movw(r0, opcode);
-    *(*emit)++ = bl_imm(calc_offset(*emit, handle_DIVS));
+    emit_DIV(emit, (opcode & 0xFEFF), ALU_OP_DIVSW);
 }
 void emit_DIVU(uint32_t** emit, uint16_t opcode) {
-    *(*emit)++ = movw(r0, opcode);
-    *(*emit)++ = bl_imm(calc_offset(*emit, handle_DIVU));
+    emit_DIV(emit, (opcode & 0xFEFF), ALU_OP_DIVUW);
 }
 void emit_EORBW(uint32_t** emit, uint16_t opcode) {
     emit_EA_ALU(emit, opcode, ALU_OP_EOR);

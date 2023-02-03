@@ -52,25 +52,96 @@
 
 #include "pjit.h"
 
-__attribute__((naked)) void handle_DIVS(uint16_t opccode) {
+uint32_t handle_DIVU(uint32_t num, uint32_t den) {
+    uint32_t quotient = 0;
+    // Unroll division completely
+    if (den <= (num >> 15)) { quotient |= 1 << 15; num -= den << 15; }
+    if (den <= (num >> 14)) { quotient |= 1 << 14; num -= den << 14; }
+    if (den <= (num >> 13)) { quotient |= 1 << 13; num -= den << 13; }
+    if (den <= (num >> 12)) { quotient |= 1 << 12; num -= den << 12; }
+    if (den <= (num >> 11)) { quotient |= 1 << 11; num -= den << 11; }
+    if (den <= (num >> 10)) { quotient |= 1 << 10; num -= den << 10; }
+    if (den <= (num >>  9)) { quotient |= 1 <<  9; num -= den <<  9; }
+    if (den <= (num >>  8)) { quotient |= 1 <<  8; num -= den <<  8; }
+    if (den <= (num >>  7)) { quotient |= 1 <<  7; num -= den <<  7; }
+    if (den <= (num >>  6)) { quotient |= 1 <<  6; num -= den <<  6; }
+    if (den <= (num >>  5)) { quotient |= 1 <<  5; num -= den <<  5; }
+    if (den <= (num >>  4)) { quotient |= 1 <<  4; num -= den <<  4; }
+    if (den <= (num >>  3)) { quotient |= 1 <<  3; num -= den <<  3; }
+    if (den <= (num >>  2)) { quotient |= 1 <<  2; num -= den <<  2; }
+    if (den <= (num >>  1)) { quotient |= 1 <<  1; num -= den <<  1; }
+    if (den <= (num >>  0)) { quotient |= 1 <<  0; num -= den <<  0; } 
 
+    // Set flags for N and Z
+    asm volatile("cmp\t%0, #0" :: "r"(quotient));
+    // Set V if overflow
+    asm volatile("mrs\t%0, cpsr" : "=r"(den));
+    if((quotient > 65535) || (num > 65535)) den |= 0x10000000;
+    asm volatile("msr\tcpsr_f, %0" :: "r"(den));
+    return (num << 16) | quotient;
 }
-__attribute__((naked)) void handle_DIVU(uint16_t opccode) {
 
-}
+int32_t handle_DIVS(int32_t num, int32_t den) {
+    uint32_t quotient = 0;
+    if(num < 0) num = -num, quotient = ~quotient;
+    if(den < 0) den = -den, quotient = ~quotient;
 
-INLINE void save_cpu(void) {
-    asm __volatile("str\tr3, [%0,%1]" ::"r"(cpu), "i"(offsetof(cpu_t, d0)));
-    asm __volatile("str\tr4, [%0,%1]" ::"r"(cpu), "i"(offsetof(cpu_t, d1)));
-    uint32_t *base = &cpu->a0;
-    asm __volatile("stm\t%0!, {r6-r13}" ::"r"(base));
-}
+    if(quotient) {
+        // Unroll division completely
+        if (den <= (num >> 15)) { quotient &= ~(1 << 15); num -= den << 15; }
+        if (den <= (num >> 14)) { quotient &= ~(1 << 14); num -= den << 14; }
+        if (den <= (num >> 13)) { quotient &= ~(1 << 13); num -= den << 13; }
+        if (den <= (num >> 12)) { quotient &= ~(1 << 12); num -= den << 12; }
+        if (den <= (num >> 11)) { quotient &= ~(1 << 11); num -= den << 11; }
+        if (den <= (num >> 10)) { quotient &= ~(1 << 10); num -= den << 10; }
+        if (den <= (num >>  9)) { quotient &= ~(1 <<  9); num -= den <<  9; }
+        if (den <= (num >>  8)) { quotient &= ~(1 <<  8); num -= den <<  8; }
+        if (den <= (num >>  7)) { quotient &= ~(1 <<  7); num -= den <<  7; }
+        if (den <= (num >>  6)) { quotient &= ~(1 <<  6); num -= den <<  6; }
+        if (den <= (num >>  5)) { quotient &= ~(1 <<  5); num -= den <<  5; }
+        if (den <= (num >>  4)) { quotient &= ~(1 <<  4); num -= den <<  4; }
+        if (den <= (num >>  3)) { quotient &= ~(1 <<  3); num -= den <<  3; }
+        if (den <= (num >>  2)) { quotient &= ~(1 <<  2); num -= den <<  2; }
+        if (den <= (num >>  1)) { quotient &= ~(1 <<  1); num -= den <<  1; }
+        if (den <= (num >>  0)) { quotient &= ~(1 <<  0); num -= den <<  0; }
 
-INLINE void restore_cpu(void) {
-    asm __volatile("ldr\tr3, [%0,%1]" ::"r"(cpu), "i"(offsetof(cpu_t, d0)));
-    asm __volatile("ldr\tr4, [%0,%1]" ::"r"(cpu), "i"(offsetof(cpu_t, d1)));
-    uint32_t *base = &cpu->a0;
-    asm __volatile("ldm\t%0!, {r6-r13}" ::"r"(base));
+        quotient += 1;
+
+        // Set flags for N and Z
+        asm volatile("cmp\t%0, #0" :: "r"(quotient));
+        // Set V if overflow
+        asm volatile("mrs\t%0, cpsr" : "=r"(den));
+        if(num > 65535) den |= 0x10000000;
+        asm volatile("msr\tcpsr_f, %0" :: "r"(den));
+        return (-num << 16) | quotient;
+
+    } else {
+        // Unroll division completely
+        if (den <= (num >> 15)) { quotient |= 1 << 15; num -= den << 15; }
+        if (den <= (num >> 14)) { quotient |= 1 << 14; num -= den << 14; }
+        if (den <= (num >> 13)) { quotient |= 1 << 13; num -= den << 13; }
+        if (den <= (num >> 12)) { quotient |= 1 << 12; num -= den << 12; }
+        if (den <= (num >> 11)) { quotient |= 1 << 11; num -= den << 11; }
+        if (den <= (num >> 10)) { quotient |= 1 << 10; num -= den << 10; }
+        if (den <= (num >>  9)) { quotient |= 1 <<  9; num -= den <<  9; }
+        if (den <= (num >>  8)) { quotient |= 1 <<  8; num -= den <<  8; }
+        if (den <= (num >>  7)) { quotient |= 1 <<  7; num -= den <<  7; }
+        if (den <= (num >>  6)) { quotient |= 1 <<  6; num -= den <<  6; }
+        if (den <= (num >>  5)) { quotient |= 1 <<  5; num -= den <<  5; }
+        if (den <= (num >>  4)) { quotient |= 1 <<  4; num -= den <<  4; }
+        if (den <= (num >>  3)) { quotient |= 1 <<  3; num -= den <<  3; }
+        if (den <= (num >>  2)) { quotient |= 1 <<  2; num -= den <<  2; }
+        if (den <= (num >>  1)) { quotient |= 1 <<  1; num -= den <<  1; }
+        if (den <= (num >>  0)) { quotient |= 1 <<  0; num -= den <<  0; } 
+    
+        // Set flags for N and Z
+        asm volatile("cmp\t%0, #0" :: "r"(quotient));
+        // Set V if overflow
+        asm volatile("mrs\t%0, cpsr" : "=r"(den));
+        if(num > 65535) den |= 0x10000000;
+        asm volatile("msr\tcpsr_f, %0" :: "r"(den));
+        return (num << 16) | quotient;
+    }
 }
 
 __attribute__((naked)) void handle_ROXd(uint16_t opccode) { }
