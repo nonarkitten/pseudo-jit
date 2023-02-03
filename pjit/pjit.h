@@ -236,7 +236,7 @@ typedef struct {
     uint32_t cacr;   // Cache Control Register
     uint32_t caar;   // Cache Address Register
     uint32_t tc;     // MMU Translation Control Register
-    uint32_t msp;    // Master Stack Pointer
+    uint32_t ssp;    // Master Stack Pointer
     uint32_t itt0;   // Instruction Transparent Translation Register 0
     uint32_t isp;    // Interrupt Stack Pointer
     uint32_t itt1;   // Instruction Transparent Translation Register 1
@@ -256,6 +256,9 @@ typedef struct {
     uint32_t* opcode_table;
     uint32_t* opcode_stubs;
     void*     pjit_core;
+
+    // ARM registers for backup
+    uint32_t r0, r1, r2, r3;
 
     uint16_t free_memory;  // in MB
 

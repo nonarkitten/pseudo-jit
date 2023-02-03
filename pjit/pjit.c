@@ -684,6 +684,10 @@ __attribute__((naked,used)) void lookup_opcode(void) {
 
 __attribute__((naked)) void jump_normal(uint32_t m68k_pc) {
     register uint32_t *out asm("lr");
+    if(m68k_pc & 1) {
+        asm("movw   r1, %0" :: "i"(0x0008));
+        asm("svc    %0" :: "i"(ADDRESSERR));
+    }
     // save_cpu();
     out = cache_find_entry(m68k_pc);
     // restore_cpu();
@@ -693,6 +697,10 @@ __attribute__((naked)) void jump_normal(uint32_t m68k_pc) {
 __attribute__((naked)) void jump_subroutine(uint32_t m68k_pc) {
     register uint32_t *out asm("lr");
     uint16_t          *pc = (uint16_t *)cache_reverse((uint32_t)(out - 1));
+    if(m68k_pc & 1) {
+        asm("movw   r1, %0" :: "i"(0x0008));
+        asm("svc    %0" :: "i"(ADDRESSERR));
+    }
     asm("str\t%0, [sp, #-4]!" ::"r"(pc));
     // save_cpu();
     out = cache_find_entry(m68k_pc);
@@ -702,7 +710,11 @@ __attribute__((naked)) void jump_subroutine(uint32_t m68k_pc) {
 
 __attribute__((naked)) void branch_normal(uint32_t _, int32_t offset) {
     register uint32_t *out asm("lr");
-    uint32_t           m68k_pc = offset + cache_reverse((uint32_t)(out - 1));
+    register uint32_t m68k_pc asm("r0") = offset + cache_reverse((uint32_t)(out - 1));
+    if(m68k_pc & 1) {
+        asm("movw   r1, %0" :: "i"(0x0008));
+        asm("svc    %0" :: "i"(ADDRESSERR));
+    }
     // save_cpu();
     out = cache_find_entry(m68k_pc);
     // restore_cpu();
@@ -711,7 +723,11 @@ __attribute__((naked)) void branch_normal(uint32_t _, int32_t offset) {
 
 __attribute__((naked)) void branch_subroutine(uint32_t _, int32_t  offset) {
     register uint32_t *out asm("lr");
-    uint32_t           m68k_pc = cache_reverse((uint32_t)(out - 1));
+    register uint32_t m68k_pc asm("r0") = cache_reverse((uint32_t)(out - 1));
+    if(m68k_pc & 1) {
+        asm("movw   r1, %0" :: "i"(0x0008));
+        asm("svc    %0" :: "i"(ADDRESSERR));
+    }
     asm("str\t%0, [sp, #-4]!" ::"r"(m68k_pc));
     m68k_pc += offset;
     // save_cpu();

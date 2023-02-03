@@ -81,11 +81,6 @@ extern uint32_t emit_EA_Store(uint32_t** emit, uint8_t dEA, uint8_t sReg, uint8_
 #pragma GCC diagnostic push
 #pragma GCC diagnostic error "-Wswitch"
 
-extern void branch_normal(int,int);
-extern void branch_subroutine(int,int);
-extern void jump_normal(int,int);
-extern void jump_subroutine(int,int);
-
 extern void r2m_word(void);
 extern void r2m_long(void);
 extern void m2r_word(void);
@@ -227,12 +222,20 @@ static void emit_arm_to_68k_cc(uint32_t** emit, uint8_t reg) {
 // @brief load the 68K SR into reg
 static void emit_load_SR(uint32_t** emit, uint8_t reg) {
     *(*emit)++ = ldrh(reg, r5, index_imm(1, 0, offsetof(cpu_t, sr)));
+    // save our stack pointer depending on current mode
+    *(*emit)++ = tst(reg, imm(0x2000));
+    *(*emit)++ = str_cc(ARM_CC_EQ, reg, sp, index_imm(1, 0, offsetof(cpu_t, ssp)));
+    *(*emit)++ = str_cc(ARM_CC_NE, reg, sp, index_imm(1, 0, offsetof(cpu_t, usp)));
     emit_arm_to_68k_cc(emit, reg);
 }
 // @brief save the 68K SR in reg to cpu_t state
 static void emit_save_SR(uint32_t** emit, uint8_t reg) {
     // put reg -> sr
     *(*emit)++ = strh(reg, r5, index_imm(1, 0, offsetof(cpu_t, sr)));
+    // load our stack pointer depending on our new mode
+    *(*emit)++ = tst(reg, imm(0x2000));
+    *(*emit)++ = ldr_cc(ARM_CC_EQ, sp, r5, index_imm(1, 0, offsetof(cpu_t, ssp)));
+    *(*emit)++ = ldr_cc(ARM_CC_NE, sp, r5, index_imm(1, 0, offsetof(cpu_t, usp)));
     emit_68k_to_arm_cc(emit, reg);
 }
 // @brief load the 68K CCR into reg
@@ -735,9 +738,9 @@ void emit_Bcc(uint32_t** emit, uint16_t opcode) {
     int8_t offset = (int8_t)(opcode & 0xFF);
     if((offset == 0) || (offset == -1)) { 
         *(*emit)++ = nop();
-    } else if(offset & 1) {
-        *(*emit)++ = nop();
-        *(*emit)++ = svc(ADDRESSERR);
+    // } else if(offset & 1) {
+    //     *(*emit)++ = movw(r1, 0x0008); // instruction
+    //     *(*emit)++ = svc(ADDRESSERR);
     } else {
         *(*emit)++ = mov_signed(r1, offset);
     }
