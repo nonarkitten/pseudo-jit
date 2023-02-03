@@ -94,7 +94,12 @@ extern void m2r_long(void);
 extern void handle_DIVS(uint32_t opccode);
 extern void handle_DIVU(uint32_t opccode);
 
-extern void handle_ROXd(uint32_t opccode);
+extern uint32_t roxr_b(uint32_t value, uint8_t shift);
+extern uint32_t roxr_w(uint32_t value, uint8_t shift);
+extern uint32_t roxr_l(uint32_t value, uint8_t shift);
+extern uint32_t roxl_b(uint32_t value, uint8_t shift);
+extern uint32_t roxl_w(uint32_t value, uint8_t shift);
+extern uint32_t roxl_l(uint32_t value, uint8_t shift);
 
 extern void abcd_d0(uint8_t b);
 extern void abcd_d1(uint8_t b);
@@ -538,15 +543,10 @@ static void emit_Bit_Op(uint32_t** emit, uint16_t opcode, ALU_OP_t op) {
 
 static void emit_DIV(uint32_t** emit, uint16_t opcode, ALU_OP_t op) {
     uint8_t sEA = (opcode & 0xC0), dEA = (opcode & 0xC0);
-    if ((op == ALU_OP_CMP) || !(op == ALU_OP_EOR) || !(opcode & 0x0100)) {
-        // m->r
-        dEA |= (opcode & 0x0E00) >> 9;
-        sEA |= (opcode & 0x003F);
-    } else {
-        // r->m
-        sEA |= (opcode & 0x0E00) >> 9;
-        dEA |= (opcode & 0x003F);
-    }
+    // m->r
+    dEA |= (opcode & 0x0E00) >> 9;
+    sEA |= (opcode & 0x003F);
+
     uint8_t regS = emit_EA_Load(emit, sEA, 1, 1, 0);
     uint8_t regD = emit_EA_Load(emit, dEA, 0, 2, 1);
     *(*emit)++ = push(LR);
@@ -563,6 +563,59 @@ static void emit_DIV(uint32_t** emit, uint16_t opcode, ALU_OP_t op) {
     emit_EA_Store(emit, dEA, regD, 2, 1);
     *(*emit)++ = pop(PC);
 }    
+
+static void emit_ROXd_opcode(uint32_t** emit, uint16_t opcode) {
+    uint8_t shift = (opcode >> 9) & 7;
+    if(opcode & 0x0020) {
+        // Register
+        if(shift < 2) *(*emit)++ = mov(r1, reg(r3 + shift));
+        else *(*emit)++ = ldrb(r1, r5, index_imm(1, 0, offsetof(cpu_t, d0) + 3 + shift * 4));
+    } else {
+        // Immediate
+        if(shift == 0) shift = 8;
+        *(*emit)++ = movw(r1, shift);
+    }
+
+    uint8_t regD = (opcode & 7);
+    if(regD < 2) *(*emit)++ = mov(r0, reg(r3 + regD));
+    else *(*emit)++ = ldr(r1, r5, index_imm(1, 0, offsetof(cpu_t, d0) + regD * 4));
+
+    switch(opcode & 0x01C0) {
+    // Right
+    case 0x0000: **emit = b_imm(calc_offset(emit, roxr_b)); break;
+    case 0x0040: **emit = b_imm(calc_offset(emit, roxr_w)); break;
+    case 0x0080: **emit = b_imm(calc_offset(emit, roxr_l)); break;
+    // Left
+    case 0x0100: **emit = b_imm(calc_offset(emit, roxl_b)); break;
+    case 0x0140: **emit = b_imm(calc_offset(emit, roxl_w)); break;
+    case 0x0180: **emit = b_imm(calc_offset(emit, roxl_l)); break;
+    }
+
+    if(regD < 2) {
+        switch(opcode & 0x00C0) {
+        case 0x0000: *(*emit)++ = bfi(r3 + regD, r0, 0, 8); break; 
+        case 0x0040: *(*emit)++ = bfi(r3 + regD, r0, 0, 16); break;
+        case 0x0080: *(*emit)++ = mov(r3 + regD, reg(r0)); break;
+        }
+    } else {
+        uint32_t idx;
+        switch(opcode & 0x00C0) {
+        case 0x0000: 
+            idx = index_imm(1, 0, offsetof(cpu_t, d0) + regD * 4 + 2);
+            *(*emit)++ = strb(r1, r5, idx);
+            break;
+        case 0x0040:
+            idx = index_imm(1, 0, offsetof(cpu_t, d0) + regD * 4 + 2);
+            *(*emit)++ = strh(r1, r5, idx);
+            break;
+        case 0x0080:
+            idx = index_imm(1, 0, offsetof(cpu_t, d0) + regD * 4);
+            *(*emit)++ = str(r1, r5, idx);
+            break;
+        }
+    }
+    *(*emit)++ = pop(PC);
+}
 
 /***
  *       ___                      _        _____           _ _   _
@@ -1304,12 +1357,10 @@ void emit_ROd(uint32_t** emit, uint16_t opcode) {
     emit_Mem_Shift(emit, opcode, (opcode & 0x0100) ? ALU_OP_ROL : ALU_OP_ROR);
 }
 void emit_ROXdBW(uint32_t** emit, uint16_t opcode) {
-    *(*emit)++ = movw(r0, opcode);
-    *(*emit)++ = bl_imm(calc_offset(*emit, handle_ROXd));
+    emit_ROXd_opcode(emit, opcode);
 }
 void emit_ROXdL(uint32_t** emit, uint16_t opcode) {
-    *(*emit)++ = movw(r0, opcode);
-    *(*emit)++ = bl_imm(calc_offset(*emit, handle_ROXd));
+    emit_ROXd_opcode(emit, opcode);
 }
 void emit_ROXd(uint32_t** emit, uint16_t opcode) {
     emit_load_X(emit);

@@ -50,6 +50,7 @@
 
 #include <stdint.h>
 
+#include "arm.h"
 #include "pjit.h"
 
 uint32_t handle_DIVU(uint32_t num, uint32_t den) {
@@ -144,7 +145,162 @@ int32_t handle_DIVS(int32_t num, int32_t den) {
     }
 }
 
-__attribute__((naked)) void handle_ROXd(uint16_t opccode) { }
+// this is ONLY called for register ROXd
+uint32_t roxl_l(uint32_t value, uint8_t shift) {
+    static const uint32_t* back = &&r0;
+    static const uint32_t* exit = &&r31;
+    goto *(void*)(back - (shift & 0x1F));
+r31:asm volatile("adcs\t%0, %0, %0" : "+r"(value));
+r30:asm volatile("adcs\t%0, %0, %0" : "+r"(value));
+r29:asm volatile("adcs\t%0, %0, %0" : "+r"(value));
+r28:asm volatile("adcs\t%0, %0, %0" : "+r"(value));
+r27:asm volatile("adcs\t%0, %0, %0" : "+r"(value));
+r26:asm volatile("adcs\t%0, %0, %0" : "+r"(value));
+r25:asm volatile("adcs\t%0, %0, %0" : "+r"(value));
+r24:asm volatile("adcs\t%0, %0, %0" : "+r"(value));
+r23:asm volatile("adcs\t%0, %0, %0" : "+r"(value));
+r22:asm volatile("adcs\t%0, %0, %0" : "+r"(value));
+r21:asm volatile("adcs\t%0, %0, %0" : "+r"(value));
+r20:asm volatile("adcs\t%0, %0, %0" : "+r"(value));
+r19:asm volatile("adcs\t%0, %0, %0" : "+r"(value));
+r18:asm volatile("adcs\t%0, %0, %0" : "+r"(value));
+r17:asm volatile("adcs\t%0, %0, %0" : "+r"(value));
+r16:asm volatile("adcs\t%0, %0, %0" : "+r"(value));
+r15:asm volatile("adcs\t%0, %0, %0" : "+r"(value));
+r14:asm volatile("adcs\t%0, %0, %0" : "+r"(value));
+r13:asm volatile("adcs\t%0, %0, %0" : "+r"(value));
+r12:asm volatile("adcs\t%0, %0, %0" : "+r"(value));
+r11:asm volatile("adcs\t%0, %0, %0" : "+r"(value));
+r10:asm volatile("adcs\t%0, %0, %0" : "+r"(value));
+r9: asm volatile("adcs\t%0, %0, %0" : "+r"(value));
+r8: asm volatile("adcs\t%0, %0, %0" : "+r"(value));
+r7: asm volatile("adcs\t%0, %0, %0" : "+r"(value));
+r6: asm volatile("adcs\t%0, %0, %0" : "+r"(value));
+r5: asm volatile("adcs\t%0, %0, %0" : "+r"(value));
+r4: asm volatile("adcs\t%0, %0, %0" : "+r"(value));
+r3: asm volatile("adcs\t%0, %0, %0" : "+r"(value));
+r2: asm volatile("adcs\t%0, %0, %0" : "+r"(value));
+r1: asm volatile("adcs\t%0, %0, %0" : "+r"(value));
+r0: return value;
+}
+
+uint32_t roxl_w(uint32_t value, uint8_t shift) {
+    static const uint32_t* back = &&r0;
+    static const uint32_t* exit = &&r15;
+    goto *(void*)(back - (shift & 0xF));
+r15:asm volatile("uxth\t%0, %0\n\tadcs\t%0, %0, %0" : "+r"(value));
+r14:asm volatile("uxth\t%0, %0\n\tadcs\t%0, %0, %0" : "+r"(value));
+r13:asm volatile("uxth\t%0, %0\n\tadcs\t%0, %0, %0" : "+r"(value));
+r12:asm volatile("uxth\t%0, %0\n\tadcs\t%0, %0, %0" : "+r"(value));
+r11:asm volatile("uxth\t%0, %0\n\tadcs\t%0, %0, %0" : "+r"(value));
+r10:asm volatile("uxth\t%0, %0\n\tadcs\t%0, %0, %0" : "+r"(value));
+r9: asm volatile("uxth\t%0, %0\n\tadcs\t%0, %0, %0" : "+r"(value));
+r8: asm volatile("uxth\t%0, %0\n\tadcs\t%0, %0, %0" : "+r"(value));
+r7: asm volatile("uxth\t%0, %0\n\tadcs\t%0, %0, %0" : "+r"(value));
+r6: asm volatile("uxth\t%0, %0\n\tadcs\t%0, %0, %0" : "+r"(value));
+r5: asm volatile("uxth\t%0, %0\n\tadcs\t%0, %0, %0" : "+r"(value));
+r4: asm volatile("uxth\t%0, %0\n\tadcs\t%0, %0, %0" : "+r"(value));
+r3: asm volatile("uxth\t%0, %0\n\tadcs\t%0, %0, %0" : "+r"(value));
+r2: asm volatile("uxth\t%0, %0\n\tadcs\t%0, %0, %0" : "+r"(value));
+r1: asm volatile("uxth\t%0, %0\n\tadcs\t%0, %0, %0" : "+r"(value));
+r0: return value;
+}
+
+uint32_t roxl_b(uint32_t value, uint8_t shift) {
+    static const uint32_t* back = &&r0;
+    static const uint32_t* exit = &&r7;
+    goto *(void*)(back - (shift & 0x7));
+r7: asm volatile("uxtb\t%0, %0\n\tadcs\t%0, %0, %0" : "+r"(value));
+r6: asm volatile("uxtb\t%0, %0\n\tadcs\t%0, %0, %0" : "+r"(value));
+r5: asm volatile("uxtb\t%0, %0\n\tadcs\t%0, %0, %0" : "+r"(value));
+r4: asm volatile("uxtb\t%0, %0\n\tadcs\t%0, %0, %0" : "+r"(value));
+r3: asm volatile("uxtb\t%0, %0\n\tadcs\t%0, %0, %0" : "+r"(value));
+r2: asm volatile("uxtb\t%0, %0\n\tadcs\t%0, %0, %0" : "+r"(value));
+r1: asm volatile("uxtb\t%0, %0\n\tadcs\t%0, %0, %0" : "+r"(value));
+r0: return value;
+}
+
+// this is ONLY called for register ROXd
+uint32_t roxr_l(uint32_t value, uint8_t shift) {
+    static const uint32_t* back = &&r0;
+    static const uint32_t* exit = &&r31;
+    asm volatile("rbit\t%0, %0" : "+r"(value));
+    goto *(void*)(back - (shift & 0x1F));
+r31:asm volatile("adcs\t%0, %0, %0" : "+r"(value));
+r30:asm volatile("adcs\t%0, %0, %0" : "+r"(value));
+r29:asm volatile("adcs\t%0, %0, %0" : "+r"(value));
+r28:asm volatile("adcs\t%0, %0, %0" : "+r"(value));
+r27:asm volatile("adcs\t%0, %0, %0" : "+r"(value));
+r26:asm volatile("adcs\t%0, %0, %0" : "+r"(value));
+r25:asm volatile("adcs\t%0, %0, %0" : "+r"(value));
+r24:asm volatile("adcs\t%0, %0, %0" : "+r"(value));
+r23:asm volatile("adcs\t%0, %0, %0" : "+r"(value));
+r22:asm volatile("adcs\t%0, %0, %0" : "+r"(value));
+r21:asm volatile("adcs\t%0, %0, %0" : "+r"(value));
+r20:asm volatile("adcs\t%0, %0, %0" : "+r"(value));
+r19:asm volatile("adcs\t%0, %0, %0" : "+r"(value));
+r18:asm volatile("adcs\t%0, %0, %0" : "+r"(value));
+r17:asm volatile("adcs\t%0, %0, %0" : "+r"(value));
+r16:asm volatile("adcs\t%0, %0, %0" : "+r"(value));
+r15:asm volatile("adcs\t%0, %0, %0" : "+r"(value));
+r14:asm volatile("adcs\t%0, %0, %0" : "+r"(value));
+r13:asm volatile("adcs\t%0, %0, %0" : "+r"(value));
+r12:asm volatile("adcs\t%0, %0, %0" : "+r"(value));
+r11:asm volatile("adcs\t%0, %0, %0" : "+r"(value));
+r10:asm volatile("adcs\t%0, %0, %0" : "+r"(value));
+r9: asm volatile("adcs\t%0, %0, %0" : "+r"(value));
+r8: asm volatile("adcs\t%0, %0, %0" : "+r"(value));
+r7: asm volatile("adcs\t%0, %0, %0" : "+r"(value));
+r6: asm volatile("adcs\t%0, %0, %0" : "+r"(value));
+r5: asm volatile("adcs\t%0, %0, %0" : "+r"(value));
+r4: asm volatile("adcs\t%0, %0, %0" : "+r"(value));
+r3: asm volatile("adcs\t%0, %0, %0" : "+r"(value));
+r2: asm volatile("adcs\t%0, %0, %0" : "+r"(value));
+r1: asm volatile("adcs\t%0, %0, %0" : "+r"(value));
+r0: asm volatile("rbit\t%0, %0" : "+r"(value));
+    return value;
+}
+
+uint32_t roxr_w(uint32_t value, uint8_t shift) {
+    static const uint32_t* back = &&r0;
+    static const uint32_t* exit = &&r15;
+    asm volatile("rbit\t%0, %0" : "+r"(value));
+    goto *(void*)(back - (shift & 0xF));
+r15:asm volatile("uxth\t%0, %0\n\tadcs\t%0, %0, %0" : "+r"(value));
+r14:asm volatile("uxth\t%0, %0\n\tadcs\t%0, %0, %0" : "+r"(value));
+r13:asm volatile("uxth\t%0, %0\n\tadcs\t%0, %0, %0" : "+r"(value));
+r12:asm volatile("uxth\t%0, %0\n\tadcs\t%0, %0, %0" : "+r"(value));
+r11:asm volatile("uxth\t%0, %0\n\tadcs\t%0, %0, %0" : "+r"(value));
+r10:asm volatile("uxth\t%0, %0\n\tadcs\t%0, %0, %0" : "+r"(value));
+r9: asm volatile("uxth\t%0, %0\n\tadcs\t%0, %0, %0" : "+r"(value));
+r8: asm volatile("uxth\t%0, %0\n\tadcs\t%0, %0, %0" : "+r"(value));
+r7: asm volatile("uxth\t%0, %0\n\tadcs\t%0, %0, %0" : "+r"(value));
+r6: asm volatile("uxth\t%0, %0\n\tadcs\t%0, %0, %0" : "+r"(value));
+r5: asm volatile("uxth\t%0, %0\n\tadcs\t%0, %0, %0" : "+r"(value));
+r4: asm volatile("uxth\t%0, %0\n\tadcs\t%0, %0, %0" : "+r"(value));
+r3: asm volatile("uxth\t%0, %0\n\tadcs\t%0, %0, %0" : "+r"(value));
+r2: asm volatile("uxth\t%0, %0\n\tadcs\t%0, %0, %0" : "+r"(value));
+r1: asm volatile("uxth\t%0, %0\n\tadcs\t%0, %0, %0" : "+r"(value));
+r0: asm volatile("rbit\t%0, %0" : "+r"(value));
+    return value;
+}
+
+uint32_t roxr_b(uint32_t value, uint8_t shift) {
+    static const uint32_t* back = &&r0;
+    static const uint32_t* exit = &&r7;
+    asm volatile("rbit\t%0, %0" : "+r"(value));
+    goto *(void*)(back - (shift & 0x7));
+r7: asm volatile("uxtb\t%0, %0\n\tadcs\t%0, %0, %0" : "+r"(value));
+r6: asm volatile("uxtb\t%0, %0\n\tadcs\t%0, %0, %0" : "+r"(value));
+r5: asm volatile("uxtb\t%0, %0\n\tadcs\t%0, %0, %0" : "+r"(value));
+r4: asm volatile("uxtb\t%0, %0\n\tadcs\t%0, %0, %0" : "+r"(value));
+r3: asm volatile("uxtb\t%0, %0\n\tadcs\t%0, %0, %0" : "+r"(value));
+r2: asm volatile("uxtb\t%0, %0\n\tadcs\t%0, %0, %0" : "+r"(value));
+r1: asm volatile("uxtb\t%0, %0\n\tadcs\t%0, %0, %0" : "+r"(value));
+r0: asm volatile("rbit\t%0, %0" : "+r"(value));
+    return value;
+}
+
 
 
 
