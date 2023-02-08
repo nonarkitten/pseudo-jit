@@ -1,7 +1,7 @@
 # All critical output, source folders
 OUTDIR  := bin
 
-BINARY  := buffee_bootloader.elf
+BINARY  := buffee.elf
 SRCDIRS := . clib/ hal/ libbbb/src/ pjit/
 CROSS   := arm-none-eabi-
 

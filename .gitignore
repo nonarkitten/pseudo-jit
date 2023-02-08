@@ -79,6 +79,7 @@ Temporary Items
 
 # Actual project stuff
 .vscode/
+~.vscode/launch.json
 
 # GNU cruft
 .cscode
