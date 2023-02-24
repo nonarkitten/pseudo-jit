@@ -78,7 +78,9 @@ void InitMMU(void) {
     "       mrc     p15,0,r4,c1,c0,0    \n" /* Load control register */
     "       orr     r4,r4,#0x800000     \n" /* v6 page tables, subpages disabled */
     "       orr     r4,r4,#1            \n" /* MMU enabled */
+#ifdef __ARMEB__    
     "       orr     r4,r4,#1<<25        \n" /* MMU tables in big endian */
+#endif    
     "       dsb                         \n"
     "       mcr     p15,0,r4,c1,c0,0    \n" /* Set control register and thus really enable mmu */
     "       isb                         \n"

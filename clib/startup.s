@@ -43,7 +43,6 @@
         .global _bss_start
         .global _bss_end
         .global start_boot
-        .global Reset_Handler
 
 @************************ Internal Definitions ******************************
 @
@@ -115,127 +114,8 @@ Default_Handler:
 @ main function. 
 
 Reset_Handler:
-@
-@ Set up the Vector Base Address Regsiter
-@
-        SUB    r0, r0, r0                      @ Brian Fraser's fix for UBoot
-        MCR    p15, 0, r0, c1, c0, 0
-        SETEND BE                             @ Enable big endian mode
-        LDR    r0, =Entry
-	LDR    lr, =end                        @ init lr to avoid errmsg on gdb      
-        MCR    p15, 0, r0, c12, c0, 0          @ Write VBAR Register
-@
-@ Set up the Stack for Undefined mode
-@
-        LDR   r0, =_stack_top                 @ Read the stack address
-        MSR   cpsr_c, #MODE_UND|I_F_BIT       @ switch to undef  mode
-        MOV   sp,r0                           @ write the stack pointer
-        SUB   r0, r0, #UND_STACK_SIZE         @ give stack space
-@
-@ Set up the Stack for abort mode
-@        
-        MSR   cpsr_c, #MODE_ABT|I_F_BIT       @ Change to abort mode
-        MOV   sp, r0                          @ write the stack pointer
-        SUB   r0,r0, #ABT_STACK_SIZE          @ give stack space
-@
-@ Set up the Stack for FIQ mode
-@       
-        MSR   cpsr_c, #MODE_FIQ|I_F_BIT       @ change to FIQ mode
-        MOV   sp,r0                           @ write the stack pointer
-        SUB   r0,r0, #FIQ_STACK_SIZE          @ give stack space
-@
-@ Set up the Stack for IRQ mode
-@       
-        MSR   cpsr_c, #MODE_IRQ|I_F_BIT       @ change to IRQ mode
-        MOV   sp,r0                           @ write the stack pointer
-        SUB   r0,r0, #IRQ_STACK_SIZE          @ give stack space
-@
-@ Set up the Stack for SVC (Supervisor) mode
-@        
-        @ MSR   cpsr_c, #MODE_SVC|I_F_BIT       @ change to SVC mode
-        @ MOV   sp,r0                           @ write the stack pointer
-        @ SUB   r0,r0, #SVC_STACK_SIZE          @ give stack space
-@
-@ Set up the Stack for System mode
-@      
-        MSR   cpsr_c, #MODE_SYS|I_F_BIT       @ change to system mode
-        MOV   sp,r0                           @ write the stack pointer
-@
-@ Invalidate and Enable Branch Prediction  
-@ Invalidate cache and Enable Branch Prediction 
-@ Allow unaligned access, effective only when MMU is enabled
-@ Enable both instruction and data caches and L2 cache
-@
-        MOV     r0, #0
-        MCR     p15, #0, r0, c7, c5, #6
-        ISB
-        MRC     p15, #0, r0, c1, c0, #0
-        ORR     r0, r0, #0x000004
-        ORR     r0, r0, #0x001800
-        ORR     r0, r0, #0x400000
-        BIC     r0, r0, #0x000002
-        MCR     p15, #0, r0, c1, c0, #0
-        ISB
-        MOV     r0, #2
-        MRC     p15, #0, r1, c1, c0, #1
-        ORR     r0,  r0, r1
-        MCR     p15, #0, r0, c1, c0, #1
-        DSB
-        ISB
-@
-@ Enable Neon/VFP Co-Processor
-@
-        MRC     p15, #0, r1, c1, c0, #2           @ r1 = Access Control Register
-        ORR     r1, r1, #(0xf << 20)              @ enable full access for p10,11
-        MCR     p15, #0, r1, c1, c0, #2           @ Access Control Register = r1
-        MOV     r1, #0
-        MCR     p15, #0, r1, c7, c5, #4           @ flush prefetch buffer
-        MOV     r0,#0x40000000
-        FMXR    FPEXC, r0                         @ Set Neon/VFP Enable bit
-@
-@ Disable the watchdog
-@
-@ 	LDR     r0, =0x44E35000	                  @@ load SOC_WDT_1_REGS
-@ 	LDR	r1, =0xAAAA0000
-@ 	STR	r1, [r0, #0x48]	                  @@ store 0xaaaa to WDT_WSPR
-@ 1:	LDR	r1, [r0, #0x34]	                  @@ loop until WDT_WWPS is 0
-@ 	CMP	r1, #0x0
-@ 	BNE	1b
-@ 	LDR	r1, =0x55550000
-@ 	STR	r1, [r0, #0x48]	                  @@ store 0x5555 to WDT_WSPR
-@ 2:	LDR	r1, [r0, #0x34]	                  @@ loop until WDT_WWPS is 0
-@ 	CMP	r1, #0x0
-@ 	BNE	2b
-@
-@ allow unaligned access, effective only when MMU is enabled
-@
-	MRC	p15, 0, r0, c1, c0, 0
-	BIC	r0, #0x2
-	MCR	p15, 0, r0, c1, c0, 0
-@
-@ Clear the BSS section here
-@
-        LDR   r4, =_bss_start                 @ Start address of BSS
-        LDR   r9, =_bss_end                   @ End address of BSS
-        MOV   r5, #0  
-        MOV   r6, #0  
-        MOV   r7, #0  
-        MOV   r8, #0  
-        B     2f
-1:      STMIA r4!, {r4-r8}                    @ Clear four words in BSS
-2:      CMP   r4, r9
-        BLO   1b                              @ Clear till BSS end
-@
-@ Enter the main function. 
-@
-	// Initialize stdlib
-	@ LDR	r0,=_init
-	@ BLX	r0
-
 	// Enter main program
-	LDR	r0, =main
-	BLX	r0
-	
+        B       main	
 end:
 1:	nop
 	B	1b

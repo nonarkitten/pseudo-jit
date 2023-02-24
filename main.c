@@ -45,6 +45,7 @@
 
 #include "cp15.h"
 #include "main.h"
+#include "support.h"
 
 uint32_t xm_start = 0, xm_end = 0;
 extern char _image_start, _image_end;
@@ -353,7 +354,7 @@ void monitor_break(void) {
 		break;
 	case 'X': case 'x':
 		if(confirm()) {
-			*(volatile uint32_t*)0x44E00F00 = __builtin_bswap32(2);
+			*(volatile uint32_t*)0x44E00F00 = LE32(2);
 		}
 		else printf("Reset cancelled.\n");
 		break;
@@ -363,11 +364,100 @@ void monitor_break(void) {
 	}
 }	
 
-int main(void) {
+/*     __  __       _         _____       _              
+**    |  \/  | __ _(_)_ __   | ____|_ __ | |_ _ __ _   _ 
+**    | |\/| |/ _` | | '_ \  |  _| | '_ \| __| '__| | | |
+**    | |  | | (_| | | | | | | |___| | | | |_| |  | |_| |
+**    |_|  |_|\__,_|_|_| |_| |_____|_| |_|\__|_|   \__, |
+**                                                 |___/ 
+*/ 
+__attribute__((naked))
+void main(void) { 
+    // Brian Fraser's fix for UBoot and enable big endian mode
+    asm volatile (
+    "           sub     r0, r0, r0              \n" /* Brian Fraser's fix for UBoot            */
+    "           mcr     p15, 0, r0, c1, c0, 0   \n" /* Disable MMU, instruction and data cache */
+#ifdef __ARMEB__
+    "           setend  be                      \n" /* Switch to big endian (FTW!)             */
+#endif    
+    );
+
+    // Initialize system stacks
+    asm volatile (
+    "           msr     cpsr_c, #0xd1           \n" /* FIQ                                     */
+    "           ldr     sp,=_stack_end + 0x10   \n"                               
+    "           msr     cpsr_c, #0xd2           \n" /* IRQ                                     */
+    "           ldr     sp,=_stack_end + 0x18   \n"                               
+    "           msr     cpsr_c, #0xd7           \n" /* Abort                                   */
+    "           ldr     sp,=_stack_end + 0x20   \n"                               
+    "           msr     cpsr_c, #0xdb           \n" /* Undefined                               */
+    "           ldr     sp,=_stack_end + 0x28   \n"                               
+    "           msr     cpsr_c, #0xdf           \n" /* System                                  */
+    "           ldr     sp,=_stack_end + 0x1000 \n"                               
+    "           msr     cpsr_c, #0xd3           \n" /* Supervisor                              */
+    "           ldr     sp,=_stack_top          \n"
+    );
+
+    // Invalidate cache and Enable Branch Prediction 
+    // Allow unaligned access, effective only when MMU is enabled
+    // Enable both instruction and data caches
+    asm volatile (                                                                      
+    "           mov r0, #0                      \n"                                     
+    "           mcr p15, #0, r0, c7, c5, #6     \n"                                     
+    "           mrc p15, 0, r0, c1, c0, 0       \n"
+    "           orr r0, r0, #0x000004           \n" // Enable data cache
+    "           orr r0, r0, #0x001800           \n" // Branch prediction and instruction cache
+    "           orr r0, r0, #0x400000           \n" // Enable unaligned data
+    "           bic r0, r0, #0x000002           \n" // Disable strict alignment check
+    "           mcr p15, 0, r0, c1, c0, 0       \n"
+    "           isb                             \n"                                     
+    "           isb                             \n"                                     
+    "           isb                             \n"                                     
+    "           isb                             \n"                                     
+    );                                                                                  
+                                                                                         
+    // Enable Neon/VFP Co-Processor
+    asm volatile (                                                                      
+    "           mrc     p15, #0, r1, c1, c0, #2 \n"    /* r1 = Access Control Register         */
+    "           orr     r1, r1, #(0xf << 20)    \n"    /* enable full access for p10,11        */
+    "           mcr     p15, #0, r1, c1, c0, #2 \n"    /* Access Control Register = r1         */
+    "           mov     r1, #0                  \n"                                     
+    "           mcr     p15, #0, r1, c7, c5, #4 \n"    /* flush prefetch buffer                */
+    "           mov     r0,#0x40000000          \n"                                     
+    "           fmxr    fpexc, r0               \n"    /* Set Neon/VFP Enable bit              */
+    );                                                                                  
+#if 0                                                                                        
+    // disable am335x watchdog
+    asm volatile (                                                                      
+    "           movw r0, 0x5000                 \n"    /* load SOC_WDT_1_REGS                  */
+    "           movt r0, 0x44E3                 \n"
+    "           movw r1, 0xAAAA                 \n"                                     
+    "           str r1, [r0, #0x48]             \n"    /* store 0xaaaa to WDT_WSPR             */
+    "1:         ldr r1, [r0, #0x34]             \n"    /* loop until WDT_WWPS is 0             */
+    "           cmp r1, #0x0                    \n"                                     
+    "           bne 1b                          \n"                                     
+    "           movw r1, 0x5555                 \n"                                     
+    "           str r1, [r0, #0x48]             \n"    /* store 0x5555 to WDT_WSPR             */
+    "2:         ldr r1, [r0, #0x34]             \n"    /* loop until WDT_WWPS is 0             */
+    "           cmp r1, #0x0                    \n"
+    "           bne 2b                          \n"
+    );
+#endif
+    // Clear the .bss section (zero init)
+    asm volatile (                                                                      
+    "           mov r0, #0                      \n"
+    "           ldr r1, =_bss_start             \n"
+    "           ldr r2, =_bss_end               \n"
+    "1:         cmp r1, r2                      \n"
+    "           strlo   r0, [r1], #4            \n"
+    "           blo     1b                      \n"
+    );
+
 	// 1. initialize all hardware including:
 	//    I2C, PMIC, clocks, EEPROM, DRAM, GPMC, GreenPAK, SPI and UART
 	// 2. verify basic operating state of the system 
 	//    i.e. Power-On Self Test or POST
+    am335x_clock_enable_l3_l4wkup();
     am335x_clock_init_core_pll();
     am335x_clock_init_per_pll();
     am335x_dmtimer1_init();
@@ -434,9 +524,9 @@ int main(void) {
 
 	/* For Cortex A8, L2EN has to be enabled for L2 Cache */
 	if(config.cpu_features & (cpu_enable_icache | cpu_enable_dcache)) {
-		CP15AuxControlFeatureEnable(__builtin_bswap32(0x02));
+		CP15AuxControlFeatureEnable(LE32(0x02));
 	} else {
-		CP15AuxControlFeatureDisable(__builtin_bswap32(0x02));
+		CP15AuxControlFeatureDisable(LE32(0x02));
 	}
 
     InitGPMC();

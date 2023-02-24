@@ -44,11 +44,12 @@
  */
 
 #include "pinmux.h"
+#include "support.h"
 
 void config_mux(const pin_muxing_t* pin_mux) {
     while(pin_mux->offset != 0xffffffff) {
         *(volatile uint32_t*)(CFG_MOD_BASE + pin_mux->offset) =
-                (pin_mux->val);
+                LE32(pin_mux->val);
         pin_mux++;
     }
 }

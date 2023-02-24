@@ -50,6 +50,7 @@
 #define _ARM_H
 
 #include <stdint.h>
+#include "support.h"
 
 typedef enum {
     // Lower case are index
@@ -165,7 +166,7 @@ typedef enum {
 } msr_mask_t;
 
 /* Converts generated ARM instruction to little-endian */
-#define LE(X) __builtin_bswap32(X)
+#define LE(X) LE32(X)
 
 /* Calculate flexible second operand -- Immediate with Rotation */
 static inline uint32_t imm(uint32_t value) {

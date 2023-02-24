@@ -2,6 +2,7 @@
 #include <stdint.h>
 
 #include "main.h"
+#include "support.h"
 
 #include "pinmux.h"
 #include "hw_init.h"
@@ -11,7 +12,7 @@
 #include "hw_gpmc.h"
 
 static uint32_t WriteChunk(uint32_t addr, uint32_t data) {
-    data = __builtin_bswap32(data);
+    data = LE32(data);
     WriteSPIBlock(addr, (uint8_t*)&data, sizeof(data));
     am335x_dmtimer1_wait_us(600);
     return addr + 4;
@@ -49,20 +50,20 @@ void WriteLoaderImage(uint32_t address, uint32_t len) {
     pos = 0;
 
     ReadSPIBlock(pos, (uint8_t*)&data, sizeof(data));
-    data = __builtin_bswap32(data);
+    data = LE32(data);
     printf("[SPI0] Read length %u bytes\n", data);
     if(data != len) goto verify_failed;
     pos += 4;
 
     ReadSPIBlock(pos, (uint8_t*)&data, sizeof(data));
-    data = __builtin_bswap32(data);
+    data = LE32(data);
     printf("[SPI0] Read load address %p\n", data);
     if(data != 0x402F0400) goto verify_failed;
     pos += 4;
 
     while(pos < len) {
         ReadSPIBlock(pos, (uint8_t*)&data, sizeof(data));
-        data = __builtin_bswap32(data);
+        data = LE32(data);
         if(data != *src++) goto verify_failed;
         pos += 4;
     }
