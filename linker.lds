@@ -45,28 +45,27 @@ ENTRY(Entry)
 SECTIONS
 {
     . = 0x402F0400;
+	_image_start = .;
 
-    .text : {
-        _image_start = .;
+	/* Program stuff */
+    .text : {    
         *(.startup)
-        /* KEEP(*bl_init.o(.text)) */
-        *(.rodata)
+        *(.rodata*)
         *(.text*)
     }
+
 	/* non-zero global and static variables */
-	. = ALIGN(32);
-	.data : {
-        *(.data)
-        _image_end = .;
-    }
+	. = ALIGN(4);
+	.data : { *(.data*) }
+	_image_end = .;
 
 	/* zeroed global and static variables */
-	. = ALIGN(32);
+	. = ALIGN(16);
 	_bss_start = .;
-	.bss :  { *(.bss) }
+	.bss :  { *(.bss*) }
 	 
 	/* Put the stack inside the BSS to simplify clearing */
-	. = ALIGN(32);
+	. = ALIGN(4);
 	.stack :
 	{
 		_stack_end = .;  /* the danger zone! */
@@ -74,7 +73,7 @@ SECTIONS
 		_stack_top = .;  /* stack grows upwards */
 	}
 
-	. = ALIGN(32);
+	. = ALIGN(16);
 	_bss_end = .;
 }
 

@@ -7,38 +7,21 @@
         {
             "name": "Cortex Debug",
             "cwd": "${workspaceFolder}",
-            "executable": "./bin/debug/buffee.elf",
+            "executable": "bin/debug/buffee.elf",
             "device": "AM3358",
             "request": "launch",
-            "type": "cortex-debug",
-            "breakAfterReset": true,
-            "serverArgs": [
-                "-select", "USB",
-                "-device", "AM3358",
-                "-endian", "big",
-                "-if", "JTAG",
-                "-speed", "auto",
-                "-ir", 
-                "-LocalhostOnly",
-                "-nologtofile"                
-            ],
+            "type": "cortex-debug",            
+            "serverArgs": [ "-endian", "big" ],
             "overrideLaunchCommands": [
                 "monitor reset halt",
                 "load",
+                "monitor reset halt",
                 "set endian big",
-                // "monitor reset halt",
                 "break main",
-                "jump Reset_Handler"
-
-                // "break JumpPjit",
-                //"jump Reset_Handler",
-                // "load ../pseudo-jit/binaries/pjit.elf",
-                // "add-symbol-file ../pseudo-jit/binaries/pjit.elf",
-                // "break pjit_entry",
-                // "continue",
+                // "jump Reset_Handler"
             ],
-            //"interface": "jtag",
-            "servertype": "jlink",
+            "interface": "jtag",
+            "servertype": "jlink"
         }
     ]
 }

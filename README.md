@@ -28,7 +28,16 @@ So, during boot, PJIT has to:
 
 ## Building
 
-We've moved to using Visual Studio Code -- a totally cross-platform development environment that's been working great on my Mac. Code Composer Studio was just too much to fight with. To use, simple grab a copy of Visual Studio Code and install the cortex-debug extension and JLINK software from SEGGER. I've included my .vscode/launch.json in the project which should "just work."
+We've moved to using Visual Studio Code -- a totally cross-platform development environment that's been working great on my Mac. Code Composer Studio was just too much to fight with. You'll need:
+
+- Visual Studio Code (latest version)
+- Cortex-debug extension (latest version)
+- ARM GNU Embedded Toolchain (either 12.2 or 8.3.1)
+- Segger J-Link (V6.32i ONLY)
+
+You'll need to stick with J-Link V6.32i as it seems to be the last version which reliably debugs big-endian code. GCC only supported the BE8 flag from 8.3.1 and onward, but versions 9 thru 11 produce oddly larger than necessary code. Our original testing was with 8.3.1 but we're using 12.2 now and it seems fine (knock on wood).
+
+I've included my .vscode/launch.json in the project which should "just work," as long as arm-none-eabi-* executables are in your path.
 
 To build, open the shell and type "make." I'm not 100% this works on Windows anymore, but it should on Linux and Mac. This is now a one-step make that will build everything required and spit out the binary at the end.
 

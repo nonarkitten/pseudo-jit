@@ -171,23 +171,27 @@ typedef enum {
  *                  |_|
  */
 // @brief emit supervisor exception
+__attribute__((target("thumb")))
 static void emit_SVC(uint32_t** emit, int exception) {
     *(*emit)++ = nop();
     *(*emit)++ = svc(exception);
 }
 // @brief check if we're in supervisor mode, exception if not
+__attribute__((target("thumb")))
 static void emit_is_SVC(uint32_t** emit) {
     // r2 should hold SR
     *(*emit)++ = tst(r2, imm(0x2000));
     *(*emit)++ = svc_cc(ARM_CC_NE, PRIV);
 }
 // @brief load our X flag into the C flag, destroys r0
+__attribute__((target("thumb")))
 static void emit_load_X(uint32_t** emit) {
     // restore X -> C
     *(*emit)++ = ldrb(r0, r5, index_imm(1, 0, (1 + offsetof(cpu_t, sr))));
     *(*emit)++ = rsbs(r0, r0, imm(0xf));
 }
 // @brief save out C flag back into the X, destroys r0
+__attribute__((target("thumb")))
 static void emit_save_X(uint32_t** emit) {
     // put C back into X, leave everything else
     *(*emit)++ = ldrb(r0, r5, index_imm(1, 0, (1 + offsetof(cpu_t, sr))));
@@ -196,6 +200,7 @@ static void emit_save_X(uint32_t** emit) {
     *(*emit)++ = strb(r0, r5, index_imm(1, 0, (1 + offsetof(cpu_t, sr))));
 }
 // @brief convert a value in r1 (e.g., 3) into a mask (e.g., 1<<3)
+__attribute__((target("thumb")))
 static void emit_src_bit_to_mask(uint32_t** emit) {
     // convert source 'r1' to 'bit position' and pre-test
     *(*emit)++ = mov(r0, imm(1));
@@ -203,6 +208,7 @@ static void emit_src_bit_to_mask(uint32_t** emit) {
     *(*emit)++ = tst(r1, r2);
 }
 // @brief given a 68K SR value in reg, set ARM CPSR flags
+__attribute__((target("thumb")))
 static void emit_68k_to_arm_cc(uint32_t** emit, uint8_t reg) {
     // recompose flags -> MCR, reg has ...xnzvc
     *(*emit)++ = rbit(reg, reg);       // cvznx...0000
@@ -211,6 +217,7 @@ static void emit_68k_to_arm_cc(uint32_t** emit, uint8_t reg) {
     *(*emit)++ = msr(CPSR_f, reg);     // msr  CPSR_f, r0
 }
 // @brief get the ARM CPSR flags into the low 4-bit of reg
+__attribute__((target("thumb")))
 static void emit_arm_to_68k_cc(uint32_t** emit, uint8_t reg) {
     // get CURRENT condition flags (do NOT affect X)
     *(*emit)++ = bic(reg, r0, imm(0xF));
@@ -220,6 +227,7 @@ static void emit_arm_to_68k_cc(uint32_t** emit, uint8_t reg) {
     *(*emit)++ = orr_cc(ARM_CC_MI, reg, reg, imm(0x07));
 }
 // @brief load the 68K SR into reg
+__attribute__((target("thumb")))
 static void emit_load_SR(uint32_t** emit, uint8_t reg) {
     *(*emit)++ = ldrh(reg, r5, index_imm(1, 0, offsetof(cpu_t, sr)));
     // save our stack pointer depending on current mode
@@ -229,6 +237,7 @@ static void emit_load_SR(uint32_t** emit, uint8_t reg) {
     emit_arm_to_68k_cc(emit, reg);
 }
 // @brief save the 68K SR in reg to cpu_t state
+__attribute__((target("thumb")))
 static void emit_save_SR(uint32_t** emit, uint8_t reg) {
     // put reg -> sr
     *(*emit)++ = strh(reg, r5, index_imm(1, 0, offsetof(cpu_t, sr)));
@@ -239,11 +248,13 @@ static void emit_save_SR(uint32_t** emit, uint8_t reg) {
     emit_68k_to_arm_cc(emit, reg);
 }
 // @brief load the 68K CCR into reg
+__attribute__((target("thumb")))
 static void emit_load_CR(uint32_t** emit, uint8_t reg) {
     *(*emit)++ = ldrb(reg, r5, index_imm(1, 0, 1 + offsetof(cpu_t, sr)));
     emit_arm_to_68k_cc(emit, reg);
 }
 // @brief save the 68K CCR in reg to cpu_t state
+__attribute__((target("thumb")))
 static void emit_save_CR(uint32_t** emit, uint8_t reg) {
     // put reg -> sr
     *(*emit)++ = strb(reg, r5, index_imm(1, 0, 1 + offsetof(cpu_t, sr)));
@@ -251,6 +262,7 @@ static void emit_save_CR(uint32_t** emit, uint8_t reg) {
 }
 // @brief return the ARM condition code based on the 68K cc field
 // @note HI and LS should not be used directly in any _cc opcode!
+__attribute__((target("thumb")))
 static int arm_cc(uint16_t opcode) {
     switch(opcode & 0x0F00) {
     case 0x0000: return ARM_CC_AL; break; // 0000 T  True           1110
@@ -272,13 +284,13 @@ static int arm_cc(uint16_t opcode) {
     } // end switch
 }
 
-
 // @brief Main arithmetic routine; does not add BX LR
 // @param uint32_t** emit stram to output opcodes
 // @param ALU_OP_t arithmetic operation to perform
 // @param regS source (unmodifed) register
 // @param regD destination (modified) register, or with NO_FLAGS to suppress setting flags
 // @return Nothing
+__attribute__((target("thumb")))
 void emit_ALU(uint32_t** emit, ALU_OP_t op, uint8_t regS, uint8_t regD) {
     uint32_t opcode = 0;
     uint32_t cond   = 0;
@@ -450,6 +462,7 @@ void emit_ALU(uint32_t** emit, ALU_OP_t op, uint8_t regS, uint8_t regD) {
 #pragma GCC diagnostic pop
 
 // @brief wrapper for ADDI, ANDI, CMPI, EORI, ORI, SUBI; adds BX LR
+__attribute__((target("thumb")))
 void emit_IMD_ALU(uint32_t** emit, uint16_t opcode, ALU_OP_t op) {
     uint8_t dEA  = (opcode & 0xFF);
     uint8_t regD = emit_EA_Load(emit, dEA, 0, 2, 1);
@@ -458,6 +471,7 @@ void emit_IMD_ALU(uint32_t** emit, uint16_t opcode, ALU_OP_t op) {
     *(*emit)++ = bx(lr);
 }
 // @brief wrapper for ADD, AND, CMP, EOR, OR, SUB; adds BX LR
+__attribute__((target("thumb")))
 void emit_EA_ALU(uint32_t** emit, uint16_t opcode, ALU_OP_t op) {
     uint8_t sEA = (opcode & 0xC0), dEA = (opcode & 0xC0);
     if ((op == ALU_OP_CMP) || !(op == ALU_OP_EOR) || !(opcode & 0x0100)) {
@@ -476,6 +490,7 @@ void emit_EA_ALU(uint32_t** emit, uint16_t opcode, ALU_OP_t op) {
     *(*emit)++ = bx(lr);
 }
 // @brief wrapper for ABCD, ADDX, SBCD, SUBX; adds BX LR
+__attribute__((target("thumb")))
 void emit_BCD_XOP_ALU(uint32_t** emit, uint16_t opcode, ALU_OP_t op) {
     uint8_t sEA = opcode & 0xC7;
     uint8_t dEA = ((opcode >> 9) & 7) | (opcode & 0xC0);
@@ -491,6 +506,7 @@ void emit_BCD_XOP_ALU(uint32_t** emit, uint16_t opcode, ALU_OP_t op) {
     *(*emit)++ = bx(lr);
 }
 // @brief wrapper for CMP, NEG, NOT; adds BX LR
+__attribute__((target("thumb")))
 void emit_UNARY_EA_ALU(uint32_t** emit, uint16_t opcode, ALU_OP_t op) {
     uint8_t dEA  = opcode & 0xFF;
     uint8_t regD = emit_EA_Load(emit, dEA, 0, 2, 1);
@@ -499,6 +515,7 @@ void emit_UNARY_EA_ALU(uint32_t** emit, uint16_t opcode, ALU_OP_t op) {
     *(*emit)++ = bx(lr);
 }
 // @brief wrapper for NEGX, NBCD; adds BX LR
+__attribute__((target("thumb")))
 void emit_BCD_XOP_EA_ALU(uint32_t** emit, uint16_t opcode, ALU_OP_t op) {
     uint8_t dEA = opcode & 0xFF;
     emit_load_X(emit);
@@ -509,6 +526,7 @@ void emit_BCD_XOP_EA_ALU(uint32_t** emit, uint16_t opcode, ALU_OP_t op) {
     *(*emit)++ = bx(lr);
 }
 // @brief perform an immediate or register (form 2) shift
+__attribute__((target("thumb")))
 static void emit_Mem_Shift(uint32_t** emit, uint16_t opcode, ALU_OP_t op) {
     uint8_t dEA   = opcode & 0x3F;
     uint8_t regD  = emit_EA_Load(emit, dEA, 0, 2, 1);
@@ -519,6 +537,7 @@ static void emit_Mem_Shift(uint32_t** emit, uint16_t opcode, ALU_OP_t op) {
     *(*emit)++ = bx(lr);
 }
 // @brief perform a memory (form 1) shift by one
+__attribute__((target("thumb")))
 static void emit_ImmReg_Shift(uint32_t** emit, uint16_t opcode, ALU_OP_t op) {
     uint8_t regS, value = (opcode & 0x0E00) >> 9;
     if (opcode & 0x0020) {  // Register shit
@@ -534,6 +553,7 @@ static void emit_ImmReg_Shift(uint32_t** emit, uint16_t opcode, ALU_OP_t op) {
     *(*emit)++ = bx(lr);
 }
 // @brief common routine for handling bitwise operators
+__attribute__((target("thumb")))
 static void emit_Bit_Op(uint32_t** emit, uint16_t opcode, ALU_OP_t op) {
     uint8_t regS = emit_EA_Load(emit, (opcode & 0x0100) ? ((opcode >> 9) & 7) : 0x3C, 1, 1, 0);
     *(*emit)++   = mov(r0, imm(1));
@@ -544,6 +564,7 @@ static void emit_Bit_Op(uint32_t** emit, uint16_t opcode, ALU_OP_t op) {
     *(*emit)++ = bx(lr);
 }
 
+__attribute__((target("thumb")))
 static void emit_DIV(uint32_t** emit, uint16_t opcode, ALU_OP_t op) {
     uint8_t sEA = (opcode & 0xC0), dEA = (opcode & 0xC0);
     // m->r
@@ -567,6 +588,7 @@ static void emit_DIV(uint32_t** emit, uint16_t opcode, ALU_OP_t op) {
     *(*emit)++ = pop(PC);
 }    
 
+__attribute__((target("thumb")))
 static void emit_ROXd_opcode(uint32_t** emit, uint16_t opcode) {
     uint8_t shift = (opcode >> 9) & 7;
     if(opcode & 0x0020) {
@@ -629,6 +651,7 @@ static void emit_ROXd_opcode(uint32_t** emit, uint16_t opcode) {
  *           |_|
  */
 
+__attribute__((target("thumb")))
 void emit_ABCD(uint32_t** emit, uint16_t opcode) {
     uint8_t sReg = (opcode & 0x7);
     uint8_t dReg = (opcode >> 9) & 0x7;
@@ -655,66 +678,84 @@ void emit_ABCD(uint32_t** emit, uint16_t opcode) {
     }
     *emit += 1;
 }
+__attribute__((target("thumb")))
 void emit_ADDBW(uint32_t** emit, uint16_t opcode) {
     emit_EA_ALU(emit, opcode, ALU_OP_ADD);
 }
+__attribute__((target("thumb")))
 void emit_ADDL(uint32_t** emit, uint16_t opcode) {
     emit_EA_ALU(emit, opcode, ALU_OP_ADD);
 }
+__attribute__((target("thumb")))
 void emit_ADDAL(uint32_t** emit, uint16_t opcode) {
     emit_EA_ALU(emit, opcode, ALU_OP_ADD);
 }
+__attribute__((target("thumb")))
 void emit_ADDAW(uint32_t** emit, uint16_t opcode) {
     emit_EA_ALU(emit, opcode, ALU_OP_ADD);
 }
+__attribute__((target("thumb")))
 void emit_ADDIBW(uint32_t** emit, uint16_t opcode) {
     emit_IMD_ALU(emit, opcode, ALU_OP_ADD);
 }
+__attribute__((target("thumb")))
 void emit_ADDIL(uint32_t** emit, uint16_t opcode) {
     emit_IMD_ALU(emit, opcode, ALU_OP_ADD);
 }
+__attribute__((target("thumb")))
 void emit_ADDQBW(uint32_t** emit, uint16_t opcode) {
     uint8_t value = (opcode & 0x0E00) >> 9;
     if (!value) value = 8;
     *(*emit)++ = 0xE3A01000 | (value);  // mov r1, value
     emit_IMD_ALU(emit, opcode, ALU_OP_ADD);
 }
+__attribute__((target("thumb")))
 void emit_ADDQL(uint32_t** emit, uint16_t opcode) {
     uint8_t value = (opcode & 0x0E00) >> 9;
     if (!value) value = 8;
     *(*emit)++ = 0xE3A01000 | (value);  // mov r1, value
     emit_IMD_ALU(emit, opcode, ALU_OP_ADD);
 }
+__attribute__((target("thumb")))
 void emit_ADDW(uint32_t** emit, uint16_t opcode) {
     emit_EA_ALU(emit, opcode, ALU_OP_ADD);
 }
+__attribute__((target("thumb")))
 void emit_ADDXBW(uint32_t** emit, uint16_t opcode) {
     emit_BCD_XOP_ALU(emit, opcode, ALU_OP_ADDX);
 }
+__attribute__((target("thumb")))
 void emit_ADDXL(uint32_t** emit, uint16_t opcode) {
     emit_BCD_XOP_ALU(emit, opcode, ALU_OP_ADDX);
 }
+__attribute__((target("thumb")))
 void emit_ALINE(uint32_t** emit, uint16_t opcode) {
     return emit_SVC(emit, LINE_A);
 }
+__attribute__((target("thumb")))
 void emit_ANDBW(uint32_t** emit, uint16_t opcode) {
     emit_EA_ALU(emit, opcode, ALU_OP_AND);
 }
+__attribute__((target("thumb")))
 void emit_ANDL(uint32_t** emit, uint16_t opcode) {
     emit_EA_ALU(emit, opcode, ALU_OP_AND);
 }
+__attribute__((target("thumb")))
 void emit_ANDIBW(uint32_t** emit, uint16_t opcode) {
     emit_IMD_ALU(emit, opcode, ALU_OP_AND);
 }
+__attribute__((target("thumb")))
 void emit_ANDIL(uint32_t** emit, uint16_t opcode) {
     emit_IMD_ALU(emit, opcode, ALU_OP_AND);
 }
+__attribute__((target("thumb")))
 void emit_ANDI_TO_CCR(uint32_t** emit, uint16_t opcode) {
     emit_load_CR(emit, 2);  // r2=sr, r1=imm
     emit_ALU(emit, ALU_OP_AND, 1, 2);
     emit_save_CR(emit, 2);  // put r2-> cpu_t and CPSR
     *(*emit)++ = bx(lr);
 }
+__attribute__((target("thumb")))
 void emit_ANDI_TO_SR(uint32_t** emit, uint16_t opcode) {
     emit_load_SR(emit, 2);  // r2=sr, r1=imm
     emit_is_SVC(emit);
@@ -722,18 +763,23 @@ void emit_ANDI_TO_SR(uint32_t** emit, uint16_t opcode) {
     emit_save_SR(emit, 2);  // put r2-> cpu_t and CPSR
     *(*emit)++ = bx(lr);
 }
+__attribute__((target("thumb")))
 void emit_ANDW(uint32_t** emit, uint16_t opcode) {
     emit_EA_ALU(emit, opcode, ALU_OP_AND);
 }
+__attribute__((target("thumb")))
 void emit_ASdBW(uint32_t** emit, uint16_t opcode) {
     emit_ImmReg_Shift(emit, opcode, (opcode & 0x0100) ? ALU_OP_ASL : ALU_OP_ASR);
 }
+__attribute__((target("thumb")))
 void emit_ASdL(uint32_t** emit, uint16_t opcode) {
     emit_ImmReg_Shift(emit, opcode, (opcode & 0x0100) ? ALU_OP_ASL : ALU_OP_ASR);
 }
+__attribute__((target("thumb")))
 void emit_ASd(uint32_t** emit, uint16_t opcode) {
     emit_Mem_Shift(emit, opcode, (opcode & 0x0100) ? ALU_OP_ASL : ALU_OP_ASR);
 }
+__attribute__((target("thumb")))
 void emit_Bcc(uint32_t** emit, uint16_t opcode) {
     int8_t offset = (int8_t)(opcode & 0xFF);
     if((offset == 0) || (offset == -1)) { 
@@ -781,26 +827,33 @@ void emit_Bcc(uint32_t** emit, uint16_t opcode) {
     }
     *(*emit)++ = bx(lr);
 }
+__attribute__((target("thumb")))
 void emit_BCHG(uint32_t** emit, uint16_t opcode) {
     emit_Bit_Op(emit, opcode, ALU_OP_BCHG);
 }
+__attribute__((target("thumb")))
 void emit_BCLR(uint32_t** emit, uint16_t opcode) {
     emit_Bit_Op(emit, opcode, ALU_OP_BCLR);
 }
+__attribute__((target("thumb")))
 void emit_BRA(uint32_t** emit, uint16_t opcode) {
     emit_Bcc(emit, opcode);
 }
+__attribute__((target("thumb")))
 void emit_BSET(uint32_t** emit, uint16_t opcode) {
     emit_Bit_Op(emit, opcode, ALU_OP_BSET);
 }
+__attribute__((target("thumb")))
 void emit_BSR(uint32_t** emit, uint16_t opcode) {
     *(*emit)++ = nop();
     **emit = b_imm(calc_offset((uint32_t)*emit, (uint32_t)branch_subroutine));
     *emit += 1;
 }
+__attribute__((target("thumb")))
 void emit_BTST(uint32_t** emit, uint16_t opcode) {
     emit_Bit_Op(emit, opcode, ALU_OP_BTST);
 }
+__attribute__((target("thumb")))
 void emit_CHK(uint32_t** emit, uint16_t opcode) {
     uint8_t sEA  = (opcode & 0xFF);
     uint8_t dEA  = (opcode & 0xC0) | ((opcode >> 9) & 7);
@@ -811,33 +864,43 @@ void emit_CHK(uint32_t** emit, uint16_t opcode) {
     *(*emit)++ = svc_cc(ARM_CC_GT, TRAPCHK);
     *(*emit)++ = bx(lr);
 }
+__attribute__((target("thumb")))
 void emit_CLRBW(uint32_t** emit, uint16_t opcode) {
     emit_UNARY_EA_ALU(emit, opcode, ALU_OP_CLR);
 }
+__attribute__((target("thumb")))
 void emit_CLRL(uint32_t** emit, uint16_t opcode) {
     emit_UNARY_EA_ALU(emit, opcode, ALU_OP_CLR);
 }
+__attribute__((target("thumb")))
 void emit_CMPBW(uint32_t** emit, uint16_t opcode) {
     emit_EA_ALU(emit, opcode, ALU_OP_CMP);
 }
+__attribute__((target("thumb")))
 void emit_CMPL(uint32_t** emit, uint16_t opcode) {
     emit_EA_ALU(emit, opcode, ALU_OP_CMP);
 }
+__attribute__((target("thumb")))
 void emit_CMPAL(uint32_t** emit, uint16_t opcode) {
     emit_EA_ALU(emit, opcode, ALU_OP_CMP);
 }
+__attribute__((target("thumb")))
 void emit_CMPAW(uint32_t** emit, uint16_t opcode) {
     emit_EA_ALU(emit, opcode, ALU_OP_CMP);
 }
+__attribute__((target("thumb")))
 void emit_CMPB(uint32_t** emit, uint16_t opcode) {
     emit_EA_ALU(emit, opcode, ALU_OP_CMP);
 }
+__attribute__((target("thumb")))
 void emit_CMPIBW(uint32_t** emit, uint16_t opcode) {
     emit_IMD_ALU(emit, opcode, ALU_OP_CMP);
 }
+__attribute__((target("thumb")))
 void emit_CMPIL(uint32_t** emit, uint16_t opcode) {
     emit_IMD_ALU(emit, opcode, ALU_OP_CMP);
 }
+__attribute__((target("thumb")))
 void emit_CMPML(uint32_t** emit, uint16_t opcode) {
     uint8_t dEA = 0x18 | (opcode & 0xC0) | ((opcode >> 9) & 0x7);
     uint8_t sEA = 0x18 | (opcode & 0xC7);
@@ -846,15 +909,19 @@ void emit_CMPML(uint32_t** emit, uint16_t opcode) {
     emit_ALU(emit, ALU_OP_CMP, regS, regD);
     *(*emit)++ = bx(lr);    
 }
+__attribute__((target("thumb")))
 void emit_CMPMB(uint32_t** emit, uint16_t opcode) {
     emit_CMPML(emit, opcode);
 }
+__attribute__((target("thumb")))
 void emit_CMPMW(uint32_t** emit, uint16_t opcode) {
     emit_CMPML(emit, opcode);
 }
+__attribute__((target("thumb")))
 void emit_CMPW(uint32_t** emit, uint16_t opcode) {
     emit_EA_ALU(emit, opcode, ALU_OP_CMP);
 }
+__attribute__((target("thumb")))
 void emit_DBcc(uint32_t** emit, uint16_t opcode) {
     // If Condition True Then Exit
     uint8_t cc = arm_cc(opcode);
@@ -897,33 +964,42 @@ void emit_DBcc(uint32_t** emit, uint16_t opcode) {
     *(*emit)++ = bx_cc(ARM_CC_EQ, lr);
     *(*emit)++ = b_imm(calc_offset((uint32_t)*emit, (uint32_t)branch_normal));
 }
+__attribute__((target("thumb")))
 void emit_DBRA(uint32_t** emit, uint16_t opcode) {
     emit_DBcc(emit, opcode);
 }
+__attribute__((target("thumb")))
 void emit_DIVS(uint32_t** emit, uint16_t opcode) {
     emit_DIV(emit, (opcode & 0xFEFF), ALU_OP_DIVSW);
 }
+__attribute__((target("thumb")))
 void emit_DIVU(uint32_t** emit, uint16_t opcode) {
     emit_DIV(emit, (opcode & 0xFEFF), ALU_OP_DIVUW);
 }
+__attribute__((target("thumb")))
 void emit_EORBW(uint32_t** emit, uint16_t opcode) {
     emit_EA_ALU(emit, opcode, ALU_OP_EOR);
 }
+__attribute__((target("thumb")))
 void emit_EORL(uint32_t** emit, uint16_t opcode) {
     emit_EA_ALU(emit, opcode, ALU_OP_EOR);
 }
+__attribute__((target("thumb")))
 void emit_EORIBW(uint32_t** emit, uint16_t opcode) {
     emit_IMD_ALU(emit, opcode, ALU_OP_EOR);
 }
+__attribute__((target("thumb")))
 void emit_EORIL(uint32_t** emit, uint16_t opcode) {
     emit_IMD_ALU(emit, opcode, ALU_OP_EOR);
 }
+__attribute__((target("thumb")))
 void emit_EORI_TO_CCR(uint32_t** emit, uint16_t opcode) {
     emit_load_CR(emit, 2);  // r2=sr, r1=imm
     emit_ALU(emit, ALU_OP_EOR, 1, 2);
     emit_save_CR(emit, 2);  // put r2-> cpu_t and CPSR
     *(*emit)++ = bx(lr);
 }
+__attribute__((target("thumb")))
 void emit_EORI_TO_SR(uint32_t** emit, uint16_t opcode) {
     emit_load_SR(emit, 2);  // r2=sr, r1=imm
     emit_is_SVC(emit);
@@ -931,6 +1007,7 @@ void emit_EORI_TO_SR(uint32_t** emit, uint16_t opcode) {
     emit_save_SR(emit, 2);  // put r2-> cpu_t and CPSR
     *(*emit)++ = bx(lr);
 }
+__attribute__((target("thumb")))
 void emit_EXG(uint32_t** emit, uint16_t opcode) {
     // If the exchange is between data and address registers,
     // this field always specifies the data register.
@@ -980,18 +1057,23 @@ void emit_EXG(uint32_t** emit, uint16_t opcode) {
     }
     *(*emit)++ = bx(lr);
 }
+__attribute__((target("thumb")))
 void emit_EXTL(uint32_t** emit, uint16_t opcode) {
     emit_IMD_ALU(emit, opcode, ALU_OP_EXTWL);
 }
+__attribute__((target("thumb")))
 void emit_EXTW(uint32_t** emit, uint16_t opcode) {
     emit_IMD_ALU(emit, opcode, ALU_OP_EXTBW);
 }
+__attribute__((target("thumb")))
 void emit_FLINE(uint32_t** emit, uint16_t opcode) {
     emit_SVC(emit, LINE_F);
 }
+__attribute__((target("thumb")))
 void emit_ILLEGAL(uint32_t** emit, uint16_t opcode) {
     emit_SVC(emit, ILLINSTR);
 }
+__attribute__((target("thumb")))
 void emit_JMP(uint32_t** emit, uint16_t opcode) {
     uint8_t sEA = 0xC0 | (opcode & 0x3F);
     uint8_t sReg = emit_EA_Load(emit, sEA, 1, 1, 0);
@@ -999,6 +1081,7 @@ void emit_JMP(uint32_t** emit, uint16_t opcode) {
     **emit = b_imm(calc_offset((uint32_t)*emit, jump_normal));
     *emit += 1;
 }
+__attribute__((target("thumb")))
 void emit_JSR(uint32_t** emit, uint16_t opcode) {
     uint8_t sEA = 0xC0 | (opcode & 0x3F);
     uint8_t sReg = emit_EA_Load(emit, sEA, 1, 1, 0);
@@ -1006,6 +1089,7 @@ void emit_JSR(uint32_t** emit, uint16_t opcode) {
     **emit = b_imm(calc_offset((uint32_t)*emit, jump_subroutine));
     *emit += 1;
 }
+__attribute__((target("thumb")))
 void emit_LEA(uint32_t** emit, uint16_t opcode) {
     // < ea > → An
     uint8_t dReg = 6 + ((opcode >> 9) & 0x7);
@@ -1021,6 +1105,7 @@ void emit_LEA(uint32_t** emit, uint16_t opcode) {
     }
     *(*emit)++ = bx(lr);
 }
+__attribute__((target("thumb")))
 void emit_LINK(uint32_t** emit, uint16_t opcode) {
     // SP – 4 -> SP; An -> (SP); SP -> An; SP + dn -> SP
     uint8_t aReg = 6 + (opcode & 7);
@@ -1028,26 +1113,32 @@ void emit_LINK(uint32_t** emit, uint16_t opcode) {
     *(*emit)++ = add(sp, aReg, reg(r1));
     *(*emit)++ = bx(lr);
 }
+__attribute__((target("thumb")))
 void emit_LSdBW(uint32_t** emit, uint16_t opcode) {
     emit_ImmReg_Shift(emit, opcode, (opcode & 0x0100) ? ALU_OP_LSL : ALU_OP_LSR);
 }
+__attribute__((target("thumb")))
 void emit_LSdL(uint32_t** emit, uint16_t opcode) {
     emit_ImmReg_Shift(emit, opcode, (opcode & 0x0100) ? ALU_OP_LSL : ALU_OP_LSR);
 }
+__attribute__((target("thumb")))
 void emit_LSd(uint32_t** emit, uint16_t opcode) {
     emit_Mem_Shift(emit, opcode, (opcode & 0x0100) ? ALU_OP_LSL : ALU_OP_LSR);
 }
+__attribute__((target("thumb")))
 void emit_MOVE_SR_TO(uint32_t** emit, uint16_t opcode) {
     emit_load_SR(emit, 1);
     uint8_t dEA = 0x40 | (opcode & 0x3F);
     emit_EA_Store(emit, dEA, 1, 1, 0);
 }
+__attribute__((target("thumb")))
 void emit_MOVE_TO_CCR(uint32_t** emit, uint16_t opcode) {
     uint8_t sEA  = opcode & 0x3F;
     uint8_t regS = emit_EA_Load(emit, sEA, 1, 1, 0);
     emit_save_CR(emit, regS);  // put r2-> cpu_t and CPSR
     *(*emit)++ = bx(lr);
 }
+__attribute__((target("thumb")))
 void emit_MOVE_TO_SR(uint32_t** emit, uint16_t opcode) {
     emit_load_SR(emit, 2);  // r2=sr, r1=imm
     emit_is_SVC(emit);
@@ -1056,6 +1147,7 @@ void emit_MOVE_TO_SR(uint32_t** emit, uint16_t opcode) {
     emit_save_SR(emit, regS);  // put r2-> cpu_t and CPSR
     *(*emit)++ = bx(lr);
 }
+__attribute__((target("thumb")))
 void emit_MOVE_TO_USP(uint32_t** emit, uint16_t opcode) {
     emit_load_SR(emit, 2);  // r2=sr, r1=imm
     emit_is_SVC(emit);
@@ -1063,6 +1155,7 @@ void emit_MOVE_TO_USP(uint32_t** emit, uint16_t opcode) {
     *(*emit)++ = str(aReg, r5, index_imm(1, 0, offsetof(cpu_t, usp)));
     *(*emit)++ = bx(lr);
 }
+__attribute__((target("thumb")))
 void emit_MOVE_USP_TO(uint32_t** emit, uint16_t opcode) {
     emit_load_SR(emit, 2);  // r2=sr, r1=imm
     emit_is_SVC(emit);
@@ -1070,18 +1163,21 @@ void emit_MOVE_USP_TO(uint32_t** emit, uint16_t opcode) {
     *(*emit)++ = ldr(aReg, r5, index_imm(1, 0, offsetof(cpu_t, usp)));
     *(*emit)++ = bx(lr);
 }
+__attribute__((target("thumb")))
 void emit_MOVEAL(uint32_t** emit, uint16_t opcode) {
     uint8_t sEA  = 0x80 | (opcode & 0x3F);
     uint8_t regD = 6 + ((opcode & 0x0E00) >> 9) & 0x7;
     emit_EA_Load(emit, sEA, regD, 1, 0);
     *(*emit)++ = bx(lr);
 }
+__attribute__((target("thumb")))
 void emit_MOVEAW(uint32_t** emit, uint16_t opcode) {
     uint8_t sEA  = 0x40 | (opcode & 0x3F);
     uint8_t regD = 6 + ((opcode & 0x0E00) >> 9) & 0x7;
     emit_EA_Load(emit, sEA, regD, 1, 0);
     *(*emit)++ = bx(lr);
 }
+__attribute__((target("thumb")))
 void emit_MOVEB(uint32_t** emit, uint16_t opcode) {
     uint8_t sEA  = 0x00 | (opcode & 0x3F);
     uint8_t dEA  = 0x00 | ((opcode & 0x0E00) >> 9) | ((opcode & 0x01C0) >> 3);
@@ -1091,6 +1187,7 @@ void emit_MOVEB(uint32_t** emit, uint16_t opcode) {
     *(*emit)++ = bx(lr);
 }
 
+__attribute__((target("thumb")))
 void emit_MOVEM(uint32_t** emit, uint16_t opcode) {
     
     if((opcode & 0x3C) == 0x0C) { 
@@ -1166,6 +1263,7 @@ void emit_MOVEM(uint32_t** emit, uint16_t opcode) {
         }
     }        
 }
+__attribute__((target("thumb")))
 void emit_MOVEP(uint32_t** emit, uint16_t opcode) {
     // MOVEP Dx,(d16,Ay)
     // MOVEP (d16,Ay),Dx
@@ -1212,6 +1310,7 @@ void emit_MOVEP(uint32_t** emit, uint16_t opcode) {
     }
     *(*emit)++ = bx(lr);
 }
+__attribute__((target("thumb")))
 void emit_MOVEQ(uint32_t** emit, uint16_t opcode) {
     int n = (int8_t)opcode;
     if (n > 0)
@@ -1221,6 +1320,7 @@ void emit_MOVEQ(uint32_t** emit, uint16_t opcode) {
     emit_EA_Store(emit, (opcode & 0x0E00) >> 9, 1, 2, 0);
     *(*emit)++ = bx(lr);
 }
+__attribute__((target("thumb")))
 void emit_MOVEW(uint32_t** emit, uint16_t opcode) {
     uint8_t sEA  = 0x40 | (opcode & 0x3F);
     uint8_t dEA  = 0x40 | ((opcode & 0x0E00) >> 9) | ((opcode & 0x01C0) >> 3);
@@ -1229,6 +1329,7 @@ void emit_MOVEW(uint32_t** emit, uint16_t opcode) {
     emit_EA_Store(emit, dEA, regS, 2, 0);
     *(*emit)++ = bx(lr);
 }
+__attribute__((target("thumb")))
 void emit_MOVEL(uint32_t** emit, uint16_t opcode) {
     uint8_t sEA  = 0x80 | (opcode & 0x3F);
     uint8_t dEA  = 0x80 | ((opcode & 0x0E00) >> 9) | ((opcode & 0x01C0) >> 3);
@@ -1238,12 +1339,15 @@ void emit_MOVEL(uint32_t** emit, uint16_t opcode) {
     emit_EA_Store(emit, dEA, regS, 2, 0);
     *(*emit)++ = bx(lr);
 }
+__attribute__((target("thumb")))
 void emit_MULS(uint32_t** emit, uint16_t opcode) {
     emit_EA_ALU(emit, (opcode & 0xFEFF), ALU_OP_MULSW);
 }
+__attribute__((target("thumb")))
 void emit_MULU(uint32_t** emit, uint16_t opcode) {
     emit_EA_ALU(emit, (opcode & 0xFEFF), ALU_OP_MULUW);
 }
+__attribute__((target("thumb")))
 void emit_NBCD(uint32_t** emit, uint16_t opcode) {
     uint8_t dEA = (opcode & 0x3F);
 
@@ -1281,46 +1385,59 @@ void emit_NBCD(uint32_t** emit, uint16_t opcode) {
     *emit += 1;
 
 }
+__attribute__((target("thumb")))
 void emit_NEGBW(uint32_t** emit, uint16_t opcode) {
     emit_UNARY_EA_ALU(emit, opcode, ALU_OP_NEG);
 }
+__attribute__((target("thumb")))
 void emit_NEGL(uint32_t** emit, uint16_t opcode) {
     emit_UNARY_EA_ALU(emit, opcode, ALU_OP_NEG);
 }
+__attribute__((target("thumb")))
 void emit_NEGXBW(uint32_t** emit, uint16_t opcode) {
     emit_BCD_XOP_EA_ALU(emit, opcode, ALU_OP_NEGX);
 }
+__attribute__((target("thumb")))
 void emit_NEGXL(uint32_t** emit, uint16_t opcode) {
     emit_BCD_XOP_EA_ALU(emit, opcode, ALU_OP_NEGX);
 }
+__attribute__((target("thumb")))
 void emit_NOP(uint32_t** emit, uint16_t opcode) {
     *(*emit)++ = nop();
     *(*emit)++ = bx(lr);
 }
+__attribute__((target("thumb")))
 void emit_NOTBW(uint32_t** emit, uint16_t opcode) {
     emit_UNARY_EA_ALU(emit, opcode, ALU_OP_NOT);
 }
+__attribute__((target("thumb")))
 void emit_NOTL(uint32_t** emit, uint16_t opcode) {
     emit_UNARY_EA_ALU(emit, opcode, ALU_OP_NOT);
 }
+__attribute__((target("thumb")))
 void emit_ORBW(uint32_t** emit, uint16_t opcode) {
     emit_EA_ALU(emit, opcode, ALU_OP_OR);
 }
+__attribute__((target("thumb")))
 void emit_ORL(uint32_t** emit, uint16_t opcode) {
     emit_EA_ALU(emit, opcode, ALU_OP_OR);
 }
+__attribute__((target("thumb")))
 void emit_ORIBW(uint32_t** emit, uint16_t opcode) {
     emit_IMD_ALU(emit, opcode, ALU_OP_OR);
 }
+__attribute__((target("thumb")))
 void emit_ORIL(uint32_t** emit, uint16_t opcode) {
     emit_IMD_ALU(emit, opcode, ALU_OP_OR);
 }
+__attribute__((target("thumb")))
 void emit_ORI_TO_CCR(uint32_t** emit, uint16_t opcode) {
     emit_load_CR(emit, 2);  // r2=sr, r1=imm
     emit_ALU(emit, ALU_OP_OR, 1, 2);
     emit_save_CR(emit, 2);  // put r2-> cpu_t and CPSR
     *(*emit)++ = bx(lr);
 }
+__attribute__((target("thumb")))
 void emit_ORI_TO_SR(uint32_t** emit, uint16_t opcode) {
     emit_load_SR(emit, 2);  // r2=sr, r1=imm
     emit_is_SVC(emit);
@@ -1328,9 +1445,11 @@ void emit_ORI_TO_SR(uint32_t** emit, uint16_t opcode) {
     emit_save_SR(emit, 2);  // put r2-> cpu_t and CPSR
     *(*emit)++ = bx(lr);
 }
+__attribute__((target("thumb")))
 void emit_ORW(uint32_t** emit, uint16_t opcode) {
     emit_EA_ALU(emit, opcode, ALU_OP_OR);
 }
+__attribute__((target("thumb")))
 void emit_PEA(uint32_t** emit, uint16_t opcode) {
     // SP – 4 → SP; < ea > → (SP)
     uint8_t sReg = 6 + ((opcode) & 0x7);
@@ -1347,29 +1466,37 @@ void emit_PEA(uint32_t** emit, uint16_t opcode) {
     }
     *(*emit)++ = bx(lr);
 }
+__attribute__((target("thumb")))
 void emit_RESET(uint32_t** emit, uint16_t opcode) {
     emit_SVC(emit, RESET_SP);
 }
+__attribute__((target("thumb")))
 void emit_ROdBW(uint32_t** emit, uint16_t opcode) {
     emit_ImmReg_Shift(emit, opcode, (opcode & 0x0100) ? ALU_OP_ROL : ALU_OP_ROR);
 }
+__attribute__((target("thumb")))
 void emit_ROdL(uint32_t** emit, uint16_t opcode) {
     emit_ImmReg_Shift(emit, opcode, (opcode & 0x0100) ? ALU_OP_ROL : ALU_OP_ROR);
 }
+__attribute__((target("thumb")))
 void emit_ROd(uint32_t** emit, uint16_t opcode) {
     emit_Mem_Shift(emit, opcode, (opcode & 0x0100) ? ALU_OP_ROL : ALU_OP_ROR);
 }
+__attribute__((target("thumb")))
 void emit_ROXdBW(uint32_t** emit, uint16_t opcode) {
     emit_ROXd_opcode(emit, opcode);
 }
+__attribute__((target("thumb")))
 void emit_ROXdL(uint32_t** emit, uint16_t opcode) {
     emit_ROXd_opcode(emit, opcode);
 }
+__attribute__((target("thumb")))
 void emit_ROXd(uint32_t** emit, uint16_t opcode) {
     emit_load_X(emit);
     emit_Mem_Shift(emit, opcode, (opcode & 0x0100) ? ALU_OP_ROXL : ALU_OP_ROXR);
     emit_save_X(emit);
 }
+__attribute__((target("thumb")))
 void emit_RTE(uint32_t** emit, uint16_t opcode) {
     // If Not Supervisor State Then TRAP
     emit_load_SR(emit, r2);
@@ -1385,6 +1512,7 @@ void emit_RTE(uint32_t** emit, uint16_t opcode) {
     **emit = b_imm(calc_offset((uint32_t)*emit, jump_normal));
     *emit += 1;
 }
+__attribute__((target("thumb")))
 void emit_RTR(uint32_t** emit, uint16_t opcode) {
     // (SP) → CCR; SP + 2 → SP; (SP) → PC; SP + 4 → SP
     *(*emit)++ = ldrh(r2, sp, index_imm(0, 1, 2));
@@ -1393,12 +1521,14 @@ void emit_RTR(uint32_t** emit, uint16_t opcode) {
     **emit = b_imm(calc_offset((uint32_t)*emit, jump_normal));
     *emit += 1;
 }
+__attribute__((target("thumb")))
 void emit_RTS(uint32_t** emit, uint16_t opcode) {
     // (SP) → PC; SP + 4 → SP
     *(*emit)++ = ldr(r0, sp, index_imm(0, 1, 4));
     **emit = b_imm(calc_offset((uint32_t)*emit, jump_normal));
     *emit += 1;
 }
+__attribute__((target("thumb")))
 void emit_SBCD(uint32_t** emit, uint16_t opcode) {
     uint8_t sReg = (opcode & 0x7);
     uint8_t dReg = (opcode >> 9) & 0x7;
@@ -1425,6 +1555,7 @@ void emit_SBCD(uint32_t** emit, uint16_t opcode) {
     }
     *emit += 1;
 }
+__attribute__((target("thumb")))
 void emit_Scc(uint32_t** emit, uint16_t opcode) {
     uint8_t cc = arm_cc(opcode);
     if(cc == ARM_CC_HI) {
@@ -1459,6 +1590,7 @@ void emit_Scc(uint32_t** emit, uint16_t opcode) {
     emit_EA_Store(emit, dEA, r0, 2, 0);
     *(*emit)++ = bx(lr);
 }
+__attribute__((target("thumb")))
 void emit_STOP(uint32_t** emit, uint16_t opcode) {
     emit_load_SR(emit, 2);
     emit_is_SVC(emit);
@@ -1466,48 +1598,61 @@ void emit_STOP(uint32_t** emit, uint16_t opcode) {
     *(*emit)++ = hlt(0);
     *(*emit)++ = bx(lr);
 }
+__attribute__((target("thumb")))
 void emit_SUBBW(uint32_t** emit, uint16_t opcode) {
     emit_EA_ALU(emit, opcode, ALU_OP_SUB);
 }
+__attribute__((target("thumb")))
 void emit_SUBL(uint32_t** emit, uint16_t opcode) {
     emit_EA_ALU(emit, opcode, ALU_OP_SUB);
 }
+__attribute__((target("thumb")))
 void emit_SUBAL(uint32_t** emit, uint16_t opcode) {
     emit_EA_ALU(emit, opcode, ALU_OP_SUB);
 }
+__attribute__((target("thumb")))
 void emit_SUBAW(uint32_t** emit, uint16_t opcode) {
     emit_EA_ALU(emit, opcode, ALU_OP_SUB);
 }
+__attribute__((target("thumb")))
 void emit_SUBIBW(uint32_t** emit, uint16_t opcode) {
     emit_IMD_ALU(emit, opcode, ALU_OP_SUB);
 }
+__attribute__((target("thumb")))
 void emit_SUBIL(uint32_t** emit, uint16_t opcode) {
     emit_IMD_ALU(emit, opcode, ALU_OP_SUB);
 }
+__attribute__((target("thumb")))
 void emit_SUBQBW(uint32_t** emit, uint16_t opcode) {
     uint8_t value = (opcode & 0x0E00) >> 9;
     if (!value) value = 8;
     *(*emit)++ = 0xE3A01000 | (value);  // mov r1, value
     emit_IMD_ALU(emit, opcode, ALU_OP_SUB);
 }
+__attribute__((target("thumb")))
 void emit_SUBQL(uint32_t** emit, uint16_t opcode) {
     uint8_t value = (opcode & 0x0E00) >> 9;
     if (!value) value = 8;
     *(*emit)++ = 0xE3A01000 | (value);  // mov r1, value
     emit_IMD_ALU(emit, opcode, ALU_OP_SUB);
 }
+__attribute__((target("thumb")))
 void emit_SUBW(uint32_t** emit, uint16_t opcode) {
     emit_EA_ALU(emit, opcode, ALU_OP_SUB);
 }
+__attribute__((target("thumb")))
 void emit_SUBXBW(uint32_t** emit, uint16_t opcode) {
     emit_BCD_XOP_ALU(emit, opcode, ALU_OP_SUBX);
 }
+__attribute__((target("thumb")))
 void emit_SUBXL(uint32_t** emit, uint16_t opcode) {
     emit_BCD_XOP_ALU(emit, opcode, ALU_OP_SUBX);
 }
+__attribute__((target("thumb")))
 void emit_SWAP(uint32_t** emit, uint16_t opcode) {
     emit_IMD_ALU(emit, opcode, ALU_OP_SWAP);
 }
+__attribute__((target("thumb")))
 void emit_TAS(uint32_t** emit, uint16_t opcode) {
     // Destination Tested -> Condition Codes; 1 -> Bit 7 of Destination
     uint8_t sEA = (opcode & 0x3F);
@@ -1517,19 +1662,24 @@ void emit_TAS(uint32_t** emit, uint16_t opcode) {
     emit_EA_Store(emit, sEA, sReg, 1, 1);
     *(*emit)++ = bx(lr);
 }
+__attribute__((target("thumb")))
 void emit_TRAP(uint32_t** emit, uint16_t opcode) {
     return emit_SVC(emit, TRAP0 + (opcode & 0xF));
 }
+__attribute__((target("thumb")))
 void emit_TRAPV(uint32_t** emit, uint16_t opcode) {
     *(*emit)++ = 0xEF000000 | TRAPV;
     *(*emit)++ = bx(lr);
 }
+__attribute__((target("thumb")))
 void emit_TSTBW(uint32_t** emit, uint16_t opcode) {
     emit_IMD_ALU(emit, opcode, ALU_OP_TST);
 }
+__attribute__((target("thumb")))
 void emit_TSTL(uint32_t** emit, uint16_t opcode) {
     emit_IMD_ALU(emit, opcode, ALU_OP_TST);
 }
+__attribute__((target("thumb")))
 void emit_UNLK(uint32_t** emit, uint16_t opcode) {
     // An -> SP; (SP) -> An; SP + 4 -> SP
     uint8_t aReg = 6 + (opcode & 7);
@@ -2164,6 +2314,7 @@ __attribute__((used)) const op_details_t optab_040mmu[] = {
  *     |_____|_| |_| |_|_|\__|\__\___|_|    |_| \_\___/ \__,_|\__|_|_| |_|\___|
  *
  */
+__attribute__((target("thumb")))
 static void emit_op(uint32_t** emit, op_details_t* op, uint16_t opcode) {
     while (1) {
         if ((opcode & op->match) == op->equal) {
@@ -2174,6 +2325,7 @@ static void emit_op(uint32_t** emit, op_details_t* op, uint16_t opcode) {
     }
 }
 
+__attribute__((target("thumb")))
 void emit_opcode_table() {
     // Generate opcode tables
     uint32_t* stubs      = cpu->opcode_stubs;

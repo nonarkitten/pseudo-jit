@@ -6,35 +6,35 @@ SRCDIRS := . clib/ hal/ libbbb/src/ pjit/
 CROSS   := arm-none-eabi-
 
 # CPU type and common options
-CCFLAGS_CPU := \
-	-fno-exceptions -fno-unwind-tables -nostdlib -fno-common \
-	-mbig-endian -ffreestanding -mbe8 \
-	-marm -mcpu=cortex-a8 -mfpu=vfpv3 -mfloat-abi=hard \
-	-ffunction-sections -fdata-sections -fomit-frame-pointer \
-	-std=gnu11 -MMD -fmax-errors=5
+CCFLAGS_CPU := -march=armv7-a -marm -mfpu=neon -mtune=cortex-a8		# CPU core type
+CCFLAGS_CPU += -mfpu=neon-vfpv3 -mfloat-abi=hard -ffast-math		# CPU floating point
+CCFLAGS_CPU += -ffunction-sections -fdata-sections					# Break functions & data into own sections
+CCFLAGS_CPU += -std=gnu11	     									# We're using GNU extensions
+CCFLAGS_CPU += -MMD     											# Build dependency files
+CCFLAGS_CPU += -fomit-frame-pointer -nostdlib -ffreestanding		# Omit some OS overhead
+CCFLAGS_CPU += -mbe8 -mbig-endian									# Compile for big-endian mode
 
 # Universally good compiler warnings
 CCFLAGS_WARN := \
 	-Wall -Wshadow -Wdouble-promotion -Wformat-overflow -Wformat-truncation \
-	-Wundef -Wno-unused-parameter
+	-Wundef -Wno-unused-parameter -fmax-errors=5
 
-ifneq ($(filter debug,$(MAKECMDGOALS)),)
-BUILD := debug
-else ifneq ($(filter release,$(MAKECMDGOALS)),)
+ifneq ($(filter release,$(MAKECMDGOALS)),)
 BUILD := release
-else ifeq ($(MAKECMDGOALS),clean)
-BUILD := *
 else
-$(error Must specify release or debug)
+BUILD := debug
 endif
 
 # Compiler optimizations
 ifeq ($(BUILD),release)
 # Optimize for release and raise the bar for errors
-CCFLAGS_OPT := -Os -ffast-math -Werror -s -ftree-vectorize
+# Do not use -Os no matter how tempting! Os uniquely creates literal pools which break big-endian!
+CCFLAGS_OPT := -O3 -Werror -s
+$(info Compiling release build);
 else
 # Optimize for debugging, but include basic optimizers for not-terrible-code
-CCFLAGS_OPT := -Og -g3 -ggdb -D_DEBUG -ftree-vectorize
+CCFLAGS_OPT := -Og -g -D_DEBUG
+$(info Compiling debug build; to compile release, specify 'release' after make);
 endif
 
 # Set noisey output
@@ -65,10 +65,13 @@ BINARY  := $(patsubst %.elf,%.bin,$(OUTPUT))
 MAPFILE := $(patsubst %.elf,%.map,$(OUTPUT))
 DISFILE := $(patsubst %.elf,%.asm,$(OUTPUT))
 
-LDFLAGS := -static -ffreestanding -T linker.lds \
-	-Wl,--gc-sections \
-	-Wl,--Map=$(MAPFILE) \
-	-Wl,--be8 -Wl,--format=elf32-bigarm
+LDFLAGS := -static -ffreestanding -nostdlib -nostartfiles -T linker.lds
+LDFLAGS += -Wl,--Map=$(MAPFILE)
+LDFLAGS += -Wl,--be8 -Wl,--format=elf32-bigarm
+LDFLAGS += -Wl,--no-warn-rwx-segment
+ifeq ($(BUILD),debug)
+LDFLAGS += -Wl,--gc-sections
+endif
 
 INCLUDES := -I./inc -I./libbbb/inc/ $(addprefix -I./,$(SRCDIRS))
 C_SOURCES := $(foreach dir,$(SRCDIRS),$(wildcard $(dir)/*.c))
@@ -80,6 +83,14 @@ OBJECTS := $(C_OBJECTS) $(ASM_OBJECTS)
 VPATH := $(SRCDIRS)
 
 .PHONY: all premake clean debug release
+
+all: premake $(OUTPUT)
+
+release debug: all
+
+premake:
+	$(MD) $(OBJDIR)
+	-@make -C pru -f pru.mk
 
 clean:
 	@echo Cleaning $(OUTPUT)...
@@ -93,15 +104,8 @@ clean:
 	-$(RM) $(DISFILE) 2>/dev/null
 	-$(RM) $(OUTDIR)/$(BUILD) 2>/dev/null
 
-release debug: premake all
-all: $(OUTPUT)
-
-premake:
-	$(MD) $(OBJDIR)
-	-@make -C pru -f pru.mk
-
 $(OUTPUT): $(OBJECTS)
-	@echo Building PJIT Bootloader...
+	@echo Building PJIT...
 	$(CC) $(CFLAGS) $(LDFLAGS) $(OBJECTS) -o $@
 	$(DI) $@ > $(DISFILE) &
 	$(OC) -O binary $@ $(BINARY)

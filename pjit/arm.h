@@ -326,10 +326,10 @@ static inline uint32_t mov_cc_signed(condition_t cc, int sf, uint8_t reg, int32_
     return (val >= 0) ? alu_cc(ARM_OP_MOV, cc, sf, reg, 0, imm(val)) : alu_cc(ARM_OP_MVN, cc, sf, reg, 0, imm(~val));
 }
 static inline uint32_t mov_signed(uint8_t reg, int32_t val) {
-    mov_cc_signed(ARM_CC_AL, 0, reg, val);
+    return mov_cc_signed(ARM_CC_AL, 0, reg, val);
 }
 static inline uint32_t movs_signed(uint8_t reg, int8_t val) {
-    mov_cc_signed(ARM_CC_AL, 1, reg, val);
+    return mov_cc_signed(ARM_CC_AL, 1, reg, val);
 }
 
 // All shifts are just MOV, added for convinience

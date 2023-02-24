@@ -108,6 +108,7 @@ typedef struct {
 // @param uint8_t   iReg  immediate register (r1/r2) and holding place for address
 // @param int       isRMW if this is a read-modify-write operation
 // @return (uint8_t) the actual register containing the expected data
+__attribute__((target("thumb")))
 uint8_t emit_EA_Load(uint32_t** emit, uint8_t sEA, uint8_t dReg, uint8_t iReg, int isRMW) {
     int width = 1 << (sEA >> 6);  // 00 = 1, 01 = 2, 10 = 4, 11 = invalid
 
@@ -259,6 +260,7 @@ uint8_t emit_EA_Load(uint32_t** emit, uint8_t sEA, uint8_t dReg, uint8_t iReg, i
 // @param uint8_t    iReg  immediate register (r1/r2) and holding place for address
 // @param int        isRMW if this is a read-modify-write operation
 // @return Nothing
+__attribute__((target("thumb")))
 void emit_EA_Store(uint32_t** emit, uint8_t dEA, uint8_t sReg, uint8_t iReg, int isRMW) {
     int     width = 1 << (dEA >> 6);
     uint8_t dReg  = (dEA & 7);
