@@ -1,51 +1,17 @@
 /*
- * Copyright (c) 2020-2023 Renee Cousins, the Buffee Project - http://www.buffee.ca
+ * test_flash.c
  *
- * This is part of PJIT the Pseudo-JIT 68K emulator.
- *
- * PJIT is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- *
- * PJIT is licensed under a Creative Commons
- * Attribution-NonCommercial-ShareAlike 4.0 International License.
- *
- * Under the terms of this license you are free copy and redistribute
- * the material in any medium or format as well as remix, transform,
- * and build upon the material.
- *
- * You must give appropriate credit, provide a link to the license,
- * and indicate if changes were made. You may do so in any reasonable
- * manner, but not in any way that suggests the licensor endorses you
- * or your use.
- *
- * You may not use the material for commercial purposes.
- *
- * If you remix, transform, or build upon the material, you must
- * distribute your contributions under the same license as the original.
- *
- * You may not apply legal terms or technological measures that legally
- * restrict others from doing anything the license permits.
- *
- * Portions of PJIT have been derived from the following:
- *
- *     Castaway (formerly FAST), GPL version 2 License
- *     Copyright (c) 1994-2002 Martin Döring, Joachim Hönig
- *    
- *     Cyclone 68K, GPL version 2 License
- *     Copyright (c) 2004,2011 Dave "FinalDave" Haywood
- *     Copyright (c) 2005-2011 Graûvydas "notaz" Ignotas
- *    
- *     TI StarterWare, modified BSD 3-Clause License
- *     Copyright (C) 2010 Texas Instruments Incorporated - http://www.ti.com/
- *
- *     libbbb, Apache License, Version 2.0
- *     Copyright 2015 University of Applied Sciences Western Switzerland / Fribourg
+ *  Created on: Apr. 17, 2021
+ *      Author: renee.cousins
  */
 
 #include "hw_init.h"
 #include "hw_flash.h"
 #include "pinmux.h"
+
+void SPIInit(int bps) {
+	InitSPI(bps);
+}
 
 static uint8_t spi_xfer[256];
 extern uint8_t TransferSPI(uint8_t *io_buffer, uint8_t len);
@@ -54,7 +20,7 @@ void WaitSPI(void) {
     while(1) {
         spi_xfer[0] = 0x05;
         spi_xfer[1] = 0x00;
-        am335x_spi_xfer( AM335X_SPI0, AM335X_CHAN0, spi_xfer, 2 );
+        TransferSPI( spi_xfer, 2 );
         if(spi_xfer[1] & 1) {
             int i=10000;
             while(i--) asm("    nop");
@@ -66,7 +32,7 @@ void WaitSPI(void) {
 
 void WriteAllowSPI(void) {
     uint8_t unlock = 0x06;
-    am335x_spi_xfer( AM335X_SPI0, AM335X_CHAN0, &unlock, 1);
+    TransferSPI(&unlock, 1);
     WaitSPI();
 }
 
@@ -87,7 +53,7 @@ void EraseSPI(uint32_t addr, ERASE_SIZE_t size) {
     spi_xfer[1] = (addr >> 16) & 0xFF;
     spi_xfer[2] = (addr >>  8) & 0xFF;
     spi_xfer[3] = (addr >>  0) & 0xFF;
-    am335x_spi_xfer( AM335X_SPI0, AM335X_CHAN0, spi_xfer, len );
+    TransferSPI( spi_xfer, len );
     WaitSPI();
 }
 
@@ -97,7 +63,7 @@ uint16_t ReadSPIID(void) {
     spi_xfer[2] = 0;
     spi_xfer[3] = 0;
     spi_xfer[4] = 0;
-    am335x_spi_xfer( AM335X_SPI0, AM335X_CHAN0, spi_xfer, 6 );
+    TransferSPI( spi_xfer, 6 );
     return (spi_xfer[4] << 8) | spi_xfer[5];
 }
 
@@ -107,7 +73,7 @@ uint8_t ReadSPI(uint32_t addr) {
     spi_xfer[2] = (addr >>  8) & 0xFF;
     spi_xfer[3] = (addr >>  0) & 0xFF;
     spi_xfer[4] = 0;
-    am335x_spi_xfer( AM335X_SPI0, AM335X_CHAN0, spi_xfer, 5 );
+    TransferSPI( spi_xfer, 5 );
     return spi_xfer[4];
 }
 
@@ -117,7 +83,7 @@ void ReadSPIBlock(uint32_t addr, void* buffer, uint8_t len) {
     spi_xfer[2] = (addr >>  8) & 0xFF;
     spi_xfer[3] = (addr >>  0) & 0xFF;
     memset(&spi_xfer[4], 0, len);
-    am335x_spi_xfer( AM335X_SPI0, AM335X_CHAN0, spi_xfer, len + 4 );
+    TransferSPI( spi_xfer, len + 4 );
     memcpy(buffer, &spi_xfer[4], len);
     return;
 }
@@ -130,7 +96,7 @@ void WriteSPI(uint32_t addr, uint8_t data) {
     spi_xfer[2] = (addr >>  8) & 0xFF;
     spi_xfer[3] = (addr >>  0) & 0xFF;
     spi_xfer[4] = data;
-    am335x_spi_xfer( AM335X_SPI0, AM335X_CHAN0, spi_xfer, 5 );
+    TransferSPI( spi_xfer, 5 );
     WaitSPI();
     return;
 }
@@ -143,7 +109,7 @@ void WriteSPIBlock(uint32_t addr, const void* buffer, uint8_t len) {
     spi_xfer[2] = (addr >>  8) & 0xFF;
     spi_xfer[3] = (addr >>  0) & 0xFF;
     memcpy(&spi_xfer[4], buffer, len);
-    am335x_spi_xfer( AM335X_SPI0, AM335X_CHAN0, spi_xfer, len + 4 );
+    TransferSPI( spi_xfer, len + 4 );
     WaitSPI();
     return;
 }

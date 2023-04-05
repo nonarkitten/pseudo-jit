@@ -7,18 +7,17 @@
         {
             "name": "Cortex Debug",
             "cwd": "${workspaceFolder}",
-            "executable": "bin/debug/buffee.elf",
+            "executable": "./binaries/debug/buffee_bootloader.elf",
             "device": "AM3358",
             "request": "launch",
-            "type": "cortex-debug",            
-            "serverArgs": [ "-endian", "big" ],
+            "type": "cortex-debug",
+            "breakAfterReset": true,
             "overrideLaunchCommands": [
                 "monitor reset halt",
                 "load",
                 "monitor reset halt",
-                "set endian big",
                 "break main",
-                // "jump Reset_Handler"
+                "jump Reset_Handler"
             ],
             "interface": "jtag",
             "servertype": "jlink"

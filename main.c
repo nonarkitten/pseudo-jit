@@ -1,560 +1,387 @@
-/*
- * Copyright (c) 2020-2023 Renee Cousins, the Buffee Project - http://www.buffee.ca
- *
- * This is part of PJIT the Pseudo-JIT 68K emulator.
- *
- * PJIT is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- *
- * PJIT is licensed under a Creative Commons
- * Attribution-NonCommercial-ShareAlike 4.0 International License.
- *
- * Under the terms of this license you are free copy and redistribute
- * the material in any medium or format as well as remix, transform,
- * and build upon the material.
- *
- * You must give appropriate credit, provide a link to the license,
- * and indicate if changes were made. You may do so in any reasonable
- * manner, but not in any way that suggests the licensor endorses you
- * or your use.
- *
- * You may not use the material for commercial purposes.
- *
- * If you remix, transform, or build upon the material, you must
- * distribute your contributions under the same license as the original.
- *
- * You may not apply legal terms or technological measures that legally
- * restrict others from doing anything the license permits.
- *
- * Portions of PJIT have been derived from the following:
- *
- *     Castaway (formerly FAST), GPL version 2 License
- *     Copyright (c) 1994-2002 Martin Döring, Joachim Hönig
- *    
- *     Cyclone 68K, GPL version 2 License
- *     Copyright (c) 2004,2011 Dave "FinalDave" Haywood
- *     Copyright (c) 2005-2011 Graûvydas "notaz" Ignotas
- *    
- *     TI StarterWare, modified BSD 3-Clause License
- *     Copyright (C) 2010 Texas Instruments Incorporated - http://www.ti.com/
- *
- *     libbbb, Apache License, Version 2.0
- *     Copyright 2015 University of Applied Sciences Western Switzerland / Fribourg
- */
+#include <stdio.h>
+#include <stdint.h>
 
-#include "cp15.h"
 #include "main.h"
-#include "support.h"
+#include "pinmux.h"
+#include "hw_init.h"
+#include "hw_mmu.h"
+#include "hw_ddr.h"
+#include "hw_flash.h"
+#include "hw_gpmc.h"
+#include "gpak.h"
 
-uint32_t xm_start = 0, xm_end = 0;
-extern char _image_start, _image_end;
+#define NAK     0x15
+#define CANCEL  0x18
+
+static int confirm(void) {
+    char query[4];
+    printf("Are you sure [y/N]? ");
+    gets(query);
+    if (query[0] == 'y' || query[0] == 'Y') {
+        return true;
+    } else {
+        printf("Cancelled\n");
+        return false;
+    }
+}
+
+#define PRU_SHARED_RAM (SOC_PRUICSS1_REGS + SOC_PRUICSS_SHARED_RAM_OFFSET)
+
+static void SetEClock(void) {
+    volatile uint32_t* smem = (volatile uint32_t*)0x4A310000;
+    char query[4];
+
+    printf("Set E Clock divisor [6-10]: ");
+    gets(query);
+    uint32_t div = atoi(query);
+    if(div) {
+        smem[1] = 0;
+        smem[0] = div;
+        WaitMSDMTimer(100);
+        div = smem[1];
+        printf("E Clock divisor set to %d\n", div);
+    } else {
+        printf("Cancelled\n");
+    }
+}
+
+static int GetPRUClock(void) {
+    volatile uint32_t* smem = (volatile uint32_t*)0x4A310000;
+    return (int)smem[2];
+}
+
+int pmic_detected;
+int gpak_detected;
+int prom_detected;
+
+// Mask determines all the settable (not reserved) bits
+//                      ↓↓ 0 1 2 3 4 5 6 7 8 9 a b c d e f
+const char nvmMask0[] =  "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF";
+const char nvmMask1[] =  "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF";
+const char nvmMask2[] =  "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF";
+const char nvmMask3[] =  "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF";
+const char nvmMask4[] =  "FFFFFFFFFFFFFFFF0000000000000000";
+const char nvmMask5[] =  "00000000000000000000000000000000";
+const char nvmMask6[] =  "03FF7F00FFFF7F7F1E1EFEFE7F007F7F";
+const char nvmMask7[] =  "7F7F7F7FFFFFFFFFFFFFFFFFFFFFFFFF";
+const char nvmMask8[] =  "FFFFFF7E7F00000C130000FFFF380800";
+const char nvmMask9[] =  "FFFFFFFFFFFFFFFFFFFFFF7FFF7F0000";
+const char nvmMask10[] = "FFFFFFFFE7FFFFFFFFFFFFFFFFFF6FFF";
+const char nvmMask11[] = "FEFFFFFFFFFFFF6BFFFEFFFFFFFFFFFF";
+const char nvmMask12[] = "6BFFFFFFFF03FFFF06FFFFFF00000000";
+const char nvmMask13[] = "00000000000000000000000000000000";
+const char nvmMask14[] = "00000000000000000000000000000000";
+const char nvmMask15[] = "00000000000000000000000000000000";
+//                      ↑↑ 0 1 2 3 4 5 6 7 8 9 a b c d e f
+
+const char* const nvmMasks[16] = {
+    nvmMask0,  nvmMask1,  nvmMask2,  nvmMask3,
+    nvmMask4,  nvmMask5,  nvmMask6,  nvmMask7,
+    nvmMask8,  nvmMask9,  nvmMask10, nvmMask11,
+    nvmMask12, nvmMask13, nvmMask14, nvmMask15
+};
 
 // Slave Address for GreenPAK
 #define SLAVE_ADDRESS 1
 #define NVM_CONFIG 0x02
 #define NVM_BYTES  240
 
-#define NAK     0x15
-#define CANCEL  0x18
-
-uint16_t i2c_address = 0;
-
-// Mask determines all the settable (not reserved) bits
-//                      ↓↓ 0 1 2 3 4 5 6 7 8 9 a b c d e f
-const char nvmMask0[]  = "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF";
-const char nvmMask1[]  = "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF";
-const char nvmMask2[]  = "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF";
-const char nvmMask3[]  = "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF";
-const char nvmMask4[]  = "FFFFFFFFFFFFFFFF0000000000000000";
-const char nvmMask5[]  = "00000000000000000000000000000000";
-const char nvmMask6[]  = "03FF7F00FFFF7F7F1E1EFEFE7F007F7F";
-const char nvmMask7[]  = "7F7F7F7FFFFFFFFFFFFFFFFFFFFFFFFF";
-const char nvmMask8[]  = "FFFFFF7E7F00000C130000FFFF380800";
-const char nvmMask9[]  = "FFFFFFFFFFFFFFFFFFFFFF7FFF7F0000";
-const char nvmMask10[] = "FFFFFFFFE7FFFFFFFFFFFFFFFFFF6FFF";
-const char nvmMask11[] = "FEFFFFFFFFFFFF6BFFFEFFFFFFFFFFFF";
-const char nvmMask12[] = "6BFFFFFFFF03FFFF06FFFFFF00000000";
-const char nvmMask13[] = "00000000000000000000000000000000";
-const char nvmMask14[] = "00000000000000000000000000000000";
-//                        ↑↑ 0 1 2 3 4 5 6 7 8 9 a b c d e f
-
-const char* const nvmMaskString[15] = {
-    nvmMask0,  nvmMask1,  nvmMask2,  nvmMask3,
-    nvmMask4,  nvmMask5,  nvmMask6,  nvmMask7,
-    nvmMask8,  nvmMask9,  nvmMask10, nvmMask11,
-    nvmMask12, nvmMask13, nvmMask14, //nvmMask15
-};
-
 // Store nvmData in to save on RAM
 //                        ↓↓ 0 1 2 3 4 5 6 7 8 9 a b c d e f
-const char nvmString0[]  = "00702007D230CAC2240B030000000000";
-const char nvmString1[]  = "00000000000000000090FE24FABB0000";
-const char nvmString2[]  = "000000000D0018401900000000000000";
-const char nvmString3[]  = "000000D23F3DD00F00110A0000000000";
-const char nvmString4[]  = "00000000000000000000000000000000";
-const char nvmString5[]  = "00000000000000000000000000000000";
-const char nvmString6[]  = "00010000808000710000808000000000";
-const char nvmString7[]  = "00000000000000000000000000000000";
-const char nvmString8[]  = "00400000001422300C00000000000000";
-const char nvmString9[]  = "D0EB0000EAEA00000000000000000000";
-const char nvmString10[] = "0000002000010008D0020100C0020401";
-const char nvmString11[] = "0000020100000200010200A0011000A0";
-const char nvmString12[] = "000102FE000001000000010100000000";
+const char nvmString0[] =  "00702007D230CAC2240BD31801000000";
+const char nvmString1[] =  "00000000000000000000000000000000";
+const char nvmString2[] =  "00000000000000000000000000000000";
+const char nvmString3[] =  "000000D23F3DD00F0011050000000000";
+const char nvmString4[] =  "00000000000000000000000000000000";
+const char nvmString5[] =  "00000000000000000000000000000000";
+const char nvmString6[] =  "00010000808000710000808000000000";
+const char nvmString7[] =  "00000000000000000000000000000000";
+const char nvmString8[] =  "00000000001422300C00000000000000";
+const char nvmString9[] =  "D0EB0000EAEAF7000000000000000000";
+const char nvmString10[] = "00007020000100000002010000020001";
+const char nvmString11[] = "00000201000002000100000201000002";
+const char nvmString12[] = "00010000020001000000020100000000";
 const char nvmString13[] = "00000000000000000000000000000000";
-const char nvmString14[] = "00000100010000000000000000000000";
+const char nvmString14[] = "00000000000000000000000000000000";
+const char nvmString15[] = "00000000000000000000000000000000";
 //                        ↑↑ 0 1 2 3 4 5 6 7 8 9 a b c d e f
 
-const char* const nvmString[15] = {
+const char* const nvmString[16] = {
     nvmString0,  nvmString1,  nvmString2,  nvmString3,
     nvmString4,  nvmString5,  nvmString6,  nvmString7,
     nvmString8,  nvmString9,  nvmString10, nvmString11,
-    nvmString12, nvmString13, nvmString14, //nvmString15
+    nvmString12, nvmString13, nvmString14, nvmString15
 };
 
-static uint8_t nvmData[NVM_BYTES] = { 0 };
-static uint8_t nvmMask[NVM_BYTES] = { 0 };
+static uint8_t nvmData[256] = { 0 };
+static uint8_t nvmMask[256] = { 0 };
 
-static uint8_t toHex2(char*n) {
+static uint8_t toHex2(char* n) {
     static const char TOHEX[32] = {
         0, 10, 11, 12, 13, 14, 15,
         0,  0,  0,  0,  0,  0,  0,  0,  0,
         0,  1,  2,  3,  4,  5,  6,  7,  8,  9,
-        0,  0,  0,  0,  0,  0, 
+        0,  0,  0,  0,  0,  0,
     };
     return (TOHEX[n[0] & 0x1F] << 4) | TOHEX[n[1] & 0x1F];
 }
 
-static void initNvm(void) {
-    for(int i=0; i<(NVM_BYTES/16); i++) {
-        for(int b=0; b<16; b++) {
-            nvmData[(i<<4) + b] = toHex2(nvmString[i] + (b<<1));
-            nvmMask[(i<<4) + b] = toHex2(nvmMask[i] + (b<<1));
+static void InitNvm(void) {
+    for (int i = 0; i < 16; i++) {
+        for (int b = 0; b < 16; b++) {
+            uint8_t D = toHex2(nvmString[i] + (b << 1));
+            uint8_t M = toHex2(nvmMasks[i] + (b << 1));
+            nvmData[(i << 4) + b] = D;
+            nvmMask[(i << 4) + b] = M;
         }
     }
+
     nvmData[0xCA] = SLAVE_ADDRESS;
+    gpak_init(0, SLAVE_ADDRESS);
+
+    printf("[I2C0] GreenPAK Protection Bits: $%02X $%02X $%02X\n", 
+        gpak_read_reg(0xE0), // Register Read/Write Protection Bits
+        gpak_read_reg(0xE1), // NVM Configuration Protection Bits
+        gpak_read_reg(0xE4)  // Protection Lock Bit
+        );    
 }
 
-uint8_t _getchar(void) { return am335x_uart_read( AM335X_UART0); }
-void _putchar(uint8_t ch) { am335x_uart_write( AM335X_UART0, ch); }
+static void ProbeI2C(void) {
+    for (int i = 0; i < 120; i++) {
+        if ((i & 0x7) == 0) printf("\n%02X:", i);
+        if (I2C0Probe(i)) printf(" %02x", i);
+        else printf(" --");
+    }
+    printf("\n");
+}
 
 ////////////////////////////////////////////////////////////////////////////////
-// readChip 
+// ReadChip 
 ////////////////////////////////////////////////////////////////////////////////
-static int readChip(int dump) {
-    uint8_t data[NVM_BYTES];
+static int ReadChip(int dump) {
+    uint8_t data[256];
+
     int same = 1;
-    gpak_read(NVM_CONFIG, 0, data, NVM_BYTES);
-    for(int page=0; page<(NVM_BYTES/16); page++) {
-        for(int b=0; b<16; b++) {
+    if (dump) printf("[I2C0] Dumping GreenPAK...\n");
+    gpak_read(NVM_CONFIG, 0, data, 256);
+    for (int page = 0; page < 16; page++) {
+        if (dump) printf("       %0X0: ", page);
+        for (int b = 0; b < 16; b++) {
             uint8_t m = nvmMask[(page << 4) | b];
-            same &= (nvmData[(page << 4) | b] & m)
-                == (data[(page << 4) | b] & m);
+            uint32_t c =
+                (nvmData[(page << 4) | b] & m)
+                ==
+                (data[(page << 4) | b] & m);
+
+            if (dump) printf(" %02X%c", data[(page << 4) | b], c ? ' ' : 'x');
+            same &= c;
         }
+        if (dump) printf("\n");
     }
     return same;
 }
 
-static void programChip(int dump) {
+static void ProgramChip(int dump) {
+    printf("[I2C0] Erasing GreenPAK...\n");
     gpak_erase(NVM_CONFIG);
-    gpak_write_reg(0xC8, 0x02); // Reset
-    am335x_dmtimer1_wait_us(300);
-
+    printf("[I2C0] Resetting GreenPAK...\n");
+    gpak_write_reg(0xC8, 0x02);
+    WaitUSDMTimer(300);
+    printf("[I2C0] Programming GreenPAK...\n");
     gpak_write(NVM_CONFIG, 0, nvmData, NVM_BYTES);
-    gpak_write_reg(0xC8, 0x02); // Reset
-    am335x_dmtimer1_wait_us(300);
+    printf("[I2C0] Resetting GreenPAK...\n");
+    gpak_write_reg(0xC8, 0x02);
+    WaitUSDMTimer(300);
+    printf("[I2C0] GreenPAK %s\n", ReadChip(dump) ? "ok." : "bad!");
 }
 
-static unsigned short crc16_ccitt(const uint8_t *buf, uint32_t len, uint16_t init) {
-    static const unsigned short crc16_table[256]= {
-        0x0000, 0x1021, 0x2042, 0x3063, 0x4084, 0x50a5, 0x60c6, 0x70e7,
-        0x8108, 0x9129, 0xa14a, 0xb16b, 0xc18c, 0xd1ad, 0xe1ce, 0xf1ef,
-        0x1231, 0x0210, 0x3273, 0x2252, 0x52b5, 0x4294, 0x72f7, 0x62d6,
-        0x9339, 0x8318, 0xb37b, 0xa35a, 0xd3bd, 0xc39c, 0xf3ff, 0xe3de,
-        0x2462, 0x3443, 0x0420, 0x1401, 0x64e6, 0x74c7, 0x44a4, 0x5485,
-        0xa56a, 0xb54b, 0x8528, 0x9509, 0xe5ee, 0xf5cf, 0xc5ac, 0xd58d,
-        0x3653, 0x2672, 0x1611, 0x0630, 0x76d7, 0x66f6, 0x5695, 0x46b4,
-        0xb75b, 0xa77a, 0x9719, 0x8738, 0xf7df, 0xe7fe, 0xd79d, 0xc7bc,
-        0x48c4, 0x58e5, 0x6886, 0x78a7, 0x0840, 0x1861, 0x2802, 0x3823,
-        0xc9cc, 0xd9ed, 0xe98e, 0xf9af, 0x8948, 0x9969, 0xa90a, 0xb92b,
-        0x5af5, 0x4ad4, 0x7ab7, 0x6a96, 0x1a71, 0x0a50, 0x3a33, 0x2a12,
-        0xdbfd, 0xcbdc, 0xfbbf, 0xeb9e, 0x9b79, 0x8b58, 0xbb3b, 0xab1a,
-        0x6ca6, 0x7c87, 0x4ce4, 0x5cc5, 0x2c22, 0x3c03, 0x0c60, 0x1c41,
-        0xedae, 0xfd8f, 0xcdec, 0xddcd, 0xad2a, 0xbd0b, 0x8d68, 0x9d49,
-        0x7e97, 0x6eb6, 0x5ed5, 0x4ef4, 0x3e13, 0x2e32, 0x1e51, 0x0e70,
-        0xff9f, 0xefbe, 0xdfdd, 0xcffc, 0xbf1b, 0xaf3a, 0x9f59, 0x8f78,
-        0x9188, 0x81a9, 0xb1ca, 0xa1eb, 0xd10c, 0xc12d, 0xf14e, 0xe16f,
-        0x1080, 0x00a1, 0x30c2, 0x20e3, 0x5004, 0x4025, 0x7046, 0x6067,
-        0x83b9, 0x9398, 0xa3fb, 0xb3da, 0xc33d, 0xd31c, 0xe37f, 0xf35e,
-        0x02b1, 0x1290, 0x22f3, 0x32d2, 0x4235, 0x5214, 0x6277, 0x7256,
-        0xb5ea, 0xa5cb, 0x95a8, 0x8589, 0xf56e, 0xe54f, 0xd52c, 0xc50d,
-        0x34e2, 0x24c3, 0x14a0, 0x0481, 0x7466, 0x6447, 0x5424, 0x4405,
-        0xa7db, 0xb7fa, 0x8799, 0x97b8, 0xe75f, 0xf77e, 0xc71d, 0xd73c,
-        0x26d3, 0x36f2, 0x0691, 0x16b0, 0x6657, 0x7676, 0x4615, 0x5634,
-        0xd94c, 0xc96d, 0xf90e, 0xe92f, 0x99c8, 0x89e9, 0xb98a, 0xa9ab,
-        0x5844, 0x4865, 0x7806, 0x6827, 0x18c0, 0x08e1, 0x3882, 0x28a3,
-        0xcb7d, 0xdb5c, 0xeb3f, 0xfb1e, 0x8bf9, 0x9bd8, 0xabbb, 0xbb9a,
-        0x4a75, 0x5a54, 0x6a37, 0x7a16, 0x0af1, 0x1ad0, 0x2ab3, 0x3a92,
-        0xfd2e, 0xed0f, 0xdd6c, 0xcd4d, 0xbdaa, 0xad8b, 0x9de8, 0x8dc9,
-        0x7c26, 0x6c07, 0x5c64, 0x4c45, 0x3ca2, 0x2c83, 0x1ce0, 0x0cc1,
-        0xef1f, 0xff3e, 0xcf5d, 0xdf7c, 0xaf9b, 0xbfba, 0x8fd9, 0x9ff8,
-        0x6e17, 0x7e36, 0x4e55, 0x5e74, 0x2e93, 0x3eb2, 0x0ed1, 0x1ef0
-    };
-    uint16_t crc = init;
-    while (len--) {
-        crc = (crc << 8) ^ crc16_table[((crc >> 8) ^ *buf++) & 0x00FF];
+static void SetGreenPAKAddr(void) {
+    char option[4];
+    uint8_t addr = 0xFF;
+    printf("Enter address (0-F): ");
+    gets(option);
+    /**/ if (option[0] >= '0' && option[0] <= '9') addr = option[0] - '0';
+    else if (option[0] >= 'A' && option[0] <= 'F') addr = option[0] - 'A' + 10;
+    else if (option[0] >= 'a' && option[0] <= 'f') addr = option[0] - 'a' + 10;
+    else return;
+    printf("Setting address to %X, ", addr);
+    if (confirm()) {
+        gpak_init(0, addr);
+        nvmData[0xCA] = addr;
+        printf("Done\n");
     }
-    return crc;
 }
 
-static void get_i2c_config(void) {
-	uint32_t ident = 0;
-	int16_t last_index = -1;
-	int16_t index = 0;
-	int save_required = 1;
-
-	printf("[I2C0] 101_0000 ($50) EEPROM Detected");
-
-	// fast scan for last incermenting address
-	while(1) {
-		am335x_i2c_read( AM335X_I2C0, 0x50, i2c_address, &ident, sizeof(ident));
-		if(ident != 0x704A4954) break;
-		am335x_i2c_read( AM335X_I2C0, 0x50, i2c_address + sizeof(ident), &index, sizeof(index));
-		if(index != (last_index + 1)) break;
-		last_index = index;
-		i2c_address += 0xFF;
-	}
-
-	// found the last page with an incrementing index
-	// verify this page, and if it fails, rewind
-	while(i2c_address) {
-		//am335x_i2c_read( AM335X_I2C0, 0x50, i2c_address, &config, sizeof(config_t));
-		uint16_t offset = 8;
-		uint16_t file_crc;
-		uint16_t calc_crc = 0xFFFF;
-		am335x_i2c_read( AM335X_I2C0, 0x50, i2c_address, &file_crc, sizeof(file_crc));
-		while(offset < sizeof(config_t)) {
-			uint16_t data;
-			am335x_i2c_read( AM335X_I2C0, 0x50, i2c_address, &data, sizeof(data));
-			calc_crc = crc16_ccitt(&data, sizeof(data), calc_crc);
-		}
-		if(calc_crc == file_crc) { save_required = 0; break; }
-		i2c_address -= 0xFF;
-	}
-
-	if(save_required) {
-		config.last_boot_good = 0;
-		i2c_address = 0; // sanity
-		am335x_i2c_write( AM335X_I2C0, 0x50, i2c_address, &config, sizeof(config_t));
-		printf(", defaults loaded.\n");
-	} else {
-		am335x_i2c_read( AM335X_I2C0, 0x50, i2c_address, &config, sizeof(config_t));
-		printf(", settings loaded.\n");
-	}
-	if(config.last_boot_good) {
-		printf("[I2C0] Last boot was good.");
-	}
+static void ManageGP(void) {
+    char option[4] = { 0 };
+    while(option[0] != 'x' && option[0] != 'X') {
+        printf("%s",
+            "1. Set GreenPAK Address\n"
+            "2. Dump & Verify GreenPAK\n"
+            "3. Erase & Program GreenPAK\n"
+            "X. Exit to main menu\n"
+            "] "
+        );
+        gets(option);
+        switch(option[0]) {
+        case '1': if(confirm()) SetGreenPAKAddr(); break;
+        case '2': printf("[I2C0] GreenPAK %s\n", ReadChip(1) ? "ok." : "bad!"); break;
+        case '3': if(confirm()) ProgramChip(1); break;
+        }
+    }
 }
 
-static void check_greenpak(void) {
-	gpak_init(0, 1);
-	printf("[I2C0] 000_10xx ($8~$A) GreenPAK Detected");
-	if (config.post_enable_t & post_enable_gpack_ok) {
-		initNvm();
-		
-		if(!readChip(0)) {
-			programChip(0);
-			if(!readChip(0)) printf(", bad chip!\n");
-		}
-		printf(", image OK.\n");
-	} else {
-		printf(".\n");
-	}
+static void InitResetHalt(void) {
+    InitGPIO();
+    AssertReset();
+    static const pin_muxing_t reset_pins[] = {
+        { CONF_UART1_RTSN,  (PIN_CFG_INEN | PIN_CFG_PTUP | PIN_CFG_M7) }, /* HALT gpio0_13 */
+        { CONF_MCASP0_AXR0, (PIN_CFG_INEN | PIN_CFG_PTUP | PIN_CFG_M7) }, /* RESET gpio3_16 */
+        { 0xFFFFFFFF, 0xFFFFFFFF },
+    };
+    config_mux(reset_pins);
 }
 
-static void make_i2c_good(void) {
-	uint8_t good = 0x5A;
-	uint16_t addr = i2c_address + offsetof(config_t, last_boot_good);
-	am335x_i2c_write( AM335X_I2C0, 0x50, addr, &good, 1);
+
+
+
+uint8_t _getchar(void) { return UART0Read(); }
+void _putchar(uint8_t ch) { UART0Write(ch); }
+
+const char* banner =
+"\n\n              ____ ______________\n"
+"  ______     |    |   \\__    ___/\n"
+"  \\  __ \\    |    |   | |    |\n"
+"  |  |_) )\\__|    |   | |    |\n"
+"  |   __/\\________|___| |____|\n"
+"  |__|\n\n";
+
+const char* menu =
+"\nMENU\n----\nTESTS:\n"
+" 1. Quick-test DDR memory\n"
+" 2. Dump first 4K of SPI Flash\n"
+" 3. Quick-test SPI flash\n"
+" 4. Test GPMC\n"
+" 5. Test printf\n"
+" 6. Scan I2C Bus\n"
+" 7. Run Native BogoMIPS test\n"
+" 8. Run PJIT BogoMIPS test\n"
+" 9. Scan and verify GreenPAK\n"
+"SETUP:\n"
+" J. Jump to PJIT\n"
+" C. Set E Clock Divider\n"
+" G. Manage GreenPAK\n"
+" E. Erase SPI flash\n"
+" P. Program SPI flash\n"
+" H. Print help (this)\n"
+" X. Reboot\n";
+
+static void JumpPJIT(void) {
+    asm __volatile("setend be");
+    ((void(*)(void))0x80000000)();
 }
 
-static void ddr_test(int long_test) {
-	uint32_t* ddr = (uint32_t*)0x80000000;
-	int passed = 1;
-
-	if(long_test) {
-		while(ddr < (uint32_t*)0xA0000000) {
-			for(int i=0; i<16; i++) {
-				*ddr = (0x11111111 * i);
-				asm("dsb" ::: "memory");
-				asm("isb" ::: "memory");
-				if(*ddr != (0x11111111 * i)) passed = 0;
-			}
-			ddr += 1;
-		}
-	} else {
-		while(ddr < (uint32_t*)0xA0000000) {
-			for(int i=0; i<16; i++) {
-				ddr[i] = (0x11111111 * i);
-			}
-			asm("dsb" ::: "memory");
-			asm("isb" ::: "memory");
-			for(int i=0; i<16; i++) {
-				if(ddr[i] != (0x11111111 * i)) passed = 0;
-			}
-			ddr += 32;
-		}
-	}
+static void InitI2C(void) {
+    static const pin_muxing_t i2c_pins[] = {
+        { CONF_I2C0_SCL, (PIN_CFG_INEN | PIN_CFG_PTUP | PIN_CFG_M0) },
+        { CONF_I2C0_SDA, (PIN_CFG_INEN | PIN_CFG_PTUP | PIN_CFG_M0) },
+        { 0xFFFFFFFF, 0xFFFFFFFF },
+    };
+    I2C0Init(400000);
+    config_mux(i2c_pins);
 }
 
-static void check_clock(void) {
-	// am335x_dmtimer1_wait_ms(10);
-	// uint32_t* pru_timer = am335x_pru_mem_base(PRU0_DRAM) + PRU_TIMER_OFFSET;
-	// uint32_t pru_counts = *pru_timer;
-	// double time_since_boot = am335x_dmtimer1_get_time();
-	// double ticks_per_s = (double)pru_counts / time_since_boot;
-	// printf("[CLKC] Clock read at %0.3fMHz\n", ticks_per_s);
-}
+int main(void) {
+    char option[4] = "?";
+    double t1, t2;
+    int clk;
 
-static void print_menu(void) {
-    printf(
-		"MENU\n"
-		"E. Erase all SPI flash.\n"
-		"P. Write SRAM to SPI flash.\n"
-		"G. Start PJIT (GO!).\n"
-		"X. Reboot.\n"
-		"Ready.\n] "
-	);
-}
+    InitResetHalt();
 
-static int confirm(void) {
-    char query[32];
-    printf("Are you sure [y/N]? ");
-    gets(query);
-    return (query[0] == 'y' || query[0] == 'Y');
-}
+    InitDMTimer(); // works
+    InitCorePLL(1000); // works
+    InitPERPLL(); // works
+    UART0Init(115200); // works
 
-// make this a UART interrupt...?
-void monitor_break(void) {
-	static char option[32];
-	switch(gets(option)[0]) {
-	case 'G': case 'g':
-		if(confirm()) asm("svc\t%0" :: "i"(RESET_PC));
-		break;
-	case 'E': case 'e':
-		if(confirm()) EraseSPI(0, ERASE_ALL);
-		else printf("Erase cancelled.\n");
-		break;
-	case 'P': case 'p':
-		if(confirm()) {
-			uint32_t a = (uint32_t)&_image_start;
-			uint32_t l = (uint32_t)(&_image_end - &_image_start);
-			WriteLoaderImage(a, l);
-		} else printf("Write cancelled.\n");
-		break;
-	case 'X': case 'x':
-		if(confirm()) {
-			*(volatile uint32_t*)0x44E00F00 = LE32(2);
-		}
-		else printf("Reset cancelled.\n");
-		break;
-	default:
-		printf("Command not understood...\n");
-		print_menu();
-	}
-}	
+    printf("%c%c%c%c", NAK, CANCEL, CANCEL, CANCEL); // flush XMODEM
+    printf("%s", banner);
 
-/*     __  __       _         _____       _              
-**    |  \/  | __ _(_)_ __   | ____|_ __ | |_ _ __ _   _ 
-**    | |\/| |/ _` | | '_ \  |  _| | '_ \| __| '__| | | |
-**    | |  | | (_| | | | | | | |___| | | | |_| |  | |_| |
-**    |_|  |_|\__,_|_|_| |_| |_____|_| |_|\__|_|   \__, |
-**                                                 |___/ 
-*/ 
-__attribute__((naked))
-void main(void) { 
-    // Brian Fraser's fix for UBoot and enable big endian mode
-    asm volatile (
-    "           sub     r0, r0, r0              \n" /* Brian Fraser's fix for UBoot            */
-    "           mcr     p15, 0, r0, c1, c0, 0   \n" /* Disable MMU, instruction and data cache */
-#ifdef __ARMEB__
-    "           setend  be                      \n" /* Switch to big endian (FTW!)             */
-#endif    
-    );
+    InitPRU(); // works
+    t1 = ReadDMTimerSeconds();
 
-    // Initialize system stacks
-    asm volatile (
-    "           msr     cpsr_c, #0xd1           \n" /* FIQ                                     */
-    "           ldr     sp,=_stack_end + 0x10   \n"                               
-    "           msr     cpsr_c, #0xd2           \n" /* IRQ                                     */
-    "           ldr     sp,=_stack_end + 0x18   \n"                               
-    "           msr     cpsr_c, #0xd7           \n" /* Abort                                   */
-    "           ldr     sp,=_stack_end + 0x20   \n"                               
-    "           msr     cpsr_c, #0xdb           \n" /* Undefined                               */
-    "           ldr     sp,=_stack_end + 0x28   \n"                               
-    "           msr     cpsr_c, #0xdf           \n" /* System                                  */
-    "           ldr     sp,=_stack_end + 0x1000 \n"                               
-    "           msr     cpsr_c, #0xd3           \n" /* Supervisor                              */
-    "           ldr     sp,=_stack_top          \n"
-    );
+    InitI2C();
+    printf("[I2C0] Scanning bus..\n");
+    if ((prom_detected = I2C0Probe(0x50))) {
+        printf("[I2C0] 101_0000 ($50) EEPROM Detected\n");
+        // Load settings?
+    }
 
-    // Invalidate cache and Enable Branch Prediction 
-    // Allow unaligned access, effective only when MMU is enabled
-    // Enable both instruction and data caches
-    asm volatile (                                                                      
-    "           mov r0, #0                      \n"                                     
-    "           mcr p15, #0, r0, c7, c5, #6     \n"                                     
-    "           mrc p15, 0, r0, c1, c0, 0       \n"
-    "           orr r0, r0, #0x000004           \n" // Enable data cache
-    "           orr r0, r0, #0x001800           \n" // Branch prediction and instruction cache
-    "           orr r0, r0, #0x400000           \n" // Enable unaligned data
-    "           bic r0, r0, #0x000002           \n" // Disable strict alignment check
-    "           mcr p15, 0, r0, c1, c0, 0       \n"
-    "           isb                             \n"                                     
-    "           isb                             \n"                                     
-    "           isb                             \n"                                     
-    "           isb                             \n"                                     
-    );                                                                                  
-                                                                                         
-    // Enable Neon/VFP Co-Processor
-    asm volatile (                                                                      
-    "           mrc     p15, #0, r1, c1, c0, #2 \n"    /* r1 = Access Control Register         */
-    "           orr     r1, r1, #(0xf << 20)    \n"    /* enable full access for p10,11        */
-    "           mcr     p15, #0, r1, c1, c0, #2 \n"    /* Access Control Register = r1         */
-    "           mov     r1, #0                  \n"                                     
-    "           mcr     p15, #0, r1, c7, c5, #4 \n"    /* flush prefetch buffer                */
-    "           mov     r0,#0x40000000          \n"                                     
-    "           fmxr    fpexc, r0               \n"    /* Set Neon/VFP Enable bit              */
-    );                                                                                  
-#if 0                                                                                        
-    // disable am335x watchdog
-    asm volatile (                                                                      
-    "           movw r0, 0x5000                 \n"    /* load SOC_WDT_1_REGS                  */
-    "           movt r0, 0x44E3                 \n"
-    "           movw r1, 0xAAAA                 \n"                                     
-    "           str r1, [r0, #0x48]             \n"    /* store 0xaaaa to WDT_WSPR             */
-    "1:         ldr r1, [r0, #0x34]             \n"    /* loop until WDT_WWPS is 0             */
-    "           cmp r1, #0x0                    \n"                                     
-    "           bne 1b                          \n"                                     
-    "           movw r1, 0x5555                 \n"                                     
-    "           str r1, [r0, #0x48]             \n"    /* store 0x5555 to WDT_WSPR             */
-    "2:         ldr r1, [r0, #0x34]             \n"    /* loop until WDT_WWPS is 0             */
-    "           cmp r1, #0x0                    \n"
-    "           bne 2b                          \n"
-    );
-#endif
-    // Clear the .bss section (zero init)
-    asm volatile (                                                                      
-    "           mov r0, #0                      \n"
-    "           ldr r1, =_bss_start             \n"
-    "           ldr r2, =_bss_end               \n"
-    "1:         cmp r1, r2                      \n"
-    "           strlo   r0, [r1], #4            \n"
-    "           blo     1b                      \n"
-    );
+    if ((gpak_detected = I2C0Probe(0x8))) {
+        printf("[I2C0] 000_10xx ($8~$A) GreenPAK Detected\n");
+        InitNvm();
+    }
 
-	// 1. initialize all hardware including:
-	//    I2C, PMIC, clocks, EEPROM, DRAM, GPMC, GreenPAK, SPI and UART
-	// 2. verify basic operating state of the system 
-	//    i.e. Power-On Self Test or POST
-    am335x_clock_enable_l3_l4wkup();
-    am335x_clock_init_core_pll();
-    am335x_clock_init_per_pll();
-    am335x_dmtimer1_init();
+    if ((pmic_detected = I2C0Probe(0x24))) {
+        printf("[I2C0] 010_0100 ($24) PMIC Detected, Nitro mode enabled\n");
+        InitPower(RAIL_DCDC2, 1.35); // works
+        InitMPUPLL(1000); // works
+    } else {
+        InitMPUPLL(300); // works
+    }
 
-	// sets baud (default) to 115200
-    am335x_uart_init( AM335X_UART0 ); 
-	//	am335x_uart_set_baudrate(AM335X_UART0, 115200);
+    SPIInit(12000000); // works
+    DDRInit(); // works
+    InitMMU(); // works
 
-    InitPRU();
+    t2 = ReadDMTimerSeconds(); 
+    clk = GetPRUClock(); // this will be in E-clocks, so 1/10th the actual
+    double MHz = clk * 0.00001 / (t2 - t1);
 
-    // RESET
-    am335x_gpio_init(AM335X_GPIO3);
-    am335x_gpio_change_state(AM335X_GPIO3, 16, 0);
+    printf("[CLK7] Main bus clock measured at %0.3f\n", MHz);
 
-	// flush XMODEM
-	printf("%c%c%c%c", NAK, CANCEL, CANCEL, CANCEL);
-	setecho(1);
+    InitGPMC((float)MHz); // works partially, no CIA, update to real CLK
 
-    printf("\n\n              ____ ______________\n");
-    printf("  ______     |    |   \\__    ___/\n");
-    printf("  \\  __ \\    |    |   | |    |\n");
-    printf("  |  |_) )\\__|    |   | |    |\n");
-    printf("  |   __/\\________|___| |____|\n");
-    printf("  |__|\n\n");
-    
+    setecho(1);
+
+    ReleaseReset();
+
     printf("[BOOT] Build Date %s, Time %s\n", __DATE__, __TIME__);
     printf("[BOOT] Image %p ~ %p (%d bytes)\n", &_image_start, &_image_end, (&_image_end - &_image_start));
+    printf("[BOOT] Completed in %0.5f seconds\n", ReadDMTimerSeconds());
 
-	am335x_i2c_init( AM335X_I2C0, 400000 );
-	am335x_spi_init( AM335X_SPI0, AM335X_CHAN0, 12000000, 8 );
+    while (1) {
+        switch (option[0]) {
+            /* TESTS */
+        case '1': DDRTest(); break;
+        case '2': SPIDump(); break;
+        case '3': if (confirm()) SPITest(); break;
+        case '4': TestGPMC(); break;
+        case '5': test_printf(); break;
+        case '6': ProbeI2C(); break;
+        case '7': test_native_bogomips(); break;
+        case '8': printf("Unimplemented\n"); break;
+        case '9': ReadChip(1); break;
 
-    cpu = &cpu_state;
-    cpu->config = &config;
+            /* SETUP */
+        case 'J': case 'j': if (confirm()) JumpPJIT(); break;
+        case 'R': case 'r': if (confirm()) run_mcl68k(0); break;
+        case 'C': case 'c': SetEClock(); break;
+        case 'G': case 'g': ManageGP(); break;
+        // case 'R': case 'r': Run68k(); break;
+        case 'E': case 'e': if (confirm()) EraseSPI(0, ERASE_ALL); break;
+        case 'P': case 'p': if (confirm()) WriteImage(&_image_start, &_image_end); break;
+        case 'X': case 'x': if (confirm()) Reset(); break;
 
-	if(am335x_i2c_probe( AM335X_I2C0, 0x50)) get_i2c_config();
+        default: printf("Unimplemented..\n"); // fallthru
+        case 'H': case 'h': case '?': printf("%s", menu); break;
+        } // end switch
 
-	if(am335x_i2c_probe( AM335X_I2C0, 0x8) 
-	&& am335x_i2c_probe( AM335X_I2C0, 0x9) 
-	&& am335x_i2c_probe( AM335X_I2C0, 0xA) 
-	&& am335x_i2c_probe( AM335X_I2C0, 0xB)) check_greenpak();
+        printf("Ready\n] ");
+        gets(option);
 
-    if(am335x_i2c_probe( AM335X_I2C0, 0x24) && config.last_boot_good) {
-		double v = 0.01 * config.pmic_voltage;
-        InitPower(RAIL_DCDC2, v);
-        am335x_clock_init_mpu_pll(config.dpll_mul, config.dpll_div);
-    } else {
-        am335x_clock_init_mpu_pll(300, 24);
-    }
+    } // end while
 
-	// set CPU caches
-	CP15ICacheFlush();
-    if(config.cpu_features & cpu_enable_icache) {
-        CP15ICacheEnable();
-    } else {
-		CP15ICacheDisable();
-	}
-
-	CP15DCacheFlush();
-    if(config.cpu_features & cpu_enable_dcache) {
-        CP15DCacheEnable();
-    } else {
-        CP15DCacheDisable();
-	}
-
-	/* For Cortex A8, L2EN has to be enabled for L2 Cache */
-	if(config.cpu_features & (cpu_enable_icache | cpu_enable_dcache)) {
-		CP15AuxControlFeatureEnable(LE32(0x02));
-	} else {
-		CP15AuxControlFeatureDisable(LE32(0x02));
-	}
-
-    InitGPMC();
-
-	DDRInit();	
-	ddr_test(config.post_enable_t & post_enable_long_mem);
-
-	// 3. based on EEPROM settings, initialize PJIT cache and opcode jump tables
-	pjit_cache_init(0xA0000000); // has to come after DDR init, before MMU init
-	emit_opcode_table();
-
-	if(config.post_enable_t & post_enable_checkclk) check_clock();
-
-    InitMMU();
-
-
-	// Set and save the last boot good flag
-	make_i2c_good();
-	printf("[BOOT] Completed in %0.5f seconds.\n", am335x_dmtimer1_get_time());
-
-    // am335x_dmtimer1_wait_us(150);
-    am335x_gpio_change_state(AM335X_GPIO3, 16, 1);
-
-	// 4. finally, start PJIT
-	while(1) {
-		print_menu();
-		monitor_break();
-	}
+    return 0;
 }
 
 // TO-DO:

@@ -158,8 +158,8 @@ uint8_t emit_EA_Load(uint32_t** emit, uint8_t sEA, uint8_t dReg, uint8_t iReg, i
         }
 
         // Address Direct (Ax)
-        case 0x10: {
-        case_0x10:
+        case 0x10: 
+        case_0x10: {
             uint8_t reg = (sEA & 7) + 6;
             switch (width) {
                 case 1:

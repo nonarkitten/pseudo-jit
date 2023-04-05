@@ -1,46 +1,8 @@
 /*
- * Copyright (c) 2020-2023 Renee Cousins, the Buffee Project - http://www.buffee.ca
+ * pinmux.h
  *
- * This is part of PJIT the Pseudo-JIT 68K emulator.
- *
- * PJIT is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- *
- * PJIT is licensed under a Creative Commons
- * Attribution-NonCommercial-ShareAlike 4.0 International License.
- *
- * Under the terms of this license you are free copy and redistribute
- * the material in any medium or format as well as remix, transform,
- * and build upon the material.
- *
- * You must give appropriate credit, provide a link to the license,
- * and indicate if changes were made. You may do so in any reasonable
- * manner, but not in any way that suggests the licensor endorses you
- * or your use.
- *
- * You may not use the material for commercial purposes.
- *
- * If you remix, transform, or build upon the material, you must
- * distribute your contributions under the same license as the original.
- *
- * You may not apply legal terms or technological measures that legally
- * restrict others from doing anything the license permits.
- *
- * Portions of PJIT have been derived from the following:
- *
- *     Castaway (formerly FAST), GPL version 2 License
- *     Copyright (c) 1994-2002 Martin Döring, Joachim Hönig
- *    
- *     Cyclone 68K, GPL version 2 License
- *     Copyright (c) 2004,2011 Dave "FinalDave" Haywood
- *     Copyright (c) 2005-2011 Graûvydas "notaz" Ignotas
- *    
- *     TI StarterWare, modified BSD 3-Clause License
- *     Copyright (C) 2010 Texas Instruments Incorporated - http://www.ti.com/
- *
- *     libbbb, Apache License, Version 2.0
- *     Copyright 2015 University of Applied Sciences Western Switzerland / Fribourg
+ *  Created on: May 13, 2021
+ *      Author: renee.cousins
  */
 
 #ifndef PINMUX_H_
@@ -49,29 +11,17 @@
 #include "main.h"
 
 /*
- * IEN  - Input Enable
- * IDIS - Input Disable
- * PTD  - Pull type Down
- * PTU  - Pull type Up
- * DIS  - Pull type selection is inactive
- * EN   - Pull type selection is active
- * M0   - Mode 0
+ * INEN - Input Enable
+ * PTDN  - Pull type Down
+ * PTUP  - Pull type Up
+ * PDIS  - Pull disabled
+ * MX    - Mode X (0 thru 7 typically)
  * The commented string gives the final mux configuration for that pin
  */
-// Slow down transition
-#define PIN_CFG_SLEW    (1 << 6)
-// Input Enable
-#define PIN_CFG_IEN     (1 << 5)
-// Input disable
-#define PIN_CFG_IDIS    (0 << 5)
-// Configure as Pull-Up
-#define PIN_CFG_PTU     (1 << 4)
-// Configure as Pull-Down
-#define PIN_CFG_PTD     (0 << 4)
-// Pull Up/Down Enable
-#define PIN_CFG_EN      (1 << 3)
-// Pull Up/Down Disable
-#define PIN_CFG_DIS     (0 << 3)
+#define PIN_CFG_INEN    (1 << 5)
+#define PIN_CFG_PTDN    (0 << 3)
+#define PIN_CFG_PTUP    (2 << 3)
+#define PIN_CFG_PDIS    (1 << 3)
 
 #define PIN_CFG_M0      (0 << 0)
 #define PIN_CFG_M1      (1 << 0)

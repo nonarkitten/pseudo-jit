@@ -1,40 +1,38 @@
 # All critical output, source folders
-OUTDIR  := bin
-
-BINARY  := buffee.elf
-SRCDIRS := . clib/ hal/ libbbb/src/ pjit/
+OUTDIR  := binaries
+BINARY  := buffee_bootloader.elf
+SRCDIRS := . clib/ hal/
 CROSS   := arm-none-eabi-
 
 # CPU type and common options
-CCFLAGS_CPU := -march=armv7-a -marm -mfpu=neon -mtune=cortex-a8		# CPU core type
-CCFLAGS_CPU += -mfpu=neon-vfpv3 -mfloat-abi=hard -ffast-math		# CPU floating point
-CCFLAGS_CPU += -ffunction-sections -fdata-sections					# Break functions & data into own sections
-CCFLAGS_CPU += -std=gnu11	     									# We're using GNU extensions
-CCFLAGS_CPU += -MMD     											# Build dependency files
-CCFLAGS_CPU += -fomit-frame-pointer -nostdlib -ffreestanding		# Omit some OS overhead
-CCFLAGS_CPU += -mbe8 -mbig-endian									# Compile for big-endian mode
+CCFLAGS_CPU := \
+	-fno-exceptions -fno-unwind-tables -nostdlib -fno-common -ffreestanding \
+	-marm -mcpu=cortex-a8 -mfpu=vfpv3 -mfloat-abi=hard \
+	-ffunction-sections -fdata-sections -fomit-frame-pointer \
+	-std=gnu11 -MMD -fmax-errors=5 
 
-# Universally good compiler warnings
+# Universally good compiler warnings	
 CCFLAGS_WARN := \
 	-Wall -Wshadow -Wdouble-promotion -Wformat-overflow -Wformat-truncation \
-	-Wundef -Wno-unused-parameter -fmax-errors=5
+	-Wundef -Wno-unused-parameter -Wno-discarded-qualifiers
 
-ifneq ($(filter release,$(MAKECMDGOALS)),)
-BUILD := release
-else
+ifneq ($(filter debug,$(MAKECMDGOALS)),)
 BUILD := debug
+else ifneq ($(filter release,$(MAKECMDGOALS)),)
+BUILD := release
+else ifeq ($(MAKECMDGOALS),clean)
+BUILD := *
+else
+$(error Must specify release or debug)
 endif
 
 # Compiler optimizations
 ifeq ($(BUILD),release)
 # Optimize for release and raise the bar for errors
-# Do not use -Os no matter how tempting! Os uniquely creates literal pools which break big-endian!
-CCFLAGS_OPT := -O3 -Werror -s
-$(info Compiling release build);
+CCFLAGS_OPT := -Os -ffast-math -Werror -s
 else
 # Optimize for debugging, but include basic optimizers for not-terrible-code
-CCFLAGS_OPT := -Og -g -D_DEBUG
-$(info Compiling debug build; to compile release, specify 'release' after make);
+CCFLAGS_OPT := -Og -g3 -ggdb -D_DEBUG
 endif
 
 # Set noisey output
@@ -53,7 +51,7 @@ AR := $(QUIET)$(CROSS)ar
 SZ := $(QUIET)$(CROSS)size
 CC := $(QUIET)$(CROSS)gcc
 OC := $(QUIET)$(CROSS)objcopy
-DI := $(QUIET)$(CROSS)objdump --disassemble
+DI := $(QUIET)$(CROSS)objdump --disassemble 
 RM := $(QUIET)rm -rf
 RD := $(QUIET)rmdir
 MD := $(QUIET)mkdir -p
@@ -65,47 +63,41 @@ BINARY  := $(patsubst %.elf,%.bin,$(OUTPUT))
 MAPFILE := $(patsubst %.elf,%.map,$(OUTPUT))
 DISFILE := $(patsubst %.elf,%.asm,$(OUTPUT))
 
-LDFLAGS := -static -ffreestanding -nostdlib -nostartfiles -T linker.lds
-LDFLAGS += -Wl,--Map=$(MAPFILE)
-LDFLAGS += -Wl,--be8 -Wl,--format=elf32-bigarm
-LDFLAGS += -Wl,--no-warn-rwx-segment
-ifeq ($(BUILD),debug)
-LDFLAGS += -Wl,--gc-sections
-endif
+LDFLAGS := -static -ffreestanding -T linker.lds \
+	-Wl,--gc-sections \
+	-Wl,--Map=$(MAPFILE)
 
-INCLUDES := -I./inc -I./libbbb/inc/ $(addprefix -I./,$(SRCDIRS))
-C_SOURCES := $(foreach dir,$(SRCDIRS),$(wildcard $(dir)/*.c))
-C_OBJECTS := $(addprefix $(OBJDIR)/,$(addsuffix .o,$(basename $(foreach file,$(C_SOURCES),$(notdir $(file))))))
-ASM_SOURCES := $(foreach dir,$(SRCDIRS),$(wildcard $(dir)/*.s))
-ASM_OBJECTS := $(addprefix $(OBJDIR)/,$(addsuffix .o,$(basename $(foreach file,$(ASM_SOURCES),$(notdir $(file))))))
-OBJECTS := $(C_OBJECTS) $(ASM_OBJECTS)
+INCLUDES := -I./inc $(addprefix -I./,$(SRCDIRS))
+SOURCES := $(foreach dir,$(SRCDIRS),$(wildcard $(dir)/*.c) $(wildcard $(dir)/*.s))
+OBJECTS := $(addprefix $(OBJDIR)/,$(addsuffix .o,$(basename $(foreach file,$(SOURCES),$(notdir $(file))))))
 
 VPATH := $(SRCDIRS)
 
 .PHONY: all premake clean debug release
 
-all: premake $(OUTPUT)
+clean:
+	@echo Cleaning $(OUTPUT)...
+	@make -C pru -f pru.mk clean
+# -@make -C pru1 -f pru.mk clean
+	$(RM) $(OBJDIR)/* 2>/dev/null || true
+	$(RD) $(OBJDIR) 2>/dev/null || true
+	$(RM) $(OUTPUT) 2>/dev/null || true
+	$(RM) $(BINARY) 2>/dev/null || true
+	$(RM) $(MAPFILE) 2>/dev/null || true	
+	$(RM) $(MAPFILE).bak 2>/dev/null || true	
+	$(RM) $(DISFILE) 2>/dev/null || true
+	$(RM) $(OUTDIR)/$(BUILD) 2>/dev/null || true
 
-release debug: all
+release debug: premake all 
+all: $(OUTPUT)
 
 premake:
 	$(MD) $(OBJDIR)
-	-@make -C pru -f pru.mk
+	@make -C pru -f pru.mk
+# -@make -C pru1 -f pru.mk
 
-clean:
-	@echo Cleaning $(OUTPUT)...
-	-@make -C pru -f pru.mk clean
-	-$(RM) $(OBJDIR)/* 2>/dev/null
-	-$(RD) $(OBJDIR) 2>/dev/null
-	-$(RM) $(OUTPUT) 2>/dev/null
-	-$(RM) $(BINARY) 2>/dev/null
-	-$(RM) $(MAPFILE) 2>/dev/null
-	-$(RM) $(MAPFILE).bak 2>/dev/null
-	-$(RM) $(DISFILE) 2>/dev/null
-	-$(RM) $(OUTDIR)/$(BUILD) 2>/dev/null
-
-$(OUTPUT): $(OBJECTS)
-	@echo Building PJIT...
+$(OUTPUT): $(OBJECTS) pru/main.c
+	@echo Building PJIT Bootloader...
 	$(CC) $(CFLAGS) $(LDFLAGS) $(OBJECTS) -o $@
 	$(DI) $@ > $(DISFILE) &
 	$(OC) -O binary $@ $(BINARY)
@@ -121,4 +113,4 @@ $(OBJDIR)/%.o: %.s
 	@echo Assembling $<...
 	$(AS) $(CFLAGS) -c $< -o $@
 
--include $(C_OBJECTS:%.o=%.d)
+-include $(addprefix $(OBJDIR)/,$(notdir $($(filter %.c,$(SOURCES)):%.c=%.d)))

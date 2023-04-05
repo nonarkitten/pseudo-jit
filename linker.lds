@@ -42,38 +42,38 @@
 
 ENTRY(Entry)
 
-SECTIONS
-{
+ SECTIONS
+ {
     . = 0x402F0400;
-	_image_start = .;
 
-	/* Program stuff */
-    .text : {    
-        *(.startup)
-        *(.rodata*)
-        *(.text*)
-    }
+    .text : {
+         _image_start = .;
+         *(.startup)
+         /* KEEP(*bl_init.o(.text)) */
+         *(.rodata)
+         *(.text*)
+     }
+ 	/* non-zero global and static variables */
+ 	. = ALIGN(32);
+ 	.data : {
+         *(.data)
+         _image_end = .;
+     }
 
-	/* non-zero global and static variables */
-	. = ALIGN(4);
-	.data : { *(.data*) }
-	_image_end = .;
+ 	/* zeroed global and static variables */
+ 	. = ALIGN(32);
+ 	_bss_start = .;
+ 	.bss :  { *(.bss) }
 
-	/* zeroed global and static variables */
-	. = ALIGN(16);
-	_bss_start = .;
-	.bss :  { *(.bss*) }
-	 
-	/* Put the stack inside the BSS to simplify clearing */
-	. = ALIGN(4);
-	.stack :
-	{
-		_stack_end = .;  /* the danger zone! */
-		. = . + 0x1000;  /* 4kB of stack memory */
-		_stack_top = .;  /* stack grows upwards */
-	}
+ 	/* Put the stack inside the BSS to simplify clearing */
+ 	. = ALIGN(32);
+ 	.stack :
+ 	{
+ 		_stack_end = .;  /* the danger zone! */
+ 		. = . + 0x1000;  /* 4kB of stack memory */
+ 		_stack_top = .;  /* stack grows upwards */
+ 	}
 
-	. = ALIGN(16);
-	_bss_end = .;
-}
-
+ 	. = ALIGN(32);
+ 	_bss_end = .;
+ }
