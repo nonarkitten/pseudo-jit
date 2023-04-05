@@ -5,3 +5,4 @@ pru/*.bin
 pru/*.lst
 pru/*.obj
 pru/*.out
+*.gp6
