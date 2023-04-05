@@ -87,24 +87,24 @@ const char* const nvmMasks[16] = {
 #define NVM_BYTES  240
 
 // Store nvmData in to save on RAM
-//                        ↓↓ 0 1 2 3 4 5 6 7 8 9 a b c d e f
-const char nvmString0[] =  "00702007D230CAC2240BD31801000000";
-const char nvmString1[] =  "00000000000000000000000000000000";
-const char nvmString2[] =  "00000000000000000000000000000000";
-const char nvmString3[] =  "000000D23F3DD00F0011050000000000";
-const char nvmString4[] =  "00000000000000000000000000000000";
-const char nvmString5[] =  "00000000000000000000000000000000";
-const char nvmString6[] =  "00010000808000710000808000000000";
-const char nvmString7[] =  "00000000000000000000000000000000";
-const char nvmString8[] =  "00000000001422300C00000000000000";
-const char nvmString9[] =  "D0EB0000EAEAF7000000000000000000";
-const char nvmString10[] = "00007020000100000002010000020001";
+const char nvmString0[] = "1D702007C200CAC2240B030000000000";
+const char nvmString1[] = "000000000000D0384600000D00000000";
+const char nvmString2[] = "00000000000000000000000000000000";
+const char nvmString3[] = "000000D23F3DD00F00D1090000000000";
+const char nvmString4[] = "00000000000000000000000000000000";
+const char nvmString5[] = "00000000000000000000000000000000";
+const char nvmString6[] = "00010000808000010000808000000000";
+const char nvmString7[] = "00000001000000000000000000000000";
+const char nvmString8[] = "00010000001422300C00000000000000";
+const char nvmString9[] = "DAE50000EAEAAAAA0000000000000000";
+const char nvmString10[] = "00FFEF20000100020000010000020001";
 const char nvmString11[] = "00000201000002000100000201000002";
 const char nvmString12[] = "00010000020001000000020100000000";
 const char nvmString13[] = "00000000000000000000000000000000";
+////                               ↓↓ 0 1 2 3 4 5 6 7 8 9 a b c d e f
 const char nvmString14[] = "00000000000000000000000000000000";
-const char nvmString15[] = "00000000000000000000000000000000";
-//                        ↑↑ 0 1 2 3 4 5 6 7 8 9 a b c d e f
+////                               ↑↑ 0 1 2 3 4 5 6 7 8 9 a b c d e f
+const char nvmString15[] = "000000000000000000000000000000A5";
 
 const char* const nvmString[16] = {
     nvmString0,  nvmString1,  nvmString2,  nvmString3,
