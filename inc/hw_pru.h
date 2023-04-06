@@ -23,8 +23,8 @@ typedef enum {
 } PRU_CORE_t;
 
 extern void PRUInit(void);
-extern void PRUReset(void);
 
+extern void PRUReset(PRU_CORE_t PRUCore);
 extern void PRUEnable(PRU_CORE_t PRUCore);
 extern void PRUHalt(PRU_CORE_t PRUCore);
 

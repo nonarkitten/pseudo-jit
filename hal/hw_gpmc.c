@@ -275,11 +275,11 @@ static void SetGPMCTiming(Timing_t *t) {
 	// Set CONFIGx bits
 	GPMCConfig(gpmc_config, 2, 0x02000000, 0x01000000);
 
-    printf("[GPMC] Cycle Time: %d\n", t->CYCLETIME);
-    printf("[GPMC] Access Time: %d\n", t->ACCESSTIME);
-    printf("[GPMC] nCS Timing (ON/OFF): %d/%d\n", t->CSONTIME, t->CSOFFTIME);
-    printf("[GPMC] nRE Timing (ON/OFF): %d/%d\n", t->OEONTIME, t->OEOFFTIME);
-    printf("[GPMC] nWE Timing (ON/OFF): %d/%d\n", t->WEONTIME, t->WEOFFTIME);
+    // printf("[GPMC] Cycle Time: %d\n", t->CYCLETIME);
+    // printf("[GPMC] Access Time: %d\n", t->ACCESSTIME);
+    // printf("[GPMC] nCS Timing (ON/OFF): %d/%d\n", t->CSONTIME, t->CSOFFTIME);
+    // printf("[GPMC] nRE Timing (ON/OFF): %d/%d\n", t->OEONTIME, t->OEOFFTIME);
+    // printf("[GPMC] nWE Timing (ON/OFF): %d/%d\n", t->WEONTIME, t->WEOFFTIME);
 
     // PrintTiming(&default_timing);
 }

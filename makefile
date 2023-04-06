@@ -41,7 +41,8 @@ QUIET := @
 endif
 
 # Any build defintions
-DEFINES :=
+VERSION := ${shell git describe --tags --no-dirty | sed 's/\(.*\)-\(.*\)-.*/\1-\2/'}
+DEFINES := -DVERSION=\"${VERSION}\"
 
 # Combine all the flags so far
 CFLAGS := $(CCFLAGS_WARN) $(CCFLAGS_CPU) $(CCFLAGS_OPT) $(DEFINES)

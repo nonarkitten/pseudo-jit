@@ -113,6 +113,11 @@ const char* const nvmString[16] = {
     nvmString12, nvmString13, nvmString14, nvmString15
 };
 
+#ifndef VERSION
+#define VERSION "n/a"
+#endif
+static const char* Version = VERSION;
+
 static uint8_t nvmData[256] = { 0 };
 static uint8_t nvmMask[256] = { 0 };
 
@@ -249,7 +254,7 @@ uint8_t _getchar(void) { return UART0Read(); }
 void _putchar(uint8_t ch) { UART0Write(ch); }
 
 const char* banner =
-"\n\n              ____ ______________\n"
+"              ____ ______________\n"
 "  ______     |    |   \\__    ___/\n"
 "  \\  __ \\    |    |   | |    |\n"
 "  |  |_) )\\__|    |   | |    |\n"
@@ -305,6 +310,323 @@ static void EmergencyErase(void) {
     }
 }
 
+#define debugSessionDAP 0
+static uint32_t printRegisterValue(int port, const char *text, uint32_t addr) {
+    uint32_t a = *(uint32_t*)addr;
+    printf("%08x %s\n", a, text);
+    return a;
+}
+
+static void DebugBoot(void) {
+    uint32_t reg_val;
+    uint32_t boot_sequence;
+    int i;
+    int esc = 0;
+
+    for(i=0; i<5; i++) {
+        WaitMSDMTimer(3);
+        if(UART0Getkey() == 0x20) esc++;
+    }
+    // if(esc == 0) return;
+
+    // CONTROL: device_id
+    reg_val = printRegisterValue(debugSessionDAP, "CONTROL: device_id", 0x44E10600);
+    if ( (reg_val & 0x0FFFFFFF) == 0xb94402e ) {printf("  * AM335x family\n");}
+    if ( (reg_val & 0xF0000000) == (0 << 28) ) {printf("  * Silicon Revision 1.0\n");}
+    if ( (reg_val & 0xF0000000) == (1 << 28) ) {printf("  * Silicon Revision 2.0\n");}
+    if ( (reg_val & 0xF0000000) == (2 << 28) ) {printf("  * Silicon Revision 2.1\n");}
+
+    // ROM: PRM_RSTST
+    printf("\n");
+    reg_val = printRegisterValue(debugSessionDAP, "PRM_DEVICE: PRM_RSTST", 0x44E00F08);
+    if (reg_val & 1<<0  ) {printf("  * Bit 0 : GLOBAL_COLD_RST\n");}
+    if (reg_val & 1<<1  ) {printf("  * Bit 1 : GLOBAL_WARM_RST\n");}
+    if (reg_val & 1<<4  ) {printf("  * Bit 4 : WDT1_RST\n");}
+    if (reg_val & 1<<5  ) {printf("  * Bit 5 : EXTERNAL_WARM_RST\n");}
+
+    // CONTROL: control_status
+    printf("\n");
+    reg_val = printRegisterValue(debugSessionDAP, "CONTROL: control_status", 0x44E10040);
+    boot_sequence = (reg_val & 0x1F);
+    if ( (reg_val & 3<<22 ) == 0<<22 ) {printf("  * SYSBOOT[15:14] = 00b (19.2 MHz)\n");}
+    if ( (reg_val & 3<<22 ) == 1<<22 ) {printf("  * SYSBOOT[15:14] = 01b (24 MHz)\n");}
+    if ( (reg_val & 3<<22 ) == 2<<22 ) {printf("  * SYSBOOT[15:14] = 10b (25 MHz)\n");}
+    if ( (reg_val & 3<<22 ) == 3<<22 ) {printf("  * SYSBOOT[15:14] = 11b (26 MHz)\n");}
+    if ( (reg_val & 3<<20 ) != 0<<20 ) {printf("  * SYSBOOT[13:12] have been set improperly!\n");}
+    if ( (reg_val & 3<<18 ) == 0<<18 ) {printf("  * SYSBOOT[11:10] = 00b No GPMC CS0 addr/data muxing\n");}
+    if ( (reg_val & 3<<18 ) == 1<<18 ) {printf("  * SYSBOOT[11:10] = 01b GPMC CS0 addr/addr/data muxing\n");}
+    if ( (reg_val & 3<<18 ) == 2<<18 ) {printf("  * SYSBOOT[11:10] = 10b GPMC CS0 addr/data muxing\n");}
+    if ( (reg_val & 3<<18 ) == 3<<18 ) {printf("  * SYSBOOT[11:10] = 11b ILLEGAL VALUE!\n");}
+    if ( (reg_val & 1<<17 ) == 0<<17 ) {printf("  * SYSBOOT[9] = 0 GPMC CS0 Ignore WAIT input\n");}
+    if ( (reg_val & 1<<17 ) == 1<<17 ) {printf("  * SYSBOOT[9] = 1 GPMC CS0 Use WAIT input\n");}
+    if ( (reg_val & 1<<16 ) == 0<<16 ) {printf("  * SYSBOOT[8] = 0 GPMC CS0 8-bit data bus\n");}
+    if ( (reg_val & 1<<16 ) == 1<<16 ) {printf("  * SYSBOOT[8] = 1 GPMC CS0 16-bit data bus\n");}
+    if ( (reg_val & 7<<8  ) == 3<<8  ) {printf("  * Device Type = General Purpose (GP)\n");}
+    else                               {printf("  * Device Type is NOT GP\n");}
+    if ( (reg_val & 0xFF  ) == 0x01  ) {printf("  * SYSBOOT[8] = 1 GPMC CS0 16-bit data bus\n");}
+    if ( (reg_val & 3<<6  ) == 0<<6  ) {printf("  * SYSBOOT[7:6] = 00b MII (EMAC boot modes only)\n");}
+    if ( (reg_val & 3<<6  ) == 1<<6  ) {printf("  * SYSBOOT[7:6] = 01b RMII (EMAC boot modes only)\n");}
+    if ( (reg_val & 3<<6  ) == 2<<6  ) {printf("  * SYSBOOT[7:6] = 10b ILLEGAL VALUE!\n");}
+    if ( (reg_val & 3<<6  ) == 3<<6  ) {printf("  * SYSBOOT[7:6] = 11b RGMII no internal delay (EMAC boot modes only)\n");}
+    if ( (reg_val & 1<<5  ) == 0<<5  ) {printf("  * SYSBOOT[5] = 0 CLKOUT1 disabled\n");}
+    if ( (reg_val & 1<<5  ) == 1<<5  ) {printf("  * SYSBOOT[5] = 1 CLKOUT1 enabled\n");}
+
+    if (boot_sequence == 0x01)      {printf("  * Boot Sequence : UART0 -> XIP w/WAIT (MUX2) -> MMC0 -> SPI0\n");} 
+    else if (boot_sequence == 0x02) {printf("  * Boot Sequence : UART0 -> SPI0 -> NAND -> NANDI2C\n");}
+    else if (boot_sequence == 0x03) {printf("  * Boot Sequence : UART0 -> SPI0 -> XIP (MUX2) -> MMC0\n");}
+    else if (boot_sequence == 0x04) {printf("  * Boot Sequence : UART0 -> XIP w/WAIT (MUX1) -> MMC0 -> NAND\n");}
+    else if (boot_sequence == 0x05) {printf("  * Boot Sequence : UART0 -> XIP (MUX1) -> SPI0 -> NANDI2C\n");}
+    else if (boot_sequence == 0x06) {printf("  * Boot Sequence : EMAC1 -> SPI0 -> NAND -> NANDI2C\n");}
+    else if (boot_sequence == 0x07) {printf("  * Boot Sequence : EMAC1 -> MMC0 -> XIP w/WAIT (MUX2) -> NAND\n");}
+    else if (boot_sequence == 0x08) {printf("  * Boot Sequence : EMAC1 -> MMC0 -> XIP (MUX2) -> NANDI2C\n");}
+    else if (boot_sequence == 0x09) {printf("  * Boot Sequence : EMAC1 -> XIP w/WAIT (MUX1) -> NAND -> MMC0\n");}
+    else if (boot_sequence == 0x0A) {printf("  * Boot Sequence : EMAC1 -> XIP (MUX1) -> SPI0 -> NANDI2C\n");}
+    else if (boot_sequence == 0x0B) {printf("  * Boot Sequence : USB0 -> NAND -> SPI0 -> MMC0\n");}
+    else if (boot_sequence == 0x0C) {printf("  * Boot Sequence : USB0 -> NAND -> XIP (MUX2) -> NANDI2C\n");}
+    else if (boot_sequence == 0x0D) {printf("  * Boot Sequence : USB0 -> NAND -> XIP (MUX1) -> SPI0\n");}
+    else if (boot_sequence == 0x0F) {printf("  * Boot Sequence : UART0 -> EMAC1 -> Reserved -> Reserved\n");}
+    else if (boot_sequence == 0x10) {printf("  * Boot Sequence : XIP (MUX1) -> UART0 -> EMAC1 -> MMC0 \n");}
+    else if (boot_sequence == 0x11) {printf("  * Boot Sequence : XIP w/WAIT (MUX1) -> UART0 -> EMAC1 -> MMC0\n");} 
+    else if (boot_sequence == 0x12) {printf("  * Boot Sequence : NAND -> NANDI2C -> USB0 -> UART0\n");}
+    else if (boot_sequence == 0x13) {printf("  * Boot Sequence : NAND -> NANDI2C -> MMC0 -> UART0\n");}
+    else if (boot_sequence == 0x14) {printf("  * Boot Sequence : NAND -> NANDI2C -> SPI0 -> EMAC1\n");}
+    else if (boot_sequence == 0x15) {printf("  * Boot Sequence : NANDI2C -> MMC0 -> EMAC1 -> UART0\n");}
+    else if (boot_sequence == 0x16) {printf("  * Boot Sequence : SPI0 -> MMC0 -> UART0 -> EMAC1\n");}
+    else if (boot_sequence == 0x17) {printf("  * Boot Sequence : MMC0 -> SPI0 -> UART0 -> USB0\n");}
+    else if (boot_sequence == 0x18) {printf("  * Boot Sequence : SPI0 -> MMC0 -> USB0 -> UART0\n");}
+    else if (boot_sequence == 0x19) {printf("  * Boot Sequence : SPI0 -> MMC0 -> EMAC1 -> UART0\n");}
+    else if (boot_sequence == 0x1A) {printf("  * Boot Sequence : XIP (MUX2) -> UART0 -> SPI0 -> MMC0\n");}
+    else if (boot_sequence == 0x1B) {printf("  * Boot Sequence : XIP w/WAIT (MUX2) -> UART0 -> SPI0 -> MMC0\n");}
+    else if (boot_sequence == 0x1C) {printf("  * Boot Sequence : MMC1 -> MMC0 -> UART0 -> USB0\n");}
+    else if (boot_sequence == 0x1F) {printf("  * Boot Sequence : Fast External Boot -> EMAC1 -> UART0 -> Reserved\n");}
+    else                            {printf("  * ILLEGAL BOOT SEQUENCE!\n");}
+
+    // ROM: Tracing Vector 1
+    printf("\n");
+    reg_val = printRegisterValue(debugSessionDAP, "ROM: Current tracing vector, word 1", 0x4030CE40);
+    if (reg_val & 1<<0  ) {printf("  * Bit 0  : [General] Passed the public reset vector\n");}
+    if (reg_val & 1<<1  ) {printf("  * Bit 1  : [General] Entered main function\n");}
+    if (reg_val & 1<<2  ) {printf("  * Bit 2  : [General] Running after the cold reset\n");}
+    if (reg_val & 1<<3  ) {printf("  * Bit 3  : [Boot] Main booting routine entered\n");}
+    if (reg_val & 1<<4  ) {printf("  * Bit 4  : [Memory Boot] Memory booting started\n");}
+    if (reg_val & 1<<5  ) {printf("  * Bit 5  : [Peripheral Boot] Peripheral booting started\n");}
+    if (reg_val & 1<<6  ) {printf("  * Bit 6  : [Boot] Booting loop reached last device\n");}
+    if (reg_val & 1<<7  ) {printf("  * Bit 7  : [Boot] GP header found\n");}
+    // if (reg_val & 1<<8  ) {printf("  * Bit 8  : [Boot] Reserved\n");}
+    // if (reg_val & 1<<9  ) {printf("  * Bit 9  : [Boot] Reserved\n");}
+    // if (reg_val & 1<<10 ) {printf("  * Bit 10 : [Peripheral Boot] Reserved\n");}
+    // if (reg_val & 1<<11 ) {printf("  * Bit 11 : [Peripheral Boot] Reserved\n");}
+    if (reg_val & 1<<12 ) {printf("  * Bit 12 : [Peripheral Boot] Device initialized\n");}
+    if (reg_val & 1<<13 ) {printf("  * Bit 13 : [Peripheral Boot] ASIC ID sent\n");}
+    if (reg_val & 1<<14 ) {printf("  * Bit 14 : [Peripheral Boot] Image received\n");}
+    if (reg_val & 1<<15 ) {printf("  * Bit 15 : [Peripheral Boot] Peripheral booting failed\n");}
+    if (reg_val & 1<<16 ) {printf("  * Bit 16 : [Peripheral Boot] Booting Message not received (timeout)\n");}
+    if (reg_val & 1<<17 ) {printf("  * Bit 17 : [Peripheral Boot] Image size not received (timeout)\n");}
+    if (reg_val & 1<<18 ) {printf("  * Bit 18 : [Peripheral Boot] Image not received (timeout)\n");}
+    // if (reg_val & 1<<19 ) {printf("  * Bit 19 : Reserved\n");}
+    if (reg_val & 1<<20 ) {printf("  * Bit 20 : [Configuration Header] CHSETTINGS found\n");}
+    if (reg_val & 1<<21 ) {printf("  * Bit 21 : [Configuration Header] CHSETTINGS executed\n");}
+    if (reg_val & 1<<22 ) {printf("  * Bit 22 : [Configuration Header] CHRAM executed\n");}
+    if (reg_val & 1<<23 ) {printf("  * Bit 23 : [Configuration Header] CHFLASH executed\n");}
+    if (reg_val & 1<<24 ) {printf("  * Bit 24 : [Configuration Header] CHMMCSD clocks executed\n");}
+    if (reg_val & 1<<25 ) {printf("  * Bit 25 : [Configuration Header] CHMMCSD bus width executed\n");}
+    // if (reg_val & 1<<26 ) {printf("  * Bit 26 : Reserved\n");}
+    // if (reg_val & 1<<27 ) {printf("  * Bit 27 : Reserved\n");}
+    // if (reg_val & 1<<28 ) {printf("  * Bit 28 : Reserved\n");}
+    // if (reg_val & 1<<29 ) {printf("  * Bit 29 : Reserved\n");}
+    // if (reg_val & 1<<30 ) {printf("  * Bit 30 : Reserved\n");}
+    // if (reg_val & 1<<31 ) {printf("  * Bit 31 : Reserved\n");}
+
+    // ROM: Tracing Vector 2
+    printf("\n");
+    reg_val = printRegisterValue(debugSessionDAP, "ROM: Current tracing vector, word 2", 0x4030CE44);
+    // if (reg_val & 1<<0  ) {printf("  * Bit 0  : [Companion chip] Reserved\n");}
+    // if (reg_val & 1<<1  ) {printf("  * Bit 1  : [Companion chip] Reserved\n");}
+    // if (reg_val & 1<<2  ) {printf("  * Bit 2  : [Companion chip] Reserved\n");}
+    // if (reg_val & 1<<3  ) {printf("  * Bit 3  : [Companion chip] Reserved\n");}
+    if (reg_val & 1<<4  ) {printf("  * Bit 4  : [USB] USB connect\n");}
+    if (reg_val & 1<<5  ) {printf("  * Bit 5  : [USB] USB configured state\n");}
+    if (reg_val & 1<<6  ) {printf("  * Bit 6  : [USB] USB VBUS valid\n");}
+    if (reg_val & 1<<7  ) {printf("  * Bit 7  : [USB] USB session valid\n");}
+    // if (reg_val & 1<<8  ) {printf("  * Bit 8  : Reserved\n");}
+    // if (reg_val & 1<<9  ) {printf("  * Bit 9  : Reserved\n");}
+    // if (reg_val & 1<<10 ) {printf("  * Bit 10 : Reserved\n");}
+    // if (reg_val & 1<<11 ) {printf("  * Bit 11 : Reserved\n");}
+    if (reg_val & 1<<12 ) {printf("  * Bit 12 : [Memory Boot] Memory booting trial 0\n");}
+    if (reg_val & 1<<13 ) {printf("  * Bit 13 : [Memory Boot] Memory booting trial 1\n");}
+    if (reg_val & 1<<14 ) {printf("  * Bit 14 : [Memory Boot] Memory booting trial 2\n");}
+    if (reg_val & 1<<15 ) {printf("  * Bit 15 : [Memory Boot] Memory booting trial 3\n");}
+    if (reg_val & 1<<16 ) {printf("  * Bit 16 : [Memory Boot] Execute GP image\n");}
+    if (reg_val & 1<<17 ) {printf("  * Bit 17 : [Peripheral Boot] Start authentication of peripheral boot image\n");}
+    if (reg_val & 1<<18 ) {printf("  * Bit 18 : [Memory & Peripheral Boot] Jumping to Initial SW\n");}
+    // if (reg_val & 1<<19 ) {printf("  * Bit 19 : [Memory & Peripheral Boot] Image authentication failed\n");}
+    if (reg_val & 1<<20 ) {printf("  * Bit 20 : [Memory & Peripheral Boot] Start image authentication\n");}
+    if (reg_val & 1<<21 ) {printf("  * Bit 21 : [Memory & Peripheral Boot] Image authentication failed\n");}
+    if (reg_val & 1<<22 ) {printf("  * Bit 22 : [Memory & Peripheral Boot] Analyzing SpeedUp\n");}
+    if (reg_val & 1<<23 ) {printf("  * Bit 23 : [Memory & Peripheral Boot] Speedup failed\n");}
+    // if (reg_val & 1<<24 ) {printf("  * Bit 24 : [Memory & Peripheral Boot] Reserved\n");}
+    // if (reg_val & 1<<25 ) {printf("  * Bit 25 : [Memory & Peripheral Boot] Reserved\n");}
+    // if (reg_val & 1<<26 ) {printf("  * Bit 26 : [Memory & Peripheral Boot] Reserved\n");}
+    // if (reg_val & 1<<27 ) {printf("  * Bit 27 : [Memory & Peripheral Boot] Reserved\n");}
+    if (reg_val & 1<<28 ) {printf("  * Bit 28 : [Memory & Peripheral Boot] Authentication procedure failed\n");}
+    // if (reg_val & 1<<29 ) {printf("  * Bit 29 : Reserved\n");}
+    // if (reg_val & 1<<30 ) {printf("  * Bit 30 : Reserved\n");}
+    // if (reg_val & 1<<31 ) {printf("  * Bit 31 : Reserved\n");}
+
+
+    // ROM: Tracing Vector 3
+    printf("\n");
+    reg_val = printRegisterValue(debugSessionDAP, "ROM: Current tracing vector, word 3", 0x4030CE48);
+    if (reg_val & 1<<0  ) {printf("  * Bit 0  : [Memory Boot] Memory booting device NULL\n");}
+    if (reg_val & 1<<1  ) {printf("  * Bit 1  : [Memory Boot] Memory booting device XIP\n");}
+    if (reg_val & 1<<2  ) {printf("  * Bit 2  : [Memory Boot] Memory booting device XIPWAIT\n");}
+    if (reg_val & 1<<3  ) {printf("  * Bit 3  : [Memory Boot] Memory booting device NAND\n");}
+    // if (reg_val & 1<<4  ) {printf("  * Bit 4  : [Memory Boot] Memory booting device XIPWAIT (MUX1)\n");}
+    if (reg_val & 1<<5  ) {printf("  * Bit 5  : [Memory Boot] Memory booting device MMCSD0\n");}
+    // if (reg_val & 1<<6  ) {printf("  * Bit 6  : Reserved\n");}
+    if (reg_val & 1<<7  ) {printf("  * Bit 7  : [Memory Boot] Memory booting device MMCSD1\n");}
+    // if (reg_val & 1<<8  ) {printf("  * Bit 8  : Reserved\n");}
+    // if (reg_val & 1<<9  ) {printf("  * Bit 9  : Reserved\n");}
+    // if (reg_val & 1<<10 ) {printf("  * Bit 10 : [Memory Boot] Memory booting device NAND_I2C\n");}
+    // if (reg_val & 1<<11 ) {printf("  * Bit 11 : Reserved\n");}
+    if (reg_val & 1<<12 ) {printf("  * Bit 12 : Memory booting device SPI\n");}
+    // if (reg_val & 1<<13 ) {printf("  * Bit 13 : Reserved\n");}
+    // if (reg_val & 1<<14 ) {printf("  * Bit 14 : Reserved\n");}
+    // if (reg_val & 1<<15 ) {printf("  * Bit 15 : Reserved\n");}
+    if (reg_val & 1<<16 ) {printf("  * Bit 16 : Peripheral booting device UART0\n");}
+    // if (reg_val & 1<<17 ) {printf("  * Bit 17 : Reserved\n");}
+    // if (reg_val & 1<<18 ) {printf("  * Bit 18 : Reserved\n");}
+    // if (reg_val & 1<<19 ) {printf("  * Bit 19 : Reserved\n");}
+    if (reg_val & 1<<20 ) {printf("  * Bit 20 : [Peripheral Boot] Peripheral booting device USB\n");}
+    // if (reg_val & 1<<21 ) {printf("  * Bit 21 : Reserved\n");}
+    if (reg_val & 1<<22 ) {printf("  * Bit 22 : [Peripheral Boot] Peripheral booting device GPGMAC0\n");}
+    // if (reg_val & 1<<23 ) {printf("  * Bit 23 : Reserved\n");}
+    if (reg_val & 1<<24 ) {printf("  * Bit 24 : Peripheral booting device NULL\n");}
+    // if (reg_val & 1<<25 ) {printf("  * Bit 25 : Reserved\n");}
+    // if (reg_val & 1<<26 ) {printf("  * Bit 26 : Reserved\n");}
+    // if (reg_val & 1<<27 ) {printf("  * Bit 27 : Reserved\n");}
+    // if (reg_val & 1<<28 ) {printf("  * Bit 28 : Reserved\n");}
+    // if (reg_val & 1<<29 ) {printf("  * Bit 29 : Reserved\n");}
+    // if (reg_val & 1<<30 ) {printf("  * Bit 30 : Reserved\n");}
+    // if (reg_val & 1<<31 ) {printf("  * Bit 31 : Reserved\n");}
+
+    // ROM: Copy of PRM_RSTST
+    printf("\n");
+    reg_val = printRegisterValue(debugSessionDAP, "ROM: Current copy of PRM_RSTST", 0x4030CE4C);
+    if (reg_val & 1<<0  ) {printf("  * Bit 0 : GLOBAL_COLD_RST\n");}
+    if (reg_val & 1<<1  ) {printf("  * Bit 1 : GLOBAL_WARM_RST\n");}
+    if (reg_val & 1<<4  ) {printf("  * Bit 4 : WDT1_RST\n");}
+    if (reg_val & 1<<5  ) {printf("  * Bit 5 : EXTERNAL_WARM_RST\n");}
+
+    // ROM: Cold Reset Tracing Vector 1
+    printf("\n");
+    reg_val = printRegisterValue(debugSessionDAP, "ROM: Cold reset tracing vector, word 1", 0x4030CE50);
+    if (reg_val & 1<<0  ) {printf("  * Bit 0  : [General] Passed the public reset vector\n");}
+    if (reg_val & 1<<1  ) {printf("  * Bit 1  : [General] Entered main function\n");}
+    if (reg_val & 1<<2  ) {printf("  * Bit 2  : [General] Running after the cold reset\n");}
+    if (reg_val & 1<<3  ) {printf("  * Bit 3  : [Boot] Main booting routine entered\n");}
+    if (reg_val & 1<<4  ) {printf("  * Bit 4  : [Memory Boot] Memory booting started\n");}
+    if (reg_val & 1<<5  ) {printf("  * Bit 5  : [Peripheral Boot] Peripheral booting started\n");}
+    if (reg_val & 1<<6  ) {printf("  * Bit 6  : [Boot] Booting loop reached last device\n");}
+    if (reg_val & 1<<7  ) {printf("  * Bit 7  : [Boot] GP header found\n");}
+    // if (reg_val & 1<<8  ) {printf("  * Bit 8  : [Boot] Reserved\n");}
+    // if (reg_val & 1<<9  ) {printf("  * Bit 9  : [Boot] Reserved\n");}
+    // if (reg_val & 1<<10 ) {printf("  * Bit 10 : [Peripheral Boot] Reserved\n");}
+    // if (reg_val & 1<<11 ) {printf("  * Bit 11 : [Peripheral Boot] Reserved\n");}
+    if (reg_val & 1<<12 ) {printf("  * Bit 12 : [Peripheral Boot] Device initialized\n");}
+    if (reg_val & 1<<13 ) {printf("  * Bit 13 : [Peripheral Boot] ASIC ID sent\n");}
+    if (reg_val & 1<<14 ) {printf("  * Bit 14 : [Peripheral Boot] Image received\n");}
+    if (reg_val & 1<<15 ) {printf("  * Bit 15 : [Peripheral Boot] Peripheral booting failed\n");}
+    if (reg_val & 1<<16 ) {printf("  * Bit 16 : [Peripheral Boot] Booting Message not received (timeout)\n");}
+    if (reg_val & 1<<17 ) {printf("  * Bit 17 : [Peripheral Boot] Image size not received (timeout)\n");}
+    if (reg_val & 1<<18 ) {printf("  * Bit 18 : [Peripheral Boot] Image not received (timeout)\n");}
+    // if (reg_val & 1<<19 ) {printf("  * Bit 19 : Reserved\n");}
+    if (reg_val & 1<<20 ) {printf("  * Bit 20 : [Configuration Header] CHSETTINGS found\n");}
+    if (reg_val & 1<<21 ) {printf("  * Bit 21 : [Configuration Header] CHSETTINGS executed\n");}
+    if (reg_val & 1<<22 ) {printf("  * Bit 22 : [Configuration Header] CHRAM executed\n");}
+    if (reg_val & 1<<23 ) {printf("  * Bit 23 : [Configuration Header] CHFLASH executed\n");}
+    if (reg_val & 1<<24 ) {printf("  * Bit 24 : [Configuration Header] CHMMCSD clocks executed\n");}
+    if (reg_val & 1<<25 ) {printf("  * Bit 25 : [Configuration Header] CHMMCSD bus width executed\n");}
+    // if (reg_val & 1<<26 ) {printf("  * Bit 26 : Reserved\n");}
+    // if (reg_val & 1<<27 ) {printf("  * Bit 27 : Reserved\n");}
+    // if (reg_val & 1<<28 ) {printf("  * Bit 28 : Reserved\n");}
+    // if (reg_val & 1<<29 ) {printf("  * Bit 29 : Reserved\n");}
+    // if (reg_val & 1<<30 ) {printf("  * Bit 30 : Reserved\n");}
+    // if (reg_val & 1<<31 ) {printf("  * Bit 31 : Reserved\n");}
+
+    // ROM: Cold Reset Tracing Vector 2
+    printf("\n");
+    reg_val = printRegisterValue(debugSessionDAP, "ROM: Cold reset tracing vector, word 2", 0x4030CE54);
+    // if (reg_val & 1<<0  ) {printf("  * Bit 0  : [Companion chip] Reserved\n");}
+    // if (reg_val & 1<<1  ) {printf("  * Bit 1  : [Companion chip] Reserved\n");}
+    // if (reg_val & 1<<2  ) {printf("  * Bit 2  : [Companion chip] Reserved\n");}
+    // if (reg_val & 1<<3  ) {printf("  * Bit 3  : [Companion chip] Reserved\n");}
+    if (reg_val & 1<<4  ) {printf("  * Bit 4  : [USB] USB connect\n");}
+    if (reg_val & 1<<5  ) {printf("  * Bit 5  : [USB] USB configured state\n");}
+    if (reg_val & 1<<6  ) {printf("  * Bit 6  : [USB] USB VBUS valid\n");}
+    if (reg_val & 1<<7  ) {printf("  * Bit 7  : [USB] USB session valid\n");}
+    // if (reg_val & 1<<8  ) {printf("  * Bit 8  : Reserved\n");}
+    // if (reg_val & 1<<9  ) {printf("  * Bit 9  : Reserved\n");}
+    // if (reg_val & 1<<10 ) {printf("  * Bit 10 : Reserved\n");}
+    // if (reg_val & 1<<11 ) {printf("  * Bit 11 : Reserved\n");}
+    if (reg_val & 1<<12 ) {printf("  * Bit 12 : [Memory Boot] Memory booting trial 0\n");}
+    if (reg_val & 1<<13 ) {printf("  * Bit 13 : [Memory Boot] Memory booting trial 1\n");}
+    if (reg_val & 1<<14 ) {printf("  * Bit 14 : [Memory Boot] Memory booting trial 2\n");}
+    if (reg_val & 1<<15 ) {printf("  * Bit 15 : [Memory Boot] Memory booting trial 3\n");}
+    if (reg_val & 1<<16 ) {printf("  * Bit 16 : [Memory Boot] Execute GP image\n");}
+    if (reg_val & 1<<17 ) {printf("  * Bit 17 : [Peripheral Boot] Start authentication of peripheral boot image\n");}
+    if (reg_val & 1<<18 ) {printf("  * Bit 18 : [Memory & Peripheral Boot] Jumping to Initial SW\n");}
+    if (reg_val & 1<<19 ) {printf("  * Bit 19 : [Memory & Peripheral Boot] Reserved\n");}
+    if (reg_val & 1<<20 ) {printf("  * Bit 20 : [Memory & Peripheral Boot] Start image authentication\n");}
+    if (reg_val & 1<<21 ) {printf("  * Bit 21 : [Memory & Peripheral Boot] Image authentication failed\n");}
+    if (reg_val & 1<<22 ) {printf("  * Bit 22 : [Memory & Peripheral Boot] Analyzing SpeedUp\n");}
+    if (reg_val & 1<<23 ) {printf("  * Bit 23 : [Memory & Peripheral Boot] SpeedUp failed\n");}
+    // if (reg_val & 1<<24 ) {printf("  * Bit 24 : [Memory & Peripheral Boot] Reserved\n");}
+    // if (reg_val & 1<<25 ) {printf("  * Bit 25 : [Memory & Peripheral Boot] Reserved\n");}
+    // if (reg_val & 1<<26 ) {printf("  * Bit 26 : [Memory & Peripheral Boot] Reserved\n");}
+    // if (reg_val & 1<<27 ) {printf("  * Bit 27 : [Memory & Peripheral Boot] Reserved\n");}
+    if (reg_val & 1<<28 ) {printf("  * Bit 28 : [Memory & Peripheral Boot] Authentication procedure failed\n");}
+    // if (reg_val & 1<<29 ) {printf("  * Bit 29 : Reserved\n");}
+    // if (reg_val & 1<<30 ) {printf("  * Bit 30 : Reserved\n");}
+    // if (reg_val & 1<<31 ) {printf("  * Bit 31 : Reserved\n");}
+
+    // ROM: Cold Reset Tracing Vector 3
+    printf("\n");
+    reg_val = printRegisterValue(debugSessionDAP, "ROM: Cold reset tracing vector, word 3", 0x4030CE58);
+    if (reg_val & 1<<0  ) {printf("  * Bit 0  : [Memory Boot] Memory booting device NULL\n");}
+    if (reg_val & 1<<1  ) {printf("  * Bit 1  : [Memory Boot] Memory booting device XIP\n");}
+    if (reg_val & 1<<2  ) {printf("  * Bit 2  : [Memory Boot] Memory booting device XIPWAIT\n");}
+    if (reg_val & 1<<3  ) {printf("  * Bit 3  : [Memory Boot] Memory booting device NAND\n");}
+    // if (reg_val & 1<<4  ) {printf("  * Bit 4  : [Memory Boot] Reserved\n");}
+    if (reg_val & 1<<5  ) {printf("  * Bit 5  : [Memory Boot] Memory booting device MMCSD0\n");}
+    // if (reg_val & 1<<6  ) {printf("  * Bit 6  : Reserved\n");}
+    if (reg_val & 1<<7  ) {printf("  * Bit 7  : [Memory Boot] Memory booting device MMCSD1\n");}
+    // if (reg_val & 1<<8  ) {printf("  * Bit 8  : Reserved\n");}
+    // if (reg_val & 1<<9  ) {printf("  * Bit 9  : Reserved\n");}
+    // if (reg_val & 1<<10 ) {printf("  * Bit 10 : [Memory Boot] Reserved\n");}
+    // if (reg_val & 1<<11 ) {printf("  * Bit 11 : Reserved\n");}
+    if (reg_val & 1<<12 ) {printf("  * Bit 12 : Memory booting device SPI\n");}
+    // if (reg_val & 1<<13 ) {printf("  * Bit 13 : Reserved\n");}
+    // if (reg_val & 1<<14 ) {printf("  * Bit 14 : Reserved\n");}
+    // if (reg_val & 1<<15 ) {printf("  * Bit 15 : Reserved\n");}
+    if (reg_val & 1<<16 ) {printf("  * Bit 16 : Peripheral booting device UART0\n");}
+    // if (reg_val & 1<<17 ) {printf("  * Bit 17 : Reserved\n");}
+    if (reg_val & 1<<18 ) {printf("  * Bit 18 : [Peripheral Boot] Reserved\n");}
+    // if (reg_val & 1<<19 ) {printf("  * Bit 19 : Reserved\n");}
+    if (reg_val & 1<<20 ) {printf("  * Bit 20 : [Peripheral Boot] Peripheral booting device USB\n");}
+    // if (reg_val & 1<<21 ) {printf("  * Bit 21 : [Peripheral Boot] Reserved\n");}
+    if (reg_val & 1<<22 ) {printf("  * Bit 22 : [Peripheral Boot] Peripheral booting device GPGMAC0\n");}
+    // if (reg_val & 1<<23 ) {printf("  * Bit 23 : Reserved\n");}
+    if (reg_val & 1<<24 ) {printf("  * Bit 24 : Peripheral booting device NULL\n");}
+    // if (reg_val & 1<<25 ) {printf("  * Bit 25 : Reserved\n");}
+    // if (reg_val & 1<<26 ) {printf("  * Bit 26 : Reserved\n");}
+    // if (reg_val & 1<<27 ) {printf("  * Bit 27 : Reserved\n");}
+    // if (reg_val & 1<<28 ) {printf("  * Bit 28 : Reserved\n");}
+    // if (reg_val & 1<<29 ) {printf("  * Bit 29 : Reserved\n");}
+    // if (reg_val & 1<<30 ) {printf("  * Bit 30 : Reserved\n");}
+    // if (reg_val & 1<<31 ) {printf("  * Bit 31 : Reserved\n");}
+}
+
 int main(void) {
     char option[4] = "?";
     double t1, t2;
@@ -318,8 +640,12 @@ int main(void) {
     EnableL3L4Wakeup();
     UART0Init(115200); // works
 
-    printf("%c%c%c%c", NAK, CANCEL, CANCEL, CANCEL); // flush XMODEM
+    printf("%c%c%c%c\n\n", NAK, CANCEL, CANCEL, CANCEL); // flush XMODEM
+    DebugBoot();
+
     printf("%s", banner);
+
+    printf("[BOOT] Build Version, %s, Date %s, Time %s\n", Version, __DATE__, __TIME__);
 
     SPIInit(24000000); // works
     EmergencyErase();
@@ -368,7 +694,6 @@ int main(void) {
 
     ReleaseReset();
 
-    printf("[BOOT] Build Date %s, Time %s\n", __DATE__, __TIME__);
     printf("[BOOT] Image %p ~ %p (%d bytes)\n", &_image_start, &_image_end, (&_image_end - &_image_start));
     printf("[BOOT] Completed in %0.5f seconds\n", ReadDMTimerSeconds());
 

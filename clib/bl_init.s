@@ -120,7 +120,7 @@ Reset_Handler:
         SUB   r0, r0, r0
         MCR   p15, 0, r0, c1, c0, 0
         LDR   r0, =Entry
-	LDR   lr, =end                        @ init lr to avoid errmsg on gdb      
+	    LDR   lr, =end                        @ init lr to avoid errmsg on gdb      
         MCR   p15, 0, r0, c12, c0, 0          @ Write VBAR Register
 @
 @ Set up the Stack for Undefined mode
@@ -195,40 +195,40 @@ Reset_Handler:
 @
 @ Disable the watchdog
 @
-	LDR     r0, =0x44E35000	                  @@ load SOC_WDT_1_REGS
-	LDR	r1, =0xAAAA
-	STR	r1, [r0, #0x48]	                  @@ store 0xaaaa to WDT_WSPR
-1:	LDR	r1, [r0, #0x34]	                  @@ loop until WDT_WWPS is 0
-	CMP	r1, #0x0
-	BNE	1b
-	LDR	r1, =0x5555
-	STR	r1, [r0, #0x48]	                  @@ store 0x5555 to WDT_WSPR
-2:	LDR	r1, [r0, #0x34]	                  @@ loop until WDT_WWPS is 0
-	CMP	r1, #0x0
-	BNE	2b
+        LDR     r0, =0x44E35000	                  @@ load SOC_WDT_1_REGS
+        LDR	    r1, =0xAAAA
+        STR	    r1, [r0, #0x48]	                  @@ store 0xaaaa to WDT_WSPR
+1:      LDR	    r1, [r0, #0x34]	                  @@ loop until WDT_WWPS is 0
+        CMP	    r1, #0x0
+        BNE	    1b
+        LDR	    r1, =0x5555
+        STR	    r1, [r0, #0x48]	                  @@ store 0x5555 to WDT_WSPR
+2:	    LDR	    r1, [r0, #0x34]	                  @@ loop until WDT_WWPS is 0
+        CMP	    r1, #0x0
+        BNE	    2b
 @
 @ Clear the BSS section here
 @
-        LDR   r4, =_bss_start                 @ Start address of BSS
-        LDR   r9, =_bss_end                   @ End address of BSS
-        MOV   r5, #0  
-        MOV   r6, #0  
-        MOV   r7, #0  
-        MOV   r8, #0  
-        B     2f
-1:      STMIA r4!, {r4-r8}                    @ Clear four words in BSS
-2:      CMP   r4, r9
-        BLO   1b                              @ Clear till BSS end
+        LDR     r4, =_bss_start                 @ Start address of BSS
+        LDR     r9, =_bss_end                   @ End address of BSS
+        MOV     r5, #0  
+        MOV     r6, #0  
+        MOV     r7, #0  
+        MOV     r8, #0  
+        B       2f
+1:      STMIA   r4!, {r4-r8}                    @ Clear four words in BSS
+2:      CMP     r4, r9
+        BLO     1b                              @ Clear till BSS end
 @
 @ Enter the main function. 
 @
-	// Initialize stdlib
-	@ LDR	r0,=_init
-	@ BLX	r0
+        // Initialize stdlib
+        @ LDR	    r0,=_init
+        @ BLX	    r0
 
-	// Enter main program
-	LDR	r0, =main
-	BLX	r0
+        // Enter main program
+        LDR	    r0, =main
+        BLX	    r0
 	
 end:
 1:	nop

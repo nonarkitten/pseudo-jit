@@ -928,10 +928,7 @@ void GPMCConfig(const uint32_t config[6], uint32_t cs, uint32_t base, uint32_t s
 #define SOC_PRUICSS_PRU0_IRAM_OFFSET    (0x00034000)
 #define SOC_PRUICSS_PRU1_IRAM_OFFSET    (0x00038000)
 
-void PRUReset(void) {
-}
-
-uint32_t PRUGetAddress(PRU_RAM_t MemoryType) {
+uint32_t* PRUGetAddress(PRU_RAM_t MemoryType) {
     static const uint32_t addr[] = {
         SOC_PRUICSS_PRU0_DRAM_OFFSET  + SOC_PRUICSS1_REGS,
         SOC_PRUICSS_PRU1_DRAM_OFFSET  + SOC_PRUICSS1_REGS,
@@ -939,45 +936,136 @@ uint32_t PRUGetAddress(PRU_RAM_t MemoryType) {
         SOC_PRUICSS_PRU1_IRAM_OFFSET  + SOC_PRUICSS1_REGS,
         SOC_PRUICSS_SHARED_RAM_OFFSET + SOC_PRUICSS1_REGS
     };
-    return addr[(int)MemoryType];
+    return (uint32_t*)addr[(int)MemoryType];
 }
 
 void PRUMemSet(PRU_RAM_t MemoryType, uint32_t offset, uint32_t Length, uint32_t Pattern) {
     if(Length == 0 || Length > 8192) return;
     if((offset + Length) > 8192) return;
-    memset(PRUGetAddress(MemoryType) + offset, Pattern, Length);
+    uint32_t* start = PRUGetAddress(MemoryType) + offset;
+    Pattern = 0x01010101 * (Pattern & 0xFF);
+    Length = (Length + 3) >> 2;
+    for(int i=0; i<Length; i++) *start++ = Pattern;
+    //memset(PRUGetAddress(MemoryType) + offset, Pattern, Length);
 }
 
 void PRUMemCpy(PRU_RAM_t MemoryType, uint32_t offset, uint32_t Length, const uint32_t *Pointer) {
     if(Length == 0 || Length > 8192) return;
     if((offset + Length) > 8192) return;
     if(Pointer < 0x402F0400 || Pointer > 0x4030FFFF) return;
-    memcpy(PRUGetAddress(MemoryType) + offset, Pointer, Length);
+    // memcpy(PRUGetAddress(MemoryType) + offset, Pointer, Length);
+    uint32_t* dest = PRUGetAddress(MemoryType) + offset;
+    uint32_t* src = Pointer;
+    Length = (Length + 3) >> 2;
+    for(int i=0; i<Length; i++) *dest++ = *src++;
 }
 
+static inline uint32_t HW_RD_REG32(uint32_t addr) {
+    uint32_t regVal = *(volatile uint32_t *) addr;
+    asm("    dsb");
+    return (regVal);
+}
+
+static inline void HW_WR_REG32(uint32_t addr, uint32_t value) {
+    *(volatile uint32_t *) addr = value;
+    asm("    dsb");
+    return;
+}
+
+#define HW_WR_FIELD32(regAddr, REG_FIELD, fieldVal)                            \
+    (HW_WR_FIELD32_RAW((uint32_t) (regAddr), ((uint32_t)REG_FIELD##_MASK),                   \
+                          ((uint32_t)REG_FIELD##_SHIFT), (uint32_t)(fieldVal)))
+
+static inline void HW_WR_FIELD32_RAW(uint32_t addr,
+                                     uint32_t mask,
+                                     uint32_t shift,
+                                     uint32_t value)
+{
+    uint32_t regVal = *(volatile uint32_t *) ((uintptr_t) addr);
+    regVal &= (~mask);
+    regVal |= (value << shift) & mask;
+    *(volatile uint32_t *) ((uintptr_t) addr) = regVal;
+    /* Donot call any functions after this. If required implement as macros */
+    HW_SYNC_BARRIER();
+    return;
+}
+
+
 void PRUInit(void) {
-    // /* Enable PRU Clocks */
-    CM_PER_L4LS_CLKSTCTRL->BIT.CLKTRCTRL = 2;
-    while(!CM_PER_L4LS_CLKSTCTRL->BIT.CLKTRCTRL);
+    // // /* Enable PRU Clocks */
+    // CM_PER_L4LS_CLKSTCTRL->BIT.CLKTRCTRL = 2;
+    // while(!CM_PER_L4LS_CLKSTCTRL->BIT.CLKTRCTRL);
 
-    RM_PER_RSTCTRL->BIT.PRU_ICSS_LRST = 1;
-    RM_PER_RSTCTRL->BIT.PRU_ICSS_LRST = 0;
+    // RM_PER_RSTCTRL->BIT.PRU_ICSS_LRST = 1;
+    // RM_PER_RSTCTRL->BIT.PRU_ICSS_LRST = 0;
 
-    CM_PER_PRU_ICSS_CLKCTRL->BIT.MODULEMODE = 2;
+    // ->BIT.MODULEMODE = 2;
+    // while(CM_PER_PRU_ICSS_CLKCTRL->BIT.IDLEST);
 
-    RM_PER_RSTCTRL->BIT.PRU_ICSS_LRST = 1;
-    RM_PER_RSTCTRL->BIT.PRU_ICSS_LRST = 0;
+    // RM_PER_RSTCTRL->BIT.PRU_ICSS_LRST = 1;
+    // RM_PER_RSTCTRL->BIT.PRU_ICSS_LRST = 0;
 
-    WaitUSDMTimer(100);
+    // WaitUSDMTimer(100);
 
-    PRUSS_CFG_SYSCFG->BIT.STANDBY_INIT = 0;
+    // // PRUSS_CFG_SYSCFG->BIT.STANDBY_INIT = 0;
 
     // PRUSS_CFG_SYSCFG->LONG = 0x00000005;
     // while(PRUSS_CFG_SYSCFG->BIT.SUB_MWAIT);
 
-    PRUHalt(PRU0);
-    PRUHalt(PRU1);
+    // PRUSS_INTC_SIPR0->LONG = 0xFFFFFFFFUL;
+    // PRUSS_INTC_SIPR1->LONG = 0xFFFFFFFFUL;
+
+    // uint32_t* cmr_reg = &PRUSS_INTC_CMR0->LONG;
+    // for(int i=0; i<16; i++) *cmr_reg++ = 0;
+
+    // PRUSS_INTC_HMR0->LONG = 0;
+    // PRUSS_INTC_HMR1->LONG = 0;
+    // PRUSS_INTC_HMR2->LONG = 0;
+
+    // PRUSS_INTC_SITR0->LONG = 0;
+    // PRUSS_INTC_SITR1->LONG = 0;
+
+    // PRUHalt(PRU0);
+    // PRUHalt(PRU1);
+
+    /* bring PRU_ICSS module out of reset */
+    RM_PER_RSTCTRL->LONG  &= 0xFFFFFFFD;            
+
+    // #define SOC_PRCM_REGS                                       (0x44E00000)
+    // #define CM_PER_ICSS_CLKSTCTRL_CLKACTIVITY_ICSS_OCP_GCLK     (0x00000010u)
+    // #define CM_PER_ICSS_CLKCTRL                                 (0xe8)
+    // #define CM_PER_ICSS_CLKSTCTRL                               (0x140)
+    // #define PRCM_MODULEMODE_ENABLE                              (2U)
+    // #define PRCM_MODULEMODE_MASK                                (3U)
+    // #define PRCM_MODULE_IDLEST_FUNC                             (0U)
+    // #define PRCM_IDLE_ST_MASK                                   (0x00030000U)
+    // #define PRCM_IDLE_ST_SHIFT                                  (16U)
+
+    /* Enable clocks */
+    CM_PER_PRU_ICSS_CLKSTCTRL->BIT.CLKTRCTRL = 2;
+    while(CM_PER_PRU_ICSS_CLKSTCTRL->BIT.CLKTRCTRL != 2);
+    CM_PER_PRU_ICSS_CLKSTCTRL->BIT.CLKACTIVITY_PRUSS_OCP_GCLK = 1;
+
+    /* Enable the module */
+    CM_PER_PRU_ICSS_CLKCTRL->BIT.MODULEMODE = 2;
+    /* Check for module enable status */
+    while(CM_PER_PRU_ICSS_CLKCTRL->BIT.MODULEMODE != 2);
+
+    /* Check clock activity - ungated */
+    while(!CM_PER_PRU_ICSS_CLKSTCTRL->BIT.CLKACTIVITY_PRUSS_OCP_GCLK);
+    /* Check idle status value - should be in functional state */
+    while(CM_PER_PRU_ICSS_CLKCTRL->BIT.IDLEST);
+
+    // CM_PER_L4LS_CLKSTCTRL->LONG |= 0x2;
+    // CM_PER_L4LS_CLKSTCTRL->LONG &= 0xFFFFFFFD;
     
+    // CM_PER_PRU_ICSS_CLKCTRL->LONG |= 0x02;
+
+    // CM_PER_L4LS_CLKSTCTRL->LONG |= 0x2;
+    // CM_PER_L4LS_CLKSTCTRL->LONG &= 0xFFFFFFFD;
+    
+    // PRUSS_CFG_SYSCFG->BIT.STANDBY_INIT = 0;
+
     /* Clear out the memory of both PRU cores */
     PRUMemSet(PRU0_DRAM, 0, 8*1024, 0);   //Data 8KB RAM0
     PRUMemSet(PRU1_DRAM, 0, 8*1024, 0);   //Data 8KB RAM1
@@ -985,14 +1073,19 @@ void PRUInit(void) {
     PRUMemSet(PRU1_IRAM, 0, 8*1024, 0);
 }
 
+void PRUReset(PRU_CORE_t PRUCore) {
+    if(PRUCore & PRU0) PRU0_CTRL->LONG = 0;
+    if(PRUCore & PRU1) PRU1_CTRL->LONG = 0;
+}
+
 void PRUEnable(PRU_CORE_t PRUCore) {
-    if(PRUCore & PRU0) PRU0_CTRL->LONG = 0xB;
-    if(PRUCore & PRU1) PRU1_CTRL->LONG = 0xB;
+    if(PRUCore & PRU0) PRU0_CTRL->BIT.ENABLE = 1;
+    if(PRUCore & PRU1) PRU1_CTRL->BIT.ENABLE = 1;
 }
 
 void PRUHalt(PRU_CORE_t PRUCore) {
-    if(PRUCore & PRU0) PRU0_CTRL->LONG = 0;
-    if(PRUCore & PRU1) PRU1_CTRL->LONG = 0;
+    if(PRUCore & PRU0) PRU0_CTRL->BIT.ENABLE = 0;
+    if(PRUCore & PRU1) PRU1_CTRL->BIT.ENABLE = 0;
 }
 
 
