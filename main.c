@@ -291,6 +291,20 @@ static void InitI2C(void) {
     config_mux(i2c_pins);
 }
 
+static void EmergencyErase(void) {
+    int i;
+    int esc = 0;
+    for(i=0; i<10; i++) {
+        WaitMSDMTimer(5);
+        if(UART0Getkey() == 0x1B) esc++;
+    }
+    if(esc >= 1) {
+        printf("\n\n!!! EMERGENCY ERASE !!!");
+        EraseSPI(0, ERASE_ALL);
+        Reset();
+    }
+}
+
 int main(void) {
     char option[4] = "?";
     double t1, t2;
@@ -306,8 +320,13 @@ int main(void) {
     printf("%c%c%c%c", NAK, CANCEL, CANCEL, CANCEL); // flush XMODEM
     printf("%s", banner);
 
+    SPIInit(12000000); // works
+    EmergencyErase();
+
     InitPRU(); // works
     t1 = ReadDMTimerSeconds();
+
+    WaitMSDMTimer(10);
 
     InitI2C();
     printf("[I2C0] Scanning bus..\n");
@@ -329,19 +348,18 @@ int main(void) {
         InitMPUPLL(300); // works
     }
 
-    SPIInit(12000000); // works
     DDRInit(); // works
     InitMMU(); // works
+
+    setecho(1);
 
     t2 = ReadDMTimerSeconds(); 
     clk = GetPRUClock(); // this will be in E-clocks, so 1/10th the actual
     double MHz = clk * 0.00001 / (t2 - t1);
 
     printf("[CLK7] Main bus clock measured at %0.3f\n", MHz);
-
-    InitGPMC((float)MHz); // works partially, no CIA, update to real CLK
-
-    setecho(1);
+    // works partially, no CIA, update to real CLK
+    if(MHz >= 4.99f && MHz <= 16.0f) InitGPMC((float)MHz); 
 
     ReleaseReset();
 
@@ -367,7 +385,6 @@ int main(void) {
         case 'R': case 'r': if (confirm()) run_mcl68k(0); break;
         case 'C': case 'c': SetEClock(); break;
         case 'G': case 'g': ManageGP(); break;
-        // case 'R': case 'r': Run68k(); break;
         case 'E': case 'e': if (confirm()) EraseSPI(0, ERASE_ALL); break;
         case 'P': case 'p': if (confirm()) WriteImage(&_image_start, &_image_end); break;
         case 'X': case 'x': if (confirm()) Reset(); break;

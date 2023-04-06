@@ -70,6 +70,7 @@
 
 @**************************** Code Seection ***********************************
         .text
+        .section .startup
 
 @
 @ This code is assembled for ARM instructions

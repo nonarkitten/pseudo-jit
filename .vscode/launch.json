@@ -7,17 +7,15 @@
         {
             "name": "Cortex Debug",
             "cwd": "${workspaceFolder}",
-            "executable": "./binaries/debug/buffee_bootloader.elf",
+            "executable": "./binaries/debug/pjit.elf",
             "device": "AM3358",
             "request": "launch",
             "type": "cortex-debug",
-            "breakAfterReset": true,
             "overrideLaunchCommands": [
                 "monitor reset halt",
                 "load",
                 "monitor reset halt",
                 "break main",
-                "jump Reset_Handler"
             ],
             "interface": "jtag",
             "servertype": "jlink"

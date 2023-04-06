@@ -170,14 +170,119 @@ static const pin_muxing_t m68k_pin_mux[] = {
 #define DEVICESIZE_16b         (1 << 12)  // We're using 16-bit bus
 #define TIMEPARAGRANULARITY_x2 (1 << 4)   // CLK / 2
 
-#define _STR(X) #X
-#define STR(X) _STR(X)
-#define ASSERT(TRUTH) if(!(TRUTH)) printf("GPMC SYNC VIOLATION: %s\n", #TRUTH)
+#define ASSERT(TRUTH) if(!(TRUTH)) printf("[GPMC] SYNC VIOLATION: %s\n", #TRUTH)
 
 // STOCK 68000 BUSTEST
 // rom       $00F80000  readw     577.1 ns   normal       3.5 * 10^6 byte/s
 // rom       $00F80000  readl    1011.1 ns   normal       4.0 * 10^6 byte/s
 // rom       $00F80000  readm     904.0 ns   normal       4.4 * 10^6 byte/s
+
+typedef struct {
+    uint8_t CYCLETIME, ACCESSTIME;
+    uint8_t CSONTIME, CSOFFTIME;
+    uint8_t OEONTIME, OEOFFTIME;
+    uint8_t WEONTIME, WEOFFTIME;
+} Timing_t;
+
+Timing_t default_timing = { 0 };
+Timing_t current_timing = { 0 };
+static bool enableRAM = false;
+
+static void PrintCycle(uint8_t on, uint8_t off, uint8_t max) {
+    int i;
+    for(i=0; i<on; i++) putchar('_');
+    for(; i<=off; i++) putchar(' ');
+    for(; i<max; i++) putchar('_');
+    putchar('\n');
+
+    for(i=0; i<on; i++) putchar(' ');
+    putchar('|');
+    for(; i<off-1; i++) putchar('_');
+    putchar('|');
+    for(; i<max; i++) putchar(' ');
+}
+
+static void PrintMarker(uint8_t off, uint8_t max) {
+    int i;
+    for(i=0; i<off; i++) putchar(' ');
+    putchar('*');
+    for(;i<=max;i++) putchar(' ');
+}
+
+static void PrintTiming(Timing_t *t) {
+    int i;
+    printf("Timing Diagram:\n");
+
+    for(i=0; i<t->CYCLETIME; i++) putchar(" 123"[i / 10]); putchar('\n');
+    for(i=0; i<t->CYCLETIME; i++) putchar('0' + (i % 10)); putchar('\n');
+    //PrintCycle(0, t->CYCLETIME); printf("  Cycle\n");
+    //PrintCycle(0, t->ACCESSTIME); printf("  Access\n");
+    PrintMarker(t->ACCESSTIME, t->CYCLETIME); printf("  Access\n");
+    PrintCycle(t->CSONTIME, t->CSOFFTIME, t->CYCLETIME); printf("  AS\n");
+    PrintMarker(t->CSONTIME+5, t->CYCLETIME); printf("  S4 Sync\n");
+    PrintCycle(t->OEONTIME, t->OEOFFTIME, t->CYCLETIME); printf("  DS (Read)\n");
+    PrintCycle(t->WEONTIME, t->WEOFFTIME, t->CYCLETIME); printf("  DS (Write)\n\n");
+}
+
+static void SetGPMCTiming(Timing_t *t) {
+    // All ON times must be <= 15
+    ASSERT(t->CSONTIME < 16);
+    ASSERT(t->OEONTIME < 16);
+    ASSERT(t->WEONTIME < 16);
+
+    // All OFF times must be <= 31
+    ASSERT(t->CSOFFTIME < 32);
+    ASSERT(t->OEOFFTIME < 32);
+    ASSERT(t->WEOFFTIME < 32);
+
+    ASSERT(t->CSOFFTIME < t->CYCLETIME);
+
+    ASSERT(t->CYCLETIME > t->CSOFFTIME);
+    ASSERT(t->CYCLETIME > t->OEOFFTIME);
+    ASSERT(t->CYCLETIME > t->WEOFFTIME);
+
+    ASSERT(t->CSOFFTIME >= (t->ACCESSTIME+1));
+    ASSERT(t->OEOFFTIME >= (t->ACCESSTIME+1));
+    ASSERT(t->WEOFFTIME >= (t->ACCESSTIME+1));
+
+    ASSERT(t->CYCLETIME > t->OEOFFTIME);
+
+    uint32_t OEEXTRATIME = 0;
+    uint32_t WEEXTRATIME = 0;
+    uint32_t CSEXTRATIME = 0;
+
+    uint32_t ADVWROFFTIME = 0;
+    uint32_t ADVRDOFFTIME = 0;
+    uint32_t ADVEXTRATIME = 0;
+    uint32_t ADVONTIME = 0;
+
+    uint32_t gpmc_config[] = { 0
+        /* CONFIG1 */
+                    | WAITPINMONITORING_RW
+                    | WAITPINSEL_WAIT0
+                    | WAITMONITORTIME_0CLKS 
+                    | DEVICESIZE_16b 
+                    | TIMEPARAGRANULARITY_x2
+                    ,
+        /* CONFIG2 */ (t->CSOFFTIME  << 16) | (t->CSOFFTIME  <<  8) | (CSEXTRATIME << 7)  | (t->CSONTIME  <<  0),
+        /* CONFIG3 */ (ADVWROFFTIME << 16)  | (ADVRDOFFTIME <<  8)  | (ADVEXTRATIME << 7) | (ADVONTIME <<  0),
+        /* CONFIG4 */ (t->WEOFFTIME << 24)  | (WEEXTRATIME << 23)   | (t->WEONTIME << 16) |
+                      (t->OEOFFTIME << 8)   | (OEEXTRATIME << 7)    | (t->OEONTIME << 0),
+        /* CONFIG5 */ (t->ACCESSTIME << 16) | (t->CYCLETIME <<  8)  | (t->CYCLETIME << 0),
+        /* CONFIG6 */ (t->ACCESSTIME << 24),
+    };
+
+	// Set CONFIGx bits
+	GPMCConfig(gpmc_config, 2, 0x02000000, 0x01000000);
+
+    printf("[GPMC] Cycle Time: %d\n", t->CYCLETIME);
+    printf("[GPMC] Access Time: %d\n", t->ACCESSTIME);
+    printf("[GPMC] nCS Timing (ON/OFF): %d/%d\n", t->CSONTIME, t->CSOFFTIME);
+    printf("[GPMC] nRE Timing (ON/OFF): %d/%d\n", t->OEONTIME, t->OEOFFTIME);
+    printf("[GPMC] nWE Timing (ON/OFF): %d/%d\n", t->WEONTIME, t->WEOFFTIME);
+
+    // PrintTiming(&default_timing);
+}
 
 void InitGPMC(float bus_clock) {
     int cycle_time = 200.0f / bus_clock; // always round down here
@@ -209,116 +314,25 @@ void InitGPMC(float bus_clock) {
     // #define ADVRDOFFTIME	    (0x00)		// = tAAVDS + tAVDP
     // #define ADVWROFFTIME	    (0x00)		// = tAVSC + tAVDP
 
-    // NEW
-    // [GPMC] Cycle Time: 27
-    // [GPMC] Access Time: 25
-    // [GPMC] nCS Timing (ON/OFF): 7/25
-    // [GPMC] nRE Timing (ON/OFF): 7/26
-    // [GPMC] nWE Timing (ON/OFF): 15/26
-    // [GPMC] ADV Timing (ON/OFF): 0/0
-
     // Total Cycle Time
-    uint32_t RDCYCLETIME  = cycle_time;
-    uint32_t WRCYCLETIME  = cycle_time;
-    printf("[GPMC] Cycle Time: %d\n", RDCYCLETIME);
+    default_timing.CYCLETIME  = cycle_time;
 
     // Point at which data should be valid
-    uint32_t ACCESSTIME   = 5 + (cycle_time * 6) / 8;
-    printf("[GPMC] Access Time: %d\n", ACCESSTIME);
+    default_timing.ACCESSTIME   = 5 + (cycle_time * 6) / 8;
 
     // Address Strobe
-    uint32_t CSONTIME     = state[1] - 2;
-    uint32_t CSRDOFFTIME  = state[7]; // CSRDOFFTIME < RDCYCLETIME
-    uint32_t CSWROFFTIME  = state[7];
-    uint32_t CSEXTRATIME  = 0; //extra[2];
-    printf("[GPMC] nCS Timing (ON/OFF): %d/%d\n", CSONTIME, CSRDOFFTIME);
+    default_timing.CSONTIME   = state[1] - 2;
+    default_timing.CSOFFTIME  = state[7];
 
     // Read Cycle
-    uint32_t OEONTIME     = 0;
-    uint32_t OEOFFTIME    = state[7] + 1;
-    uint32_t OEEXTRATIME  = 0; //extra[2];
-    printf("[GPMC] nRE Timing (ON/OFF): %d/%d\n", OEONTIME, OEOFFTIME);
+    default_timing.OEONTIME     = 0;
+    default_timing.OEOFFTIME    = state[7] + 1;
 
     // Write Cycle
-    uint32_t WEONTIME     = state[1];
-    uint32_t WEOFFTIME    = state[7] + 1;
-    uint32_t WEEXTRATIME  = 0; //extra[4];
-    printf("[GPMC] nWE Timing (ON/OFF): %d/%d\n", WEONTIME, WEOFFTIME);
+    default_timing.WEONTIME     = state[1];
+    default_timing.WEOFFTIME    = state[7] + 1;
 
-    // Read and Write should mostly be the same here
-    uint32_t ADVONTIME    = 0;
-    uint32_t ADVRDOFFTIME = 0;
-    uint32_t ADVWROFFTIME = 0;
-    uint32_t ADVEXTRATIME = 0;
-    printf("[GPMC] ADV Timing (ON/OFF): %d/%d\n", ADVONTIME, ADVRDOFFTIME);
-
-    // All ON times must be <= 15
-    ASSERT(CSONTIME < 16);
-    ASSERT(OEONTIME < 16);
-    ASSERT(WEONTIME < 16);
-
-    // All OFF times must be <= 31
-    ASSERT(CSRDOFFTIME < 32);
-    ASSERT(CSWROFFTIME < 32);
-    ASSERT(OEOFFTIME < 32);
-    ASSERT(WEOFFTIME < 32);
-    ASSERT(ADVRDOFFTIME < 32);
-    ASSERT(ADVWROFFTIME < 32);
-
-
-
-    // CSRDOFFTIME < RDCYCLETIME
-    ASSERT(CSRDOFFTIME < RDCYCLETIME);
-    // Sync Read: Rule 3. (RDACCESSTIME – CLKACTIVATIONTIME) modulus (GPMCFCLKDIVIDER + 1) 
-    // must be different from GPMCFCLKDIVIDER
-    // ASSERT(((ACCESSTIME) % (GMPC_CLK_DIV + 1)) != GMPC_CLK_DIV);
-    // Sync Read: Rule 8. RdCycleTime must be strictly greater than all the Off times 
-    // of the control signals (OeOffTime CsRdOffTime, CsWrOffTime, AdvRdOffTime, AdvWrOffTime, WeOffTime),
-    // plus the possible extra delays added (CSExtraDelay, AdvExtraDelay, WeExtraDelay, OeExtraDelay, CsExtraDelay).
-    ASSERT(RDCYCLETIME > OEOFFTIME);
-    ASSERT(RDCYCLETIME > CSRDOFFTIME);
-    ASSERT(RDCYCLETIME > ADVRDOFFTIME);
-    ASSERT(RDCYCLETIME > CSWROFFTIME);
-    ASSERT(RDCYCLETIME > ADVWROFFTIME);
-    ASSERT(RDCYCLETIME > WEOFFTIME);
-
-    // CSWROFFTIME < WRCYCLETIME
-    ASSERT(CSWROFFTIME < WRCYCLETIME);
-    // Sync Write: Rule 6. If GPMCFCLKDIVIDER is greater than 0 and WAITWRITEMONITORING is enabled,
-    // WEOFFTIME must be greater or equal to WRACCESSTIME+2. If GPMCFCLKDIVIDER is 0 and 
-    // WAITWRITEMONITORING is enabled, WEOFFTIME must be greater than or equal to WRACCESSTIME+1
-    ASSERT(WEOFFTIME >= (ACCESSTIME+1));
-    
-    // Sync Write: Rule 7. Regardless of WAITWRITEMONITORING and 
-    // GPMCFCLKDIVIDER, WEOFFTIME and CSWROFFTIME must be greater than or equal to WRACCESSTIME+1
-    ASSERT(WEOFFTIME >= (ACCESSTIME+1));
-    ASSERT(CSWROFFTIME >= (ACCESSTIME+1));
-
-    // Sync Write: Rule 8. WrCycleTime must be strictly greater than all the Off times of the control
-    // signals (OeOffTime CsRdOffTime, CsWrOffTime, AdvRdOffTime, AdvWrOffTime, WeOffTime), 
-    // plus the possible extra delays added (CSExtraDelay, AdvExtraDelay, WeExtraDelay, OeExtraDelay, CsExtraDelay).
-    ASSERT(WRCYCLETIME > OEOFFTIME);
-    ASSERT(WRCYCLETIME > CSRDOFFTIME);
-    ASSERT(WRCYCLETIME > ADVRDOFFTIME);
-    ASSERT(WRCYCLETIME > CSWROFFTIME);
-    ASSERT(WRCYCLETIME > ADVWROFFTIME);
-    ASSERT(WRCYCLETIME > WEOFFTIME);    
-
-    uint32_t gpmc_config[] = { 0
-        /* CONFIG1 */
-                    | WAITPINMONITORING_RW
-                    | WAITPINSEL_WAIT0
-                    | WAITMONITORTIME_0CLKS 
-                    | DEVICESIZE_16b 
-                    | TIMEPARAGRANULARITY_x2
-                    ,
-        /* CONFIG2 */ (CSWROFFTIME  << 16) | (CSRDOFFTIME  <<  8) | (CSEXTRATIME << 7)  | (CSONTIME  <<  0),
-        /* CONFIG3 */ (ADVWROFFTIME << 16) | (ADVRDOFFTIME <<  8) | (ADVEXTRATIME << 7) | (ADVONTIME <<  0),
-        /* CONFIG4 */ (WEOFFTIME << 24)    | (WEEXTRATIME << 23)  | (WEONTIME << 16)    |
-                      (OEOFFTIME << 8)     | (OEEXTRATIME << 7)   | (OEONTIME << 0),
-        /* CONFIG5 */ (ACCESSTIME << 16)   | (WRCYCLETIME <<  8)  | (RDCYCLETIME << 0),
-        /* CONFIG6 */ (ACCESSTIME << 24),
-    };
+    current_timing = default_timing;
 
 	// Enable pins
 	config_mux(m68k_pin_mux);
@@ -326,8 +340,43 @@ void InitGPMC(float bus_clock) {
 	// Enable and wait for clock
 	GPMCInit();
 
-	// Set CONFIGx bits
-	GPMCConfig(gpmc_config, 2, 0x02000000, 0x01000000);
+    // Set CS
+    SetGPMCTiming(&default_timing);
+}
+
+static int Prompt(const char* out, uint8_t* value) {
+    char option[4] = { 0 };
+    int n = *value;
+    printf(out, n);
+    gets(option);
+    if(option[0] == 0) return true;
+    else if(option[0] < '0' || option[0] > '9') return false;
+    else { *value = atoi(option); return true; }
+}
+
+static void ChangeGPMCTiming(void) {
+    Timing_t t = current_timing;
+
+    PrintTiming(&t);
+
+    printf("[GPMC] Cycle Time: %d\n", t.CYCLETIME);
+    printf("[GPMC] Access Time: %d\n", default_timing.ACCESSTIME);
+    printf("[GPMC] nCS Timing (ON/OFF): %d/%d\n", t.CSONTIME, t.CSOFFTIME);
+    printf("[GPMC] nRE Timing (ON/OFF): %d/%d\n", t.OEONTIME, t.OEOFFTIME);
+    printf("[GPMC] nWE Timing (ON/OFF): %d/%d\n", t.WEONTIME, t.WEOFFTIME);
+
+    if(!Prompt("Set Cycle Time     (0-31) [%2d]: ", &t.CYCLETIME)) return;
+    if(!Prompt("Set Access Time    (0-31) [%2d]: ", &t.ACCESSTIME)) return;
+    if(!Prompt("Set AS On-Time     (0-15) [%2d]: ", &t.CSONTIME)) return;
+    if(!Prompt("Set AS Off-Time    (0-31) [%2d]: ", &t.CSOFFTIME)) return;
+    if(!Prompt("Set Read On-Time   (0-15) [%2d]: ", &t.OEONTIME)) return;
+    if(!Prompt("Set Read Off-Time  (0-31) [%2d]: ", &t.OEOFFTIME)) return;
+    if(!Prompt("Set Write On-Time  (0-15) [%2d]: ", &t.WEONTIME)) return;
+    if(!Prompt("Set Write Off-Time (0-31) [%2d]: ", &t.WEOFFTIME)) return;
+
+    current_timing = t;
+    SetGPMCTiming(&current_timing);
+    PrintTiming(&t);
 }
 
 uint32_t count_diff_bits(uint16_t a, uint16_t b) {
@@ -355,6 +404,8 @@ void TestGPMC(void) {
             "6. CIA read/write\n"
             "7. Chip RAM read/write\n"
             "A. Perform all tests and exit\n"
+            "D. Set GPMC timing to default\n"
+            "T. Set GPMC timing\n"
             "X. Exit to main menu\n"
             "] "
         );
@@ -362,13 +413,26 @@ void TestGPMC(void) {
         bool all = (option[0] == 'a' || option[0] == 'A');
         bool allpassed = true;
 
+        if(option[0] == 'd' || option[0] == 'D') {
+            current_timing = default_timing;
+            SetGPMCTiming(&default_timing);
+            continue;
+        }
+
+        if(option[0] == 't' || option[0] == 'T') {
+            ChangeGPMCTiming();
+            continue;
+        }
+
         if(option[0] == '1' || all) {
             char buffer[65] = { 0 };
 
-            (void)*(volatile uint16_t*)0xD00000;
-
-            *(uint8_t*)0xBFE201 |= 0x03; // Set low two bits for output.
-            *(uint8_t*)0xBFE001 |= 0x01; // Set boot ROM on
+            if(enableRAM) {
+                enableRAM = false;
+                *(uint8_t*)0xBFE201 |= 0x03; // Set low two bits for output.
+                *(uint8_t*)0xBFE001 |= 0x01; // Set boot ROM on
+                WaitMSDMTimer(2);
+            }
 
             memcpy(buffer, (void*)(base + 24), 64);
             uint8_t len = 1 + strlen(buffer);
@@ -401,8 +465,12 @@ void TestGPMC(void) {
 
             (void)*(volatile uint16_t*)0xD00000;
 
-            *(uint8_t*)0xBFE201 |= 0x03; // Set low two bits for output.
-            *(uint8_t*)0xBFE001 |= 0x01; // Set boot ROM on
+            if(enableRAM) {
+                enableRAM = false;
+                *(uint8_t*)0xBFE201 |= 0x03; // Set low two bits for output.
+                *(uint8_t*)0xBFE001 |= 0x01; // Set boot ROM on
+                WaitMSDMTimer(2);
+            }
 
             bool passed = true;
             bool match = true;
@@ -426,10 +494,12 @@ void TestGPMC(void) {
             // This should mean about 3.58MB/s or that 2MB should be read in 0.559s
             printf("[GPMC] Performing benchmark with ROM\n");
 
-            (void)*(volatile uint16_t*)0xD00000;
-
-            *(uint8_t*)0xBFE201 |= 0x03; // Set low two bits for output.
-            *(uint8_t*)0xBFE001 |= 0x01; // Set boot ROM on
+            if(enableRAM) {
+                enableRAM = false;
+                *(uint8_t*)0xBFE201 |= 0x03; // Set low two bits for output.
+                *(uint8_t*)0xBFE001 |= 0x01; // Set boot ROM on
+                WaitMSDMTimer(2);
+            }
 
             double startTimer = ReadDMTimerSeconds();
             volatile uint16_t r;
@@ -555,13 +625,14 @@ void TestGPMC(void) {
         }
 
         if(option[0] == '7' || all) {
-            //volatile uint8_t confirm;
-            (void)*(volatile uint16_t*)0xD00000;
+            if(!enableRAM) {
+                enableRAM = true;
+                (void)*(volatile uint16_t*)0xD00000;
+                *(uint8_t*)0xBFE201 |= 0x03; // Set low two bits for output.
+                *(uint8_t*)0xBFE001 &= 0xFC; // Set boot ROM off, power light.
+                WaitMSDMTimer(2);
+            }
 
-            *(uint8_t*)0xBFE201 |= 0x03; // Set low two bits for output.
-            *(uint8_t*)0xBFE001 &= 0xFC; // Set boot ROM off, power light.
-
-            WaitMSDMTimer(2);
             volatile int errors = 1;
             printf("[GPMC] Performing RAM test");
             #define TEST_LEN 200

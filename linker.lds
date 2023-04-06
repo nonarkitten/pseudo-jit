@@ -50,13 +50,13 @@ ENTRY(Entry)
          _image_start = .;
          *(.startup)
          /* KEEP(*bl_init.o(.text)) */
-         *(.rodata)
+         *(.rodata*)
          *(.text*)
      }
  	/* non-zero global and static variables */
  	. = ALIGN(32);
  	.data : {
-         *(.data)
+         *(.data*)
          _image_end = .;
      }
 

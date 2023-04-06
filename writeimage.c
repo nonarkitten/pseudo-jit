@@ -56,7 +56,7 @@ static uint32_t crc32 (void* buffer, uint32_t len, uint32_t init) {
 static uint32_t WriteChunk(uint32_t addr, uint32_t data, uint32_t * crc) {
     uint32_t _data = rev32(data);
     if(crc) *crc = crc32(&_data, sizeof(data), *crc);
-    WriteSPIBlock(addr, (uint8_t*)&data, sizeof(data));
+    WriteSPIBlock(addr, (uint8_t*)&_data, sizeof(data));
     WaitUSDMTimer(600);
     return addr + 4;
 }
@@ -73,6 +73,7 @@ void WriteImage(void* start, void* end) {
     printf("[SPI0] Erasing block %08lx\n", (pos >> 12));
     EraseSPI(pos, ERASE_4K);
     WaitMSDMTimer(400);
+    printf("[SPI0] Programming");
 
     // Write length
     pos = WriteChunk(pos, len, 0);
@@ -82,14 +83,17 @@ void WriteImage(void* start, void* end) {
 
     while(pos < len) {
         if((pos & 0xFFF) == 0) {
-            printf("[SPI0] Erasing block %08lx\n", (pos >> 12));
+            printf("\n[SPI0] Erasing block %08lx\n", (pos >> 12));
             EraseSPI(pos, ERASE_4K);
             WaitMSDMTimer(400);
+            printf("[SPI0] Programming");
         }
         pos = WriteChunk(pos, *src++, 0); // TODO CRC check?
+        if((pos & 0xFF) == 0) putchar('.');
+
     }
 
-    printf("[SPI0] Verifying %ld bytes\n", len);
+    printf("\n[SPI0] Verifying %ld bytes\n", len);
     src = (uint32_t*)start;
     pos = 0;
 
