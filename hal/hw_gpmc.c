@@ -288,9 +288,10 @@ void InitGPMC(float bus_clock) {
     int cycle_time = 200.0f / bus_clock; // always round down here
 
     int core_pll = 0.5f + (1000.0f * bus_clock) / (200.0f / (float)cycle_time);
-    InitCorePLL(core_pll);
-    printf("[GPMC] Trimming Core PLL to: %d\n", core_pll);
-
+    if(core_pll < 1000) {
+        InitCorePLL(core_pll);
+        printf("[GPMC] Trimming Core PLL to: %d\n", core_pll);
+    }
     int state[8], extra[8];
 
     for(int i=0; i<8; i++) {

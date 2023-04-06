@@ -114,6 +114,36 @@ void InitPERPLL(void)
           (1 == CM_IDLEST_DPLL_PER->BIT.ST_MN_BYPASS));
 }
 
+void EnableL3L4Wakeup(void) {
+    /*Enable Modules*/
+    CM_PER_L3_CLKCTRL->BIT.MODULEMODE = 2;
+    while(CM_PER_L3_CLKCTRL->BIT.IDLEST);
+    CM_PER_L3_INSTR_CLKCTRL->BIT.MODULEMODE = 2;
+    while(CM_PER_L3_INSTR_CLKCTRL->BIT.IDLEST);
+
+    /*Wakeup Modules*/
+    CM_PER_L3_CLKSTCTRL->BIT.CLKTRCTRL = 2;
+    CM_PER_OCPWP_CLKCTRL->BIT.MODULEMODE = 2;
+    while(CM_PER_OCPWP_CLKCTRL->BIT.IDLEST);
+    CM_PER_L3S_CLKSTCTRL->BIT.CLKTRCTRL = 2;
+
+    CM_PER_L3_CLKSTCTRL->BIT.CLKACTIVITY_L3_GCLK = 1;
+    CM_PER_L3S_CLKSTCTRL->BIT.CLKACTIVITY_L3S_GCLK = 1;
+
+    /*Wakeup Regions*/
+    CM_WKUP_CONTROL_CLKCTRL->BIT.MODULEMODE = 2;
+    while(CM_WKUP_CONTROL_CLKCTRL->BIT.IDLEST);
+    CM_WKUP_CLKSTCTRL->BIT.CLKTRCTRL = 2;
+    CM_L3_AON_CLKSTCTRL->BIT.CLKTRCTRL = 2;
+
+    CM_L3_AON_CLKSTCTRL->BIT.CLKACTIVITY_L3_AON_GCLK = 1;
+    CM_WKUP_L4WKUP_CLKCTRL->BIT.MODULEMODE = 2;
+    while(CM_WKUP_L4WKUP_CLKCTRL->BIT.IDLEST);
+    CM_WKUP_CLKSTCTRL->BIT.CLKACTIVITY_L4_WKUP_GCLK = 1;
+    CM_L4_WKUP_AON_CLKSTCTRL->BIT.CLKACTIVITY_L4_WKUP_AON_GCLK = 1;
+
+}
+
 void InitDMTimer(void) {
     CM_WKUP_TIMER1_CLKCTRL->BIT.MODULEMODE = 2;
     while(CM_WKUP_TIMER1_CLKCTRL->BIT.IDLEST);
@@ -259,32 +289,24 @@ void InitDDR(void)
 {
     uint32_t i;
 
-    /*Enable Clocks*/
-    CM_PER_L3_CLKSTCTRL->BIT.CLKTRCTRL = 2;
-    CM_PER_L3_CLKCTRL->BIT.MODULEMODE = 2;
+    /*Enable GPIO Interface Clock*/
+    CM_WKUP_L4WKUP_CLKCTRL->BIT.MODULEMODE = 2;
+    CM_WKUP_GPIO0_CLKCTRL->BIT.MODULEMODE = 2;
+    /*Wait clocks to get active*/
+    while(CM_WKUP_GPIO0_CLKCTRL->BIT.IDLEST ||
+          CM_WKUP_L4WKUP_CLKCTRL->BIT.IDLEST);
+
     /*Enable Func Clock*/
     CM_PER_EMIF_CLKCTRL->BIT.MODULEMODE = 2;
     /*Wait clock to get active*/
     while(CM_PER_EMIF_CLKCTRL->BIT.IDLEST);
 
     /*VTT Enable*/
-    /*Enable Control module clocks*/
-    CM_WKUP_CLKSTCTRL->BIT.CLKTRCTRL = 2;
-    CM_WKUP_CONTROL_CLKCTRL->BIT.MODULEMODE = 2;
-    /*Wait clock to get active*/
-    while(CM_WKUP_CONTROL_CLKCTRL->BIT.IDLEST);
     /*CONF_ECAP0_IN_PWM0_OUT (GPIO0_7) Pin configure*/
     /*pull disabled*/
     CONF_ECAP0_IN_PWM0_OUT->BIT.PUDEN = 1;
     /*Select GPIO mode*/
     CONF_ECAP0_IN_PWM0_OUT->BIT.MMODE = 7;
-    /*Enable GPIO Interface Clock*/
-    CM_WKUP_CLKSTCTRL->BIT.CLKTRCTRL = 2;
-    CM_WKUP_L4WKUP_CLKCTRL->BIT.MODULEMODE = 2;
-    CM_WKUP_GPIO0_CLKCTRL->BIT.MODULEMODE = 2;
-    /*Wait clocks to get active*/
-    while(CM_WKUP_GPIO0_CLKCTRL->BIT.IDLEST ||
-          CM_WKUP_L4WKUP_CLKCTRL->BIT.IDLEST);
     /*Make VTT_EN (GPIO0_7) pin output*/
     GPIO0_OE->LONG &= ~(1<<7) ;
     /*Set VTT_EN*/
@@ -909,76 +931,53 @@ void GPMCConfig(const uint32_t config[6], uint32_t cs, uint32_t base, uint32_t s
 void PRUReset(void) {
 }
 
-void PRUMemSet(uint32_t MemoryType, uint32_t offset, uint32_t Length, uint32_t Pattern) {
-    uint32_t StartAddress;
-
-    if (MemoryType == PRU0_DRAM)
-        StartAddress = SOC_PRUICSS1_REGS + SOC_PRUICSS_PRU0_DRAM_OFFSET;
-    else if (MemoryType == PRU1_DRAM)
-        StartAddress = SOC_PRUICSS1_REGS + SOC_PRUICSS_PRU1_DRAM_OFFSET;
-    else if (MemoryType == PRU0_IRAM)
-        StartAddress = SOC_PRUICSS1_REGS + SOC_PRUICSS_PRU0_IRAM_OFFSET;
-    else if (MemoryType == PRU1_IRAM)
-        StartAddress = SOC_PRUICSS1_REGS + SOC_PRUICSS_PRU1_IRAM_OFFSET;
-    else if (MemoryType == PRU_SHARED_RAM)
-        StartAddress = SOC_PRUICSS1_REGS + SOC_PRUICSS_SHARED_RAM_OFFSET;
-    else return;
-
-    uint8_t *destaddr = (uint8_t*)(StartAddress + offset);
-    memset(destaddr, Pattern, Length);
+uint32_t PRUGetAddress(PRU_RAM_t MemoryType) {
+    static const uint32_t addr[] = {
+        SOC_PRUICSS_PRU0_DRAM_OFFSET  + SOC_PRUICSS1_REGS,
+        SOC_PRUICSS_PRU1_DRAM_OFFSET  + SOC_PRUICSS1_REGS,
+        SOC_PRUICSS_PRU0_IRAM_OFFSET  + SOC_PRUICSS1_REGS,
+        SOC_PRUICSS_PRU1_IRAM_OFFSET  + SOC_PRUICSS1_REGS,
+        SOC_PRUICSS_SHARED_RAM_OFFSET + SOC_PRUICSS1_REGS
+    };
+    return addr[(int)MemoryType];
 }
 
-void PRUMemCpy(uint32_t MemoryType, uint32_t offset, uint32_t Length, const uint32_t *Pointer) {
-    //static const uint32_t BaseAddress = SOC_PRUICSS1_REGS;
-    if(Length == 0 || Length > 8192) 
-        return;
-    if((offset + Length) > 8192) 
-        return;
-    if(Pointer < 0x402F0400 || Pointer > 0x4030FFFF) 
-        return;
+void PRUMemSet(PRU_RAM_t MemoryType, uint32_t offset, uint32_t Length, uint32_t Pattern) {
+    if(Length == 0 || Length > 8192) return;
+    if((offset + Length) > 8192) return;
+    memset(PRUGetAddress(MemoryType) + offset, Pattern, Length);
+}
 
-    uint32_t StartAddress;
-    uint8_t *srcaddr;
-    uint8_t *destaddr;
-
-    if (MemoryType == PRU0_DRAM)
-        StartAddress = SOC_PRUICSS1_REGS + SOC_PRUICSS_PRU0_DRAM_OFFSET;
-    else if (MemoryType == PRU1_DRAM)
-        StartAddress = SOC_PRUICSS1_REGS + SOC_PRUICSS_PRU1_DRAM_OFFSET;
-    else if (MemoryType == PRU0_IRAM)
-        StartAddress = SOC_PRUICSS1_REGS + SOC_PRUICSS_PRU0_IRAM_OFFSET;
-    else if (MemoryType == PRU1_IRAM)
-        StartAddress = SOC_PRUICSS1_REGS + SOC_PRUICSS_PRU1_IRAM_OFFSET;
-    else if (MemoryType == PRU_SHARED_RAM)
-        StartAddress = SOC_PRUICSS1_REGS + SOC_PRUICSS_SHARED_RAM_OFFSET;
-    else return;
-
-    srcaddr = (uint8_t*)Pointer;
-    destaddr = (uint8_t*)(StartAddress + offset);
-
-    memcpy(destaddr, srcaddr, Length);
+void PRUMemCpy(PRU_RAM_t MemoryType, uint32_t offset, uint32_t Length, const uint32_t *Pointer) {
+    if(Length == 0 || Length > 8192) return;
+    if((offset + Length) > 8192) return;
+    if(Pointer < 0x402F0400 || Pointer > 0x4030FFFF) return;
+    memcpy(PRUGetAddress(MemoryType) + offset, Pointer, Length);
 }
 
 void PRUInit(void) {
-    /* Enable PRU Clocks */
+    // /* Enable PRU Clocks */
     CM_PER_L4LS_CLKSTCTRL->BIT.CLKTRCTRL = 2;
     while(!CM_PER_L4LS_CLKSTCTRL->BIT.CLKTRCTRL);
 
-    /*PRU-ICSS PRCM Enable Step 1*/
-    RM_PER_RSTCTRL->BIT.PRU_ICSS_LRST = 2;
+    RM_PER_RSTCTRL->BIT.PRU_ICSS_LRST = 1;
+    RM_PER_RSTCTRL->BIT.PRU_ICSS_LRST = 0;
 
-    /*PRU-ICSS PRCM Enable Step 2*/
     CM_PER_PRU_ICSS_CLKCTRL->BIT.MODULEMODE = 2;
-    while(CM_PER_PRU_ICSS_CLKCTRL->BIT.IDLEST);
 
-    /*PRU-ICSS PRCM Reset*/
-    RM_PER_RSTCTRL->BIT.PRU_ICSS_LRST = 2;
+    RM_PER_RSTCTRL->BIT.PRU_ICSS_LRST = 1;
+    RM_PER_RSTCTRL->BIT.PRU_ICSS_LRST = 0;
 
     WaitUSDMTimer(100);
 
-    PRUSS_CFG_SYSCFG->LONG = 0x00000005;
-    while(PRUSS_CFG_SYSCFG->BIT.SUB_MWAIT);
+    PRUSS_CFG_SYSCFG->BIT.STANDBY_INIT = 0;
 
+    // PRUSS_CFG_SYSCFG->LONG = 0x00000005;
+    // while(PRUSS_CFG_SYSCFG->BIT.SUB_MWAIT);
+
+    PRUHalt(PRU0);
+    PRUHalt(PRU1);
+    
     /* Clear out the memory of both PRU cores */
     PRUMemSet(PRU0_DRAM, 0, 8*1024, 0);   //Data 8KB RAM0
     PRUMemSet(PRU1_DRAM, 0, 8*1024, 0);   //Data 8KB RAM1
@@ -996,14 +995,6 @@ void PRUHalt(PRU_CORE_t PRUCore) {
     if(PRUCore & PRU1) PRU1_CTRL->LONG = 0;
 }
 
-/*
-
-0x231E0 SPI Initialize
-0x23230 SPI ReadSectors
-
- *
- *
- */
 
 
 

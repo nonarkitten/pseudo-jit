@@ -22,9 +22,15 @@ void InitPRU(void) {
     /*Configure pins*/
     config_mux(pru_pins);
 
+    WaitMSDMTimer(40);
+
     PRUMemCpy(PRU0_IRAM, 0, pru_text_bin_len, pru_text_bin);
     PRUMemCpy(PRU0_DRAM, 0, pru_data_bin_len, pru_data_bin);
 
     PRUEnable(PRU0);
+
+    // uint32_t* x = (uint32_t*)0x4A322000;
+    // for(int i=0; i<11; i++) printf("[PRU0] %p = %08x\n", &x[i], x[i]);
+
 }
 

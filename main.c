@@ -295,7 +295,7 @@ static void EmergencyErase(void) {
     int i;
     int esc = 0;
     for(i=0; i<10; i++) {
-        WaitMSDMTimer(5);
+        WaitMSDMTimer(3);
         if(UART0Getkey() == 0x1B) esc++;
     }
     if(esc >= 1) {
@@ -308,25 +308,21 @@ static void EmergencyErase(void) {
 int main(void) {
     char option[4] = "?";
     double t1, t2;
-    int clk;
+    int clk1, clk2;
 
     InitResetHalt();
 
     InitDMTimer(); // works
     InitCorePLL(1000); // works
     InitPERPLL(); // works
+    EnableL3L4Wakeup();
     UART0Init(115200); // works
 
     printf("%c%c%c%c", NAK, CANCEL, CANCEL, CANCEL); // flush XMODEM
     printf("%s", banner);
 
-    SPIInit(12000000); // works
+    SPIInit(24000000); // works
     EmergencyErase();
-
-    InitPRU(); // works
-    t1 = ReadDMTimerSeconds();
-
-    WaitMSDMTimer(10);
 
     InitI2C();
     printf("[I2C0] Scanning bus..\n");
@@ -348,18 +344,27 @@ int main(void) {
         InitMPUPLL(300); // works
     }
 
+    InitPRU(); // works
+    t1 = ReadDMTimerSeconds();
+    clk1 = GetPRUClock();
+
+    WaitMSDMTimer(20);
     DDRInit(); // works
     InitMMU(); // works
-
     setecho(1);
 
     t2 = ReadDMTimerSeconds(); 
-    clk = GetPRUClock(); // this will be in E-clocks, so 1/10th the actual
-    double MHz = clk * 0.00001 / (t2 - t1);
+    clk2 = GetPRUClock(); // this will be in E-clocks, so 1/10th the actual
+    double MHz = (clk2 - clk1) * 0.00001 / (t2 - t1);
 
-    printf("[CLK7] Main bus clock measured at %0.3f\n", MHz);
     // works partially, no CIA, update to real CLK
-    if(MHz >= 4.99f && MHz <= 16.0f) InitGPMC((float)MHz); 
+    if(MHz < 5.0 || MHz > 16.0) {
+        printf("[CLK7] Unable to read main bus CLK\n");
+        MHz = 8.0;
+    } else {
+        printf("[CLK7] Main bus clock measured at %0.3f\n", MHz);
+    }
+    InitGPMC((float)MHz); 
 
     ReleaseReset();
 

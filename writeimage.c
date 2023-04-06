@@ -57,7 +57,7 @@ static uint32_t WriteChunk(uint32_t addr, uint32_t data, uint32_t * crc) {
     uint32_t _data = rev32(data);
     if(crc) *crc = crc32(&_data, sizeof(data), *crc);
     WriteSPIBlock(addr, (uint8_t*)&_data, sizeof(data));
-    WaitUSDMTimer(600);
+    WaitUSDMTimer(60);
     return addr + 4;
 }
 
