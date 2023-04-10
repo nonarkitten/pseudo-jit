@@ -16,14 +16,12 @@ CCFLAGS_WARN := \
 	-Wall -Wshadow -Wdouble-promotion -Wformat-overflow -Wformat-truncation \
 	-Wundef -Wno-unused-parameter -Wno-discarded-qualifiers
 
-ifneq ($(filter debug,$(MAKECMDGOALS)),)
-BUILD := debug
-else ifneq ($(filter release,$(MAKECMDGOALS)),)
-BUILD := release
-else ifeq ($(MAKECMDGOALS),clean)
+ifeq ($(MAKECMDGOALS),clean)
 BUILD := *
+else ifdef RELEASE
+BUILD := release
 else
-$(error Must specify release or debug)
+BUILD := debug
 endif
 
 # Compiler optimizations
@@ -76,10 +74,11 @@ VPATH := $(SRCDIRS)
 
 .PHONY: all premake clean debug release
 
+all: premake $(OUTPUT)
+
 clean:
 	@echo Cleaning $(OUTPUT)...
 	@make -C pru -f pru.mk clean
-# -@make -C pru1 -f pru.mk clean
 	$(RM) $(OBJDIR)/* 2>/dev/null || true
 	$(RD) $(OBJDIR) 2>/dev/null || true
 	$(RM) $(OUTPUT) 2>/dev/null || true
@@ -89,13 +88,9 @@ clean:
 	$(RM) $(DISFILE) 2>/dev/null || true
 	$(RM) $(OUTDIR)/$(BUILD) 2>/dev/null || true
 
-release debug: premake all 
-all: $(OUTPUT)
-
 premake:
 	$(MD) $(OBJDIR)
 	@make -C pru -f pru.mk
-# -@make -C pru1 -f pru.mk
 
 $(OUTPUT): $(OBJECTS) pru/main.c
 	@echo Building PJIT Bootloader...
