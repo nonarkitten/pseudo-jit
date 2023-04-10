@@ -11,8 +11,8 @@ Please visit [the Wiki](https://github.com/nonarkitten/pseudo-jit/wiki) for more
 ## Future Plans
 
 While PJIT is working in principle, getting it loaded and debugging has been a huge challenge with open source offerings (though, to be fair, they're actually better than TI's own Code Compser Studio). As such we're refactoring PJIT into PJIT 2.0 with the following goals:
-- migrate old PJIT into pjit-legacy branch
-- migrating the Buffee Bootloader code to this repository
+- migrate old PJIT into pjit-legacy branch (to-do)
+- migrating the Buffee Bootloader code to this repository (done)
 - cleaning up instructions for Visual Studio Code for loading and debugging
 
 ## Single Binary PJIT
@@ -24,7 +24,7 @@ So, during boot, PJIT has to:
 - based on EEPROM settings, initialize PJIT cache and opcode jump tables (to-do)
 - finally, start PJIT
 
-I can happily say this is complete and working well. Right now the bootloader is home to PJIT, mcl68k and a copy of tinyBASIC and we're still only at 100kB. We'll probably be removing mcl68k once PJIT is more stable which will clear up around 20kB for 680x0 opcodes.
+Right now the bootloader is home to PJIT, mcl68k and a copy of tinyBASIC and we're still only at 100kB. We'll probably be removing mcl68k once PJIT is more stable which will clear up around 20kB for 680x0 opcodes.
 
 ## Building
 
