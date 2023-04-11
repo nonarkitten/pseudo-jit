@@ -71,14 +71,56 @@ const config_t default_config = {
 cpu_t cpu_state = {0};
 extern void lookup_opcode(void);
 
-#define INDEXLEN 11  // Bit Length of Index
-#define BLOCKLEN 7   // Bit Length of Block Size
+// __attribute__((naked)) static void cache_clear_block(uint32_t* block) {
+//     asm("movw     r1, #0x0002   \n\t" // 0xE2800002 = add r0, r0, #2    
+//         "movt     r1, #0xE280   \n\t"         
+//         "vmov     s16, r1       \n\t"
+//         "movw     r1, #0xFF35   \n\t" // 0xE12FFF35 = blx r5        
+//         "movt     r1, #0xE12F   \n\t"         
+//         "vmov     s17, r1       \n\t"     
+//         "add      r1, r0, r0    \n\t"        
+//         "vmov.f64 d9, d8        \n\t"    
+//         "vmov.f64 d10, d8       \n\t"     
+//         "vmov.f64 d11, d8       \n\t"     
+//         "vmov.f64 d12, d8       \n\t"     
+//         "vmov.f64 d13, d8       \n\t"     
+//         "vmov.f64 d14, d8       \n\t"     
+//         "vmov.f64 d15, d8       \n"     
+//     "L0: vstm     r0!, {d8-d15} \n\t"           
+//         "cmp      r1, r0        \n\t"    
+//         "bhi      L0            \n\t"
+//         "bx       lr            \n\t");
+// }
 
-typedef uint16_t cache_tags_t[(1 << INDEXLEN)];
-typedef uint32_t cache_data_t[(1 << INDEXLEN)][(1 << BLOCKLEN)];
+__attribute__((naked)) static void cache_clear(void) {
+    asm("ldr      r0, [r5, %0]       \n\t" // r0 = start
+        "ldrb     r1, [r5, %1]       \n\t"
+        "ldrb     r2, [r5, %2]       \n\t"
+        "add      r2, r2, r1         \n\t"
+        "mov      r1, #8             \n\t"
+        "add      r2, r0, r1, lsl r2 \n"   // r2 = end
+        "movw     r1, #0x0002        \n\t" // 0xE2800002 = add r0, r0, #2    
+        "movt     r1, #0xE280        \n\t"         
+        "vmov     s16, r1            \n\t"
+        "movw     r1, #0xFF35        \n\t" // 0xE12FFF35 = blx r5        
+        "movt     r1, #0xE12F        \n\t"         
+        "vmov     s17, r1            \n\t"     
+        "vmov.f64 d9, d8             \n\t"    
+        "vmov.f64 d10, d8            \n\t"     
+        "vmov.f64 d11, d8            \n\t"     
+        "vmov.f64 d12, d8            \n\t"     
+        "vmov.f64 d13, d8            \n\t"     
+        "vmov.f64 d14, d8            \n\t"     
+        "vmov.f64 d15, d8            \n"
+    "L1: vstm     r0!, {d8-d15}      \n\t"           
+        "cmp      r0, r2             \n\t"
+        "bcc      L1                 \n\t"
+        "bx       lr                 \n\t"
+        ::  "i"(__offsetof(cpu_t,cache_data)),
+            "i"(__offsetof(cpu_t,config.cache_index_bits)),
+            "i"(__offsetof(cpu_t,config.cache_block_bits)));
+}
 
-static cache_tags_t *const cache_tags = (cache_tags_t *const)0x9FDF0000;
-static cache_data_t *const cache_data = (cache_data_t *const)0x9FE00000;
 
 /*  Given a point within the PJIT cache, determine the 68K PC
     WARNING: this assumes that the cache_tag is valid and makes
@@ -90,33 +132,6 @@ uint32_t cache_reverse(uint32_t arm_addr) {
 //     uint32_t set =
 //         (arm_addr >> (2 + PAGE_SIZE + PAGE_COUNT)) & ((1 << SET_BITS) - 1);
 //     return pjit_tag_cache[set][page] | (index << 1);
-}
-
-static inline void __cache_clear(uint32_t* block, uint32_t* end) {
-    static const uint32_t cache_ops[2] = { 0xE2800002, 0xE12FFF35 };
-    uint32x2_t ops = *(uint32x2_t*)cache_ops;
-    uint32x2_t* b = (uint32x2_t*)block;
-    uint32x2_t* e = (uint32x2_t*)end;
-    while(b < e) *b++ = ops;
-}
-
-void cache_clear(void) {
-    __cache_clear(&cpu->cache_data[0], &cpu->cache_data[1 << (INDEXLEN + BLOCKLEN)]);
-}
-
-/*  Given a 68K address return the exact instruction to enter
-    if the tags don't match, clear the cache first */
-uint32_t cache_find_entry(uint32_t m68k_addr) {
-    uint32_t tag = ((m68k_addr >> 1) >> (BLOCKLEN + INDEXLEN));             
-    uint32_t idx = ((m68k_addr >> 1) >> BLOCKLEN) & ((1 << INDEXLEN) - 1);  
-    uint32_t off = ((m68k_addr >> 1) & ((1 << BLOCKLEN) - 1));              
-    
-    if (cpu->cache_tags[idx] != tag) { // MISS!
-        cpu->cache_tags[idx] = tag;
-        //  Wipe out a single cache page
-        __cache_clear(&cpu->cache_data[idx << BLOCKLEN], &cpu->cache_data[(idx + 1) << BLOCKLEN]);
-    }
-    return (uint32_t)&cpu->cache_data[(idx << BLOCKLEN) | off];
 }
 
 pjit_cache_init(uint32_t top) {
@@ -173,6 +188,7 @@ pjit_cache_init(uint32_t top) {
     cpu_state.b_lookup = b_imm(calc_offset(cpu, &lookup_opcode));
 
     // Clear caches
+    cpu = &cpu_state;
     cache_clear();
 
     // Load our initial PC and SP

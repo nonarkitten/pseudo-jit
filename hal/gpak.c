@@ -251,7 +251,7 @@ int DetectGP(void) {
             gpak_read_reg(0xE1), // NVM Configuration Protection Bits
             gpak_read_reg(0xE4)  // Protection Lock Bit
             );  
-            printf("[I2C0] GreenPAK %s\n", ReadChip(0) ? "ok." : "bad!");
+            printf("[I2C0] GreenPAK %s\n", ReadChip(0) ? "ok" : "BAD");
         }
     }
 }

@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdint.h>
 
+#include "init.h"
 #include "main.h"
 #include "pinmux.h"
 #include "init.h"
@@ -64,6 +65,7 @@ void SaveConfigEEPROM(int boot_good) {
     cpu_state.config.crc16 = crc16_ccitt(config, sizeof(config_t) - 6, 0xFFFF);    
     printf("[I2C0] Saving and verifying settings\n");
     I2C0SendCmd( 0x50, addr, 2, &cpu_state.config, sizeof(config_t));
+    WaitMSDMTimer(10);
     I2C0ReadCmd( 0x50, addr, 2, &i2c_config, sizeof(config_t));
     if(memcmp(&i2c_config, &cpu_state.config, sizeof(config_t))) {
         printf("[I2C0] Verify failed! EEPROM may be bad\n");
