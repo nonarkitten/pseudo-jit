@@ -163,7 +163,7 @@ char * strncat ( char * destination, const char * source, size_t num ) {
 }
 
 int echo_on = 0;
-void setecho(int on) {
+void SetEcho(int on) {
     echo_on = on;
 }
 

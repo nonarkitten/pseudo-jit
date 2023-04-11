@@ -5,13 +5,9 @@
  *      Author: renee.cousins
  */
 
-#include "hw_init.h"
-#include "hw_flash.h"
+#include "init.h"
+#include "flash.h"
 #include "pinmux.h"
-
-void SPIInit(int bps) {
-	InitSPI(bps);
-}
 
 static uint8_t spi_xfer[256];
 extern uint8_t TransferSPI(uint8_t *io_buffer, uint8_t len);

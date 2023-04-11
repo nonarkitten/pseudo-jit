@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <stdint.h>
 
-#include "hw_mmu.h"
+#include "mmu.h"
 
 int MMUEnabled = 0;
 
@@ -17,7 +17,7 @@ void InitMMU(void) {
     // 0x400 to 0x403, internal ROM and SRAM, Caches write-through, write allocate, access for all
     for (int i=0x400; i < 0x403; i++) mmu_table[i] = (i << 20) | 0x1c0e;
 
-    arm_flush_cache((uint32_t)mmu_table, sizeof(mmu_table));
+    CP15DCacheFlushBuff((uint32_t)mmu_table, sizeof(mmu_table));
     
     // Load new pointer to the mmu table
     asm volatile(

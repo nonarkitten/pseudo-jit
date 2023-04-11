@@ -48,7 +48,7 @@
 
 #include "arm.h"
 #include "pjit.h"
-#include "pjit_extword.h"
+#include "extword.h"
 
 extern const uint32_t optab[65536];
 extern const uint8_t  oplen[65536];

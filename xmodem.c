@@ -4,11 +4,11 @@
 #include "main.h"
 
 #include "pinmux.h"
-#include "hw_init.h"
-#include "hw_mmu.h"
-#include "hw_ddr.h"
-#include "hw_flash.h"
-#include "hw_gpmc.h"
+#include "init.h"
+#include "mmu.h"
+#include "ddr.h"
+#include "flash.h"
+#include "gpmc.h"
 
 /* These definitions are for xmodem protocol. */
 #define SOH     0x01

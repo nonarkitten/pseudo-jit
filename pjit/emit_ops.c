@@ -44,7 +44,7 @@
  */
 
 #include "pjit.h"
-#include "pjit_emitters.h"
+#include "emitters.h"
 
 // Performs an Effective-Address (EA) Load
 // Parameters

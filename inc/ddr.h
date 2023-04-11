@@ -3,7 +3,7 @@
 
 #include "main.h"
 
-extern void DDRInit(void);
+extern void InitDDR(void);
 extern void DDRTest(void);
 
 #endif

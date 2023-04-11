@@ -27,7 +27,7 @@ extern void ReadSPIBlock(uint32_t addr, void* buffer, uint8_t len);
 /*Write a whole block to SPI*/
 extern void WriteSPIBlock(uint32_t addr, const void* buffer, uint8_t len);
 
-extern void SPIInit(int bps);
+extern void InitSPI(int bps);
 extern void SPITest(void);
 extern void SPIDump(void);
 

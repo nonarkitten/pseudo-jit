@@ -114,7 +114,7 @@ void InitPERPLL(void)
           (1 == CM_IDLEST_DPLL_PER->BIT.ST_MN_BYPASS));
 }
 
-void EnableL3L4Wakeup(void) {
+void InitL3L4Wakeup(void) {
     /*Enable Modules*/
     CM_PER_L3_CLKCTRL->BIT.MODULEMODE = 2;
     while(CM_PER_L3_CLKCTRL->BIT.IDLEST);
@@ -285,7 +285,7 @@ void InitDDRPLL(void)
  *
  *************************************************************************/
 extern void DDR3_EMIF_Config(void);
-void InitDDR(void)
+void InitDDREMIF(void)
 {
     uint32_t i;
 
@@ -837,7 +837,7 @@ int32_t  I2C0Probe(uint32_t slave) {
 }
 
 
-void UART0Init(int baud) {
+void InitUART0(int baud) {
     /*Enable Func Clock*/
     CM_WKUP_UART0_CLKCTRL->BIT.MODULEMODE = 2;
     /*Wait clocks to get active*/
@@ -1022,7 +1022,7 @@ void GPMCConfig(const uint32_t config[6], uint32_t cs, uint32_t base, uint32_t s
 }
 
 
-#include "hw_pru.h"
+#include "pru.h"
 
 #define SOC_PRUICSS1_REGS               (0x4A300000)
 

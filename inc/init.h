@@ -12,13 +12,13 @@ extern void InitPERPLL(void);
 /*DDR PLL Init*/
 extern void InitDDRPLL(void);
 /*DDR Init*/
-extern void InitDDR(void);
+extern void InitDDREMIF(void);
 /*SPI Init*/
 extern void InitSPI(int bus_speed);
 /*SPI Transfer*/
 extern uint8_t TransferSPI(uint8_t *io_buffer, uint8_t len);
 /*Init UART*/
-extern void UART0Init(int baud);
+extern void InitUART0(int baud);
 /*Write byte to UART*/
 extern void UART0Write(int c);
 /*Check if UART has data*/

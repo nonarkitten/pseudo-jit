@@ -1,13 +1,13 @@
-#include "hw_ddr.h"
-#include "hw_init.h"
+#include "ddr.h"
+#include "init.h"
 
 volatile uint32_t *ddr = (volatile uint32_t *)0x80000000;
 
 #define TEST_SIZE 8
 
-void DDRInit(void) {
+void InitDDR(void) {
     InitDDRPLL();
-    InitDDR();
+    InitDDREMIF();
 }
 
 void DDRTest(void) {

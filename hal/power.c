@@ -1,4 +1,16 @@
-#include "init_power.h"
+#include <stdio.h>
+#include <stdint.h>
+
+#include "main.h"
+#include "pinmux.h"
+#include "init.h"
+#include "mmu.h"
+#include "ddr.h"
+#include "flash.h"
+#include "gpmc.h"
+#include "gpak.h"
+#include "pjit.h"
+#include "power.h"
 
 #define PMIC_CNTL_I2C_SLAVE_ADDR       (0x24)
 
@@ -114,5 +126,15 @@ int InitPower(PowerRail_t rail, double voltage) {
         printf("[I2C0] PMIC DCDC voltage: %0.2f\n", v);
         return (int)(v * 100.0) == (int)(voltage * 100.0);
     }
+}
 
+int DetectPMIC(void) {
+    if(I2C0Probe(0x24)) {
+        if(InitPower(RAIL_DCDC2, cpu_state.config.pmic_voltage * 0.01)) {
+            InitMPUPLL(cpu_state.config.dpll_mul);
+            return 1;
+        }
+    }
+    InitMPUPLL(300);
+    return 0;
 }

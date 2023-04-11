@@ -95,7 +95,7 @@
     r15 is the Program Counter
 */
 
-#include "pjit_emitters.h"
+#include "emitters.h"
 
 typedef struct {
     unsigned enable_32b_addr : 1;

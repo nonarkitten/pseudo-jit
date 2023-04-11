@@ -14,13 +14,13 @@
 #include <stdbool.h>
 #include <string.h>
 
-#include "init_power.h"
-#include "hw_ddr.h"
-#include "hw_flash.h"
-#include "hw_gpmc.h"
-#include "hw_init.h"
-#include "hw_pru.h"
-#include "hw_mmu.h"
+#include "power.h"
+#include "ddr.h"
+#include "flash.h"
+#include "gpmc.h"
+#include "init.h"
+#include "pru.h"
+#include "mmu.h"
 #include "mem_be.h"
 #include "pinmux.h"
 
@@ -46,7 +46,7 @@ extern void arm_dcache_invalidate(uintptr_t addr, uint32_t length);
 extern void test_native_bogomips(void);
 extern void test_pjit_bogomips(void);
 
-extern void setecho(int);
+extern void SetEcho(int);
 extern void test_printf(void);
 
 extern int pmic_detected;
