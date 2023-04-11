@@ -38,9 +38,9 @@ $(OUTPUT): $(C_SRCS:%.c=%.obj)
 	$(CG_TOOL_ROOT)/bin/lnkpru $(LD_CLPRU_OPTS) --output_file=$@ --map_file=$(@:%.out=%.map)
 	$(CG_TOOL_ROOT)/bin/hexpru  -o "buffee-pru.hex" $(OUTPUT) bin.cmd
 	-@gsed '$$ s/\x00*$$//' text.bin >pru_text.bin
-	-@xxd -i -a pru_text.bin >../pru_text.h
+	-@xxd -i -a pru_text.bin >../inc/pru_text.h
 	-@gsed '$$ s/\x00*$$//' data.bin >pru_data.bin
-	-@xxd -i -a pru_data.bin >../pru_data.h
+	-@xxd -i -a pru_data.bin >../inc/pru_data.h
 	-@echo ' '
 
 %.obj: %.c
