@@ -39,8 +39,7 @@ QUIET := @
 endif
 
 # Any build defintions
-VERSION := ${shell git describe --tags --no-dirty | sed 's/\(.*\)-\(.*\)-.*/\1-\2/'}
-DEFINES := -DVERSION=\"${VERSION}\"
+DEFINES := -DVERSION="${shell git describe --tags --no-dirty | sed 's/\(.*\)-\(.*\)-.*/\1-\2/'}"
 
 # Combine all the flags so far
 CFLAGS := $(CCFLAGS_WARN) $(CCFLAGS_CPU) $(CCFLAGS_OPT) $(DEFINES)
@@ -73,6 +72,8 @@ OBJECTS := $(addprefix $(OBJDIR)/,$(addsuffix .o,$(basename $(foreach file,$(SOU
 VPATH := $(SRCDIRS)
 
 .PHONY: all premake clean debug release
+
+# $(info $(addprefix $(OBJDIR)/,$(notdir $(filter %.d,$(SOURCES:%.c=%.d)))))
 
 all: premake $(OUTPUT)
 
@@ -109,4 +110,4 @@ $(OBJDIR)/%.o: %.s
 	@echo Assembling $<...
 	$(AS) $(CFLAGS) -c $< -o $@
 
--include $(addprefix $(OBJDIR)/,$(notdir $($(filter %.c,$(SOURCES)):%.c=%.d)))
+-include $(addprefix $(OBJDIR)/,$(notdir $(filter %.d,$(SOURCES:%.c=%.d))))

@@ -1,15 +1,6 @@
 #include <stdio.h>
 #include <stdint.h>
 
-#include "main.h"
-
-#include "pinmux.h"
-#include "init.h"
-#include "mmu.h"
-#include "ddr.h"
-#include "flash.h"
-#include "gpmc.h"
-
 /* These definitions are for xmodem protocol. */
 #define SOH     0x01
 #define STX     0x02

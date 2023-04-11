@@ -8,7 +8,87 @@
 #include <stdint.h>
 #include <string.h>
 
+#include "pru.h"
 #include "ioam3358.h"
+
+extern void DDR3_EMIF_Config(void);
+
+#define SYSTEM_CLOCK 48000000
+
+// I2C CON register bit definition
+#define CON_I2C_EN (1 << 15)
+
+#define CON_STB  (1 << 11)
+#define CON_MST  (1 << 10)
+#define CON_TRX  (1 << 9)
+#define CON_XSA  (1 << 8)
+#define CON_XOA0 (1 << 7)
+#define CON_XOA1 (1 << 6)
+#define CON_XOA2 (1 << 5)
+#define CON_XOA3 (1 << 4)
+#define CON_STP  (1 << 1)
+#define CON_STT  (1 << 0)
+
+#define INTERNAL_CLOCK 12000000
+
+//*******************************************************************
+//DDR3 PHY parameters
+//*******************************************************************
+
+#define  CMD_PHY_CTRL_SLAVE_RATIO       0x80
+#define  CMD_PHY_INVERT_CLKOUT          0x0
+
+// GEL
+#define  DATA_PHY_RD_DQS_SLAVE_RATIO    0x38
+#define  DATA_PHY_WR_DQS_SLAVE_RATIO    0x44
+#define  DATA_PHY_FIFO_WE_SLAVE_RATIO   0x94 //RD DQS GATE
+#define  DATA_PHY_WR_DATA_SLAVE_RATIO   0x7D  //WRITE DATA
+
+#define  DDR_IOCTRL_VALUE               (0x18B)
+
+#define ALLOPP_DDR3_READ_LATENCY          0x07 // RD_Latency = (CL + 2) - 1; CL=6 for DDR3-1600 speed grade and CK of 2.5ns
+
+//******************************************************************
+//EMIF parameters
+//******************************************************************
+// GEL
+// 400MHz settings
+#define ALLOPP_DDR3_SDRAM_TIMING1 0x0AAAD4DB
+#define ALLOPP_DDR3_SDRAM_TIMING2 0x266B7FDA
+#define ALLOPP_DDR3_SDRAM_TIMING3 0x501F867F
+
+#define ALLOPP_DDR3_SDRAM_CONFIG 0x61C05332 // termination = 1 (RZQ/4)
+                                            // dynamic ODT = 2 (RZQ/2)
+                                            // SDRAM drive = 0 (RZQ/6)
+                                            // CWL = 0 (CAS write latency = 5)
+                                            // CL = 4 (CAS latency = 6)
+                                            // ROWSIZE = 6 (15 row bits)
+                                            // PAGESIZE = 2 (10 column bits)
+#define ALLOPP_DDR3_REF_CTRL 0x00000C30 // 400 * 7.8us = 0xC30
+#define ALLOPP_DDR3_ZQ_CONFIG 0x50074BE4
+
+#define GPMC_SIZE_256M  0x0
+#define GPMC_SIZE_128M  0x8
+#define GPMC_SIZE_64M   0xC
+#define GPMC_SIZE_32M   0xE
+#define GPMC_SIZE_16M   0xF
+
+#define SOC_PRUICSS1_REGS               (0x4A300000)
+
+#define SOC_PRUICSS_PRU0_DRAM_OFFSET    (0x00000000)
+#define SOC_PRUICSS_PRU1_DRAM_OFFSET    (0x00002000)
+#define SOC_PRUICSS_SHARED_RAM_OFFSET   (0x00010000)
+#define SOC_PRUICSS_INTC_OFFSET         (0x00020000)
+#define SOC_PRUICSS_PRU0_CTRL_OFFSET    (0x00022000)
+#define SOC_PRUICSS_PRU0_DBG_OFFSET     (0x00022400)
+#define SOC_PRUICSS_PRU1_CTRL_OFFSET    (0x00024000)
+#define SOC_PRUICSS_PRU1_DBG_OFFSET     (0x00024400)
+#define SOC_PRUICSS_CFG_OFFSET          (0x00026000)
+#define SOC_PRUICSS_UART_OFFSET         (0x00028000)
+#define SOC_PRUICSS_IEP_OFFSET          (0x0002E000)
+#define SOC_PRUICSS_ECAP_OFFSET         (0x00030000)
+#define SOC_PRUICSS_PRU0_IRAM_OFFSET    (0x00034000)
+#define SOC_PRUICSS_PRU1_IRAM_OFFSET    (0x00038000)
 
 /*************************************************************************
  * Function Name: InitCorePLL
@@ -222,58 +302,6 @@ void InitDDRPLL(void)
           (1 == CM_IDLEST_DPLL_DDR->BIT.ST_MN_BYPASS));
 }
 
-//*******************************************************************
-//DDR3 PHY parameters
-//*******************************************************************
-
-#define  CMD_PHY_CTRL_SLAVE_RATIO       0x80
-#define  CMD_PHY_INVERT_CLKOUT          0x0
-
-// GEL
-#define  DATA_PHY_RD_DQS_SLAVE_RATIO    0x38
-#define  DATA_PHY_WR_DQS_SLAVE_RATIO    0x44
-#define  DATA_PHY_FIFO_WE_SLAVE_RATIO   0x94 //RD DQS GATE
-#define  DATA_PHY_WR_DATA_SLAVE_RATIO   0x7D  //WRITE DATA
-
-// OSD Recommended
-//#define  DATA_PHY_RD_DQS_SLAVE_RATIO    0x3A
-//#define  DATA_PHY_WR_DQS_SLAVE_RATIO    0x45
-//#define  DATA_PHY_FIFO_WE_SLAVE_RATIO   0x95
-//#define  DATA_PHY_WR_DATA_SLAVE_RATIO   0x7F
-
-#define  DDR_IOCTRL_VALUE               (0x18B)
-
-#define ALLOPP_DDR3_READ_LATENCY          0x07 // RD_Latency = (CL + 2) - 1; CL=6 for DDR3-1600 speed grade and CK of 2.5ns
-
-//******************************************************************
-//EMIF parameters
-//******************************************************************
-// GEL
-// 400MHz settings
-#define ALLOPP_DDR3_SDRAM_TIMING1 0x0AAAD4DB
-#define ALLOPP_DDR3_SDRAM_TIMING2 0x266B7FDA
-#define ALLOPP_DDR3_SDRAM_TIMING3 0x501F867F
-
-#define ALLOPP_DDR3_SDRAM_CONFIG 0x61C05332 // termination = 1 (RZQ/4)
-                                            // dynamic ODT = 2 (RZQ/2)
-                                            // SDRAM drive = 0 (RZQ/6)
-                                            // CWL = 0 (CAS write latency = 5)
-                                            // CL = 4 (CAS latency = 6)
-                                            // ROWSIZE = 6 (15 row bits)
-                                            // PAGESIZE = 2 (10 column bits)
-#define ALLOPP_DDR3_REF_CTRL 0x00000C30 // 400 * 7.8us = 0xC30
-#define ALLOPP_DDR3_ZQ_CONFIG 0x50074BE4
-
-// OSD Recommended
-//#define ALLOPP_DDR3_READ_LATENCY    0x00100007
-//#define ALLOPP_DDR3_SDRAM_TIMING1   0x0AAAD4DB
-//#define ALLOPP_DDR3_SDRAM_TIMING2   0x266B7FDA
-//#define ALLOPP_DDR3_SDRAM_TIMING3   0x501F867F
-//#define ALLOPP_DDR3_SDRAM_CONFIG    0x61C05332
-//#define ALLOPP_DDR3_REF_CTRL        0x00000C30
-//#define ALLOPP_DDR3_ZQ_CONFIG       0x50074BE4
-
-
 /*************************************************************************
  * Function Name: InitDDR
  * Parameters: None
@@ -284,9 +312,7 @@ void InitDDRPLL(void)
  *
  *
  *************************************************************************/
-extern void DDR3_EMIF_Config(void);
-void InitDDREMIF(void)
-{
+void InitDDREMIF(void) {
     uint32_t i;
 
     /*Enable GPIO Interface Clock*/
@@ -355,27 +381,12 @@ void InitDDREMIF(void)
     DDR_DATA0_IOCTRL->LONG = DDR_IOCTRL_VALUE;
     DDR_DATA1_IOCTRL->LONG = DDR_IOCTRL_VALUE;
     /**/
-//    DDR_IO_CTRL->BIT.DDR3_RST_DEF_VAL = 0;
-//    DDR_IO_CTRL->BIT.DDR_WUCLK_DISABLE = 0;
-//    DDR_IO_CTRL->BIT.MDDR_SEL = 0;
-//    DDR_CKE_CTRL->BIT.DDR_CKE_CTRL = 1;
-
 
     // IO to work for DDR3
-    // WR_MEM_32(DDR_IO_CTRL, RD_MEM_32(DDR_IO_CTRL) & ~0x10000000);
-    //printf("[DDR0] DDR_IO_CTRL: %08x\n", DDR_IO_CTRL->LONG);
     DDR_IO_CTRL->LONG &= ~0x10000000;
-    //printf("[DDR0] DDR_IO_CTRL: %08x\n", DDR_IO_CTRL->LONG);
-
-    //for(i=0; i<50000; i++) asm("    nop");
 
     // CKE controlled by EMIF/DDR_PHY
-    // WR_MEM_32(DDR_CKE_CTRL, RD_MEM_32(DDR_CKE_CTRL) | 0x00000001);
-    //printf("[DDR0] DDR_CKE_CTRL: %08x\n", DDR_CKE_CTRL->LONG);
     DDR_CKE_CTRL->LONG = 0x00000001;
-    //*((volatile uint32_t*)0x44E1131C) = 1;
-    //printf("[DDR0] DDR_CKE_CTRL: %08x\n", DDR_CKE_CTRL->LONG);
-
 
     for(i=0; i<50000; i++) asm("    nop");
 
@@ -399,8 +410,6 @@ void InitDDREMIF(void)
 
     while(!EMIF_STATUS->BIT.REG_PHY_DLL_READY);
 }
-
-#define SYSTEM_CLOCK 48000000 // TODO: Verify!
 
 uint8_t TransferSPI(uint8_t *io_buffer, uint8_t len) {
     MCSPI0_CH0CTRL->BIT.EN = 1;
@@ -498,31 +507,7 @@ void InitSPI(int bus_speed) {
     CONF_SPI0_CS0->BIT.RXACTIVE = 1;
 }
 
-// I2C CON register bit definition
-#define CON_I2C_EN (1 << 15)
 
-#define CON_STB  (1 << 11)
-#define CON_MST  (1 << 10)
-#define CON_TRX  (1 << 9)
-#define CON_XSA  (1 << 8)
-#define CON_XOA0 (1 << 7)
-#define CON_XOA1 (1 << 6)
-#define CON_XOA2 (1 << 5)
-#define CON_XOA3 (1 << 4)
-#define CON_STP  (1 << 1)
-#define CON_STT  (1 << 0)
-
-/** public functions **/
-/*************************************************************************
- * Function Name: I2C0Init
- * Parameters: None
- *
- * Return: None
- *
- * Description: Inits I2C0 Module.
- *
- *************************************************************************/
-#define INTERNAL_CLOCK 12000000
 
 void I2C0Init(uint32_t bus_speed) {
     uint32_t divider = (INTERNAL_CLOCK / 2) / bus_speed;
@@ -806,34 +791,6 @@ int32_t  I2C0Probe(uint32_t slave) {
     I2C0_CNT->BIT.DCOUNT = 0;
 
     return present;
-
-    // /*Enable peripheral*/
-    // I2C0_CON->BIT.I2C_EN = 1;
-    // /*Flush buffer*/
-    // (void)I2C0_DATA->BIT.DATA;
-    // /*Check for bus busy*/
-    // while(I2C0_IRQSTATUS_RAW->BIT.BB);
-    // /*Set data count*/
-    // I2C0_CNT->BIT.DCOUNT = 1;
-    // /*Set Slave Addr*/
-    // I2C0_SA->BIT.SA = slave;
-    // /*Clear IRQ Status*/
-    // I2C0_IRQSTATUS->LONG = 0x7FFF;
-    // /*Start immediate RX*/
-    // I2C0_CON->LONG = CON_I2C_EN | CON_MST | CON_STT | CON_STP;
-    // /*Wait until transfer complete and check if done correctly*/
-    // if ((wait_for_status() == 0)) {
-    //     if(I2C0_IRQSTATUS_RAW->BIT.NACK) return 0;
-    //     //if(I2C0_IRQSTATUS_RAW->BIT.AERR) return 0;
-    // } 
-    // //else return 0;
-    // /*Found, receive dummy byte*/
-    // while(!I2C0_IRQSTATUS_RAW->BIT.RRDY);
-    // (void)I2C0_DATA->BIT.DATA;
-    // /*Clear IRQ Status*/
-    // I2C0_IRQSTATUS->LONG = I2C0_IRQSTATUS_RAW->LONG;
-
-    // return 1;
 }
 
 
@@ -843,27 +800,12 @@ void InitUART0(int baud) {
     /*Wait clocks to get active*/
     while(CM_WKUP_UART0_CLKCTRL->BIT.IDLEST);
 
-    // PAD_CONTROL_RXACTIVE | PAD_CONTROL_PULLUP
     CONF_UART0_RXD->LONG = 0x70;
-//    CONF_UART0_RXD->BIT.MMODE = 0;   // Enable GPIO
-//    CONF_UART0_RXD->BIT.PUDEN = 0;
-//    CONF_UART0_RXD->BIT.PUTYPESEL = 1;
-//    CONF_UART0_RXD->BIT.RXACTIVE = 1;
-//    CONF_UART0_RXD->BIT.SLEWCTRL = 0;
-//
-//    // PAD_CONTROL_PULLUP | PAD_CONTROL_SLEWCTRL
     CONF_UART0_TXD->LONG = 0x58;
-//    CONF_UART0_TXD->BIT.MMODE = 0;   // Enable GPIO
-//    CONF_UART0_TXD->BIT.PUDEN = 0;
-//    CONF_UART0_TXD->BIT.PUTYPESEL = 1;
-//    CONF_UART0_TXD->BIT.RXACTIVE = 0;
-//    CONF_UART0_TXD->BIT.SLEWCTRL = 1;
 
     /*Reset UART*/
     UART0_SYSC->BIT.SOFTRESET = 1;
     while(UART0_SYSS->BIT.RESETDONE == 0);
-    /*Disable all interrupts and line drivers*/
-    //UART0_MDR1->BIT.MODE_SELECT = 7;
 
     float div = 48000000.0f/(16.0f*(float)baud);
     unsigned int intdiv = (unsigned int) div;
@@ -908,11 +850,6 @@ int UART0Getkey(void) {
         return -1;
 }
 
-/*  BBB_RESET and BBB_HALT are open drain
-    BBB_HALT  is on GPIO0_13
-    BBB_RESET is on GPIO3_16
-*/
-
 void InitGPIO(void) {
     CM_WKUP_GPIO0_CLKCTRL->BIT.MODULEMODE = 2;
     while(CM_WKUP_GPIO0_CLKCTRL->BIT.IDLEST);
@@ -951,7 +888,6 @@ void ReleaseReset(void) {
     GPIO3_OE->BIT.OUTPUTEN16 = 1; GPIO3_DATAOUT->BIT.DATAOUT16 = 0; 
 }
 
-
 void GPMCInit(void) {
     // CM_DIV_M4_DPLL_CORE->BIT.HSDIVIDER_CLKOUT1_DIV = clk_div;
     CM_PER_GPMC_CLKCTRL->BIT.MODULEMODE = 2;
@@ -976,12 +912,6 @@ void GPMCInit(void) {
      */
     GPMC_CONFIG7_0->LONG = 0;
 }
-
-#define GPMC_SIZE_256M  0x0
-#define GPMC_SIZE_128M  0x8
-#define GPMC_SIZE_64M   0xC
-#define GPMC_SIZE_32M   0xE
-#define GPMC_SIZE_16M   0xF
 
 void GPMCConfig(const uint32_t config[6], uint32_t cs, uint32_t base, uint32_t size) {
     __gpmc_config7_bits config7;
@@ -1021,26 +951,6 @@ void GPMCConfig(const uint32_t config[6], uint32_t cs, uint32_t base, uint32_t s
 
 }
 
-
-#include "pru.h"
-
-#define SOC_PRUICSS1_REGS               (0x4A300000)
-
-#define SOC_PRUICSS_PRU0_DRAM_OFFSET    (0x00000000)
-#define SOC_PRUICSS_PRU1_DRAM_OFFSET    (0x00002000)
-#define SOC_PRUICSS_SHARED_RAM_OFFSET   (0x00010000)
-#define SOC_PRUICSS_INTC_OFFSET         (0x00020000)
-#define SOC_PRUICSS_PRU0_CTRL_OFFSET    (0x00022000)
-#define SOC_PRUICSS_PRU0_DBG_OFFSET     (0x00022400)
-#define SOC_PRUICSS_PRU1_CTRL_OFFSET    (0x00024000)
-#define SOC_PRUICSS_PRU1_DBG_OFFSET     (0x00024400)
-#define SOC_PRUICSS_CFG_OFFSET          (0x00026000)
-#define SOC_PRUICSS_UART_OFFSET         (0x00028000)
-#define SOC_PRUICSS_IEP_OFFSET          (0x0002E000)
-#define SOC_PRUICSS_ECAP_OFFSET         (0x00030000)
-#define SOC_PRUICSS_PRU0_IRAM_OFFSET    (0x00034000)
-#define SOC_PRUICSS_PRU1_IRAM_OFFSET    (0x00038000)
-
 uint32_t* PRUGetAddress(PRU_RAM_t MemoryType) {
     static const uint32_t addr[] = {
         SOC_PRUICSS_PRU0_DRAM_OFFSET  + SOC_PRUICSS1_REGS,
@@ -1073,86 +983,9 @@ void PRUMemCpy(PRU_RAM_t MemoryType, uint32_t offset, uint32_t Length, const uin
     for(int i=0; i<Length; i++) *dest++ = *src++;
 }
 
-static inline uint32_t HW_RD_REG32(uint32_t addr) {
-    uint32_t regVal = *(volatile uint32_t *) addr;
-    asm("    dsb");
-    return (regVal);
-}
-
-static inline void HW_WR_REG32(uint32_t addr, uint32_t value) {
-    *(volatile uint32_t *) addr = value;
-    asm("    dsb");
-    return;
-}
-
-#define HW_WR_FIELD32(regAddr, REG_FIELD, fieldVal)                            \
-    (HW_WR_FIELD32_RAW((uint32_t) (regAddr), ((uint32_t)REG_FIELD##_MASK),                   \
-                          ((uint32_t)REG_FIELD##_SHIFT), (uint32_t)(fieldVal)))
-
-static inline void HW_WR_FIELD32_RAW(uint32_t addr,
-                                     uint32_t mask,
-                                     uint32_t shift,
-                                     uint32_t value)
-{
-    uint32_t regVal = *(volatile uint32_t *) ((uintptr_t) addr);
-    regVal &= (~mask);
-    regVal |= (value << shift) & mask;
-    *(volatile uint32_t *) ((uintptr_t) addr) = regVal;
-    /* Donot call any functions after this. If required implement as macros */
-    HW_SYNC_BARRIER();
-    return;
-}
-
-
 void PRUInit(void) {
-    // // /* Enable PRU Clocks */
-    // CM_PER_L4LS_CLKSTCTRL->BIT.CLKTRCTRL = 2;
-    // while(!CM_PER_L4LS_CLKSTCTRL->BIT.CLKTRCTRL);
-
-    // RM_PER_RSTCTRL->BIT.PRU_ICSS_LRST = 1;
-    // RM_PER_RSTCTRL->BIT.PRU_ICSS_LRST = 0;
-
-    // ->BIT.MODULEMODE = 2;
-    // while(CM_PER_PRU_ICSS_CLKCTRL->BIT.IDLEST);
-
-    // RM_PER_RSTCTRL->BIT.PRU_ICSS_LRST = 1;
-    // RM_PER_RSTCTRL->BIT.PRU_ICSS_LRST = 0;
-
-    // WaitUSDMTimer(100);
-
-    // // PRUSS_CFG_SYSCFG->BIT.STANDBY_INIT = 0;
-
-    // PRUSS_CFG_SYSCFG->LONG = 0x00000005;
-    // while(PRUSS_CFG_SYSCFG->BIT.SUB_MWAIT);
-
-    // PRUSS_INTC_SIPR0->LONG = 0xFFFFFFFFUL;
-    // PRUSS_INTC_SIPR1->LONG = 0xFFFFFFFFUL;
-
-    // uint32_t* cmr_reg = &PRUSS_INTC_CMR0->LONG;
-    // for(int i=0; i<16; i++) *cmr_reg++ = 0;
-
-    // PRUSS_INTC_HMR0->LONG = 0;
-    // PRUSS_INTC_HMR1->LONG = 0;
-    // PRUSS_INTC_HMR2->LONG = 0;
-
-    // PRUSS_INTC_SITR0->LONG = 0;
-    // PRUSS_INTC_SITR1->LONG = 0;
-
-    // PRUHalt(PRU0);
-    // PRUHalt(PRU1);
-
     /* bring PRU_ICSS module out of reset */
     RM_PER_RSTCTRL->LONG  &= 0xFFFFFFFD;            
-
-    // #define SOC_PRCM_REGS                                       (0x44E00000)
-    // #define CM_PER_ICSS_CLKSTCTRL_CLKACTIVITY_ICSS_OCP_GCLK     (0x00000010u)
-    // #define CM_PER_ICSS_CLKCTRL                                 (0xe8)
-    // #define CM_PER_ICSS_CLKSTCTRL                               (0x140)
-    // #define PRCM_MODULEMODE_ENABLE                              (2U)
-    // #define PRCM_MODULEMODE_MASK                                (3U)
-    // #define PRCM_MODULE_IDLEST_FUNC                             (0U)
-    // #define PRCM_IDLE_ST_MASK                                   (0x00030000U)
-    // #define PRCM_IDLE_ST_SHIFT                                  (16U)
 
     /* Enable clocks */
     CM_PER_PRU_ICSS_CLKSTCTRL->BIT.CLKTRCTRL = 2;
@@ -1168,16 +1001,6 @@ void PRUInit(void) {
     while(!CM_PER_PRU_ICSS_CLKSTCTRL->BIT.CLKACTIVITY_PRUSS_OCP_GCLK);
     /* Check idle status value - should be in functional state */
     while(CM_PER_PRU_ICSS_CLKCTRL->BIT.IDLEST);
-
-    // CM_PER_L4LS_CLKSTCTRL->LONG |= 0x2;
-    // CM_PER_L4LS_CLKSTCTRL->LONG &= 0xFFFFFFFD;
-    
-    // CM_PER_PRU_ICSS_CLKCTRL->LONG |= 0x02;
-
-    // CM_PER_L4LS_CLKSTCTRL->LONG |= 0x2;
-    // CM_PER_L4LS_CLKSTCTRL->LONG &= 0xFFFFFFFD;
-    
-    // PRUSS_CFG_SYSCFG->BIT.STANDBY_INIT = 0;
 
     /* Clear out the memory of both PRU cores */
     PRUMemSet(PRU0_DRAM, 0, 8*1024, 0);   //Data 8KB RAM0
@@ -1200,15 +1023,3 @@ void PRUHalt(PRU_CORE_t PRUCore) {
     if(PRUCore & PRU0) PRU0_CTRL->BIT.ENABLE = 0;
     if(PRUCore & PRU1) PRU1_CTRL->BIT.ENABLE = 0;
 }
-
-
-
-
-
-
-
-
-
-
-
-

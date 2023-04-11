@@ -1,132 +1,51 @@
 #include "pjit.h"
-
-// void ExceptionGroup0(
-//     int           number,
-//     unsigned long address,
-//     int           ReadWrite) {
-//     short sr = GetSRW(), context = 0;
-//     #ifdef DEBUG
-//     ON_TRAP(number);
-//     assert(cpu_state != -3);
-//     #endif
-//     if (cpu_state == 0) {
-//         cpu_state = -3;
-//         longjmp(trap_buf, 1);
-//     }
-//     #if CPU_TYPE == 68000
-//     else if (cpu_state > 0) {
-//         context |= 0x8;
-//     }
-//     if (ReadWrite) context |= 0x10;
-//     #else
-//     if (ReadWrite) context |= 0x100;
-//     #endif
-//     if (GetS()) context |= 0x4;
-//     if (ReadWrite && address == pc)
-//         context |= 0x2;
-//     else
-//         context |= 0x1;
-//     cpu_state = 0; /* begin group 0 exception processing */
-//     SetS(1);
-//     SetT(0);
-//     #if CPU_TYPE == 68010
-//     areg[7] -= 44; /* Rerun info */
-//     areg[7] -= 4;
-//     SetMemL(areg[7], address); /* fault address */
-//     areg[7] -= 2;
-//     SetMemW(areg[7], context);
-//     areg[7] -= 2;
-//     SetMemW(areg[7], 0x8000 | (number * 4));
-//     areg[7] -= 4;
-//     SetMemL(areg[7], GetPC());
-//     areg[7] -= 2;
-//     SetMemW(areg[7], sr);
-//     #else
-//     areg[7] = areg[7] - 14;
-//     SetMemW(areg[7], context);
-//     SetMemL(areg[7] + 2, address);
-//     SetMemW(areg[7] + 6, inst);
-//     SetMemW(areg[7] + 8, sr);
-//     SetMemL(areg[7] + 10, GetPC());
-//     #endif
-//     SetPC(GetMemL((long)number * 4) + vbr);
-//     /* end exception processing */
-//     cpu_state = -1;
-// }
-
-// void ExceptionGroup1(int number) {
-//     short sr = GetSRW();
-//     #ifdef DEBUG
-//     ON_TRAP(number);
-//     #endif
-//     cpu_state = 1; /* begin group 1 exception processing */
-//     switch (number) {
-//         case LINE_A:
-//         case LINE_F:
-//         case PRIV:
-//         case ILLINSTR:
-//             SetPC(GetPC() - 2);
-//             break;
-//     }
-//     SetS(1);
-//     SetT(0);
-//     #if CPU_TYPE == 68010
-//     areg[7] -= 2;
-//     SetMemW(areg[7], number * 4);
-//     #endif
-//     areg[7] -= 4;
-//     SetMemL(areg[7], GetPC());
-//     areg[7] -= 2;
-//     SetMemW(areg[7], sr);
-//     SetPC(GetMemL((long)number * 4) + vbr);
-//     /* end exception processing */
-//     cpu_state = -1;
-// }
-
-// void Interrupt(void) {
-//     short sr     = GetSRW();
-//     int   number = QueryIRQ(intpri);
-//     #ifdef DEBUG
-//     ON_TRAP(number);
-//     #endif
-//     cpu_state = 1; /* begin group 1 exception processing */
-//     SetI(intpri);
-//     SetS(1);
-//     SetT(0);
-//     #if CPU_TYPE == 68010
-//     areg[7] -= 2;
-//     SetMemW(areg[7], number * 4);
-//     #endif
-//     areg[7] -= 4;
-//     SetMemL(areg[7], GetPC());
-//     areg[7] -= 2;
-//     SetMemW(areg[7], sr);
-//     SetPC(GetMemL((long)number * 4) + vbr);
-//     /* end exception processing */
-//     cpu_state = -1;
-// }
-
-// void ExceptionGroup2(int number) {
-//     short sr = GetSRW();
-//     #ifdef DEBUG
-//     ON_TRAP(number);
-//     #endif
-//     cpu_state = 2; /* begin group 2 exception processing */
-//     SetS(1);
-//     SetT(0);
-//     #if CPU_TYPE == 68010
-//     areg[7] -= 2;
-//     SetMemW(areg[7], number * 4);
-//     #endif
-//     areg[7] -= 4;
-//     SetMemL(areg[7], GetPC());
-//     areg[7] -= 2;
-//     SetMemW(areg[7], sr);
-//     SetPC(GetMemL((long)number * 4) + vbr);
-//     /* end exception processing */
-//     cpu_state = -1;
-// }
-
+/*
+ * Copyright (c) 2020-2023 Renee Cousins, the Buffee Project - http://www.buffee.ca
+ *
+ * This is part of PJIT the Pseudo-JIT 68K emulator.
+ *
+ * PJIT is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ *
+ * PJIT is licensed under a Creative Commons
+ * Attribution-NonCommercial-ShareAlike 4.0 International License.
+ *
+ * Under the terms of this license you are free copy and redistribute
+ * the material in any medium or format as well as remix, transform,
+ * and build upon the material.
+ *
+ * You must give appropriate credit, provide a link to the license,
+ * and indicate if changes were made. You may do so in any reasonable
+ * manner, but not in any way that suggests the licensor endorses you
+ * or your use.
+ *
+ * You may not use the material for commercial purposes.
+ *
+ * If you remix, transform, or build upon the material, you must
+ * distribute your contributions under the same license as the original.
+ *
+ * You may not apply legal terms or technological measures that legally
+ * restrict others from doing anything the license permits.
+ *
+ * Portions of PJIT have been derived from the following:
+ *
+ *     Castaway (formerly FAST), GPL version 2 License
+ *     Copyright (c) 1994-2002 Martin Döring, Joachim Hönig
+ *    
+ *     Cyclone 68K, GPL version 2 License
+ *     Copyright (c) 2004,2011 Dave "FinalDave" Haywood
+ *     Copyright (c) 2005-2011 Graûvydas "notaz" Ignotas
+ *    
+ *     TI StarterWare, modified BSD 3-Clause License
+ *     Copyright (C) 2010 Texas Instruments Incorporated - http://www.ti.com/
+ *
+ *     libbbb, Apache License, Version 2.0
+ *     Copyright 2015 University of Applied Sciences Western Switzerland / Fribourg
+ * 
+ *     emu68 (https://github.com/michalsc), Mozilla Public License, v. 2.0
+ *     Copyright © 2019 Michal Schulz <michal.schulz@gmx.de>
+ */
 
 __attribute__((naked)) void C_SVC_Handler(uint32_t svc, uint32_t* stack) {
     // save r0~r3 immediately

@@ -1,14 +1,7 @@
 #include <stdio.h>
 #include <stdint.h>
 
-#include "main.h"
-
-#include "pinmux.h"
-#include "init.h"
-#include "mmu.h"
-#include "ddr.h"
 #include "flash.h"
-#include "gpmc.h"
 
 static uint32_t crc32 (void* buffer, uint32_t len, uint32_t init) {
     static const unsigned int crc32_table[] = {

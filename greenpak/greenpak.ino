@@ -305,14 +305,6 @@ int eraseChip(String NVMorEEPROM) {
  *  - Please reference "Issue 2: Non-I2C Compliant ACK Behavior for the NVM and EEPROM Page Erase Byte"
  *    in the SLG46824/6 (XC revision) errata document for more information. */
 
-//    if (Wire.endTransmission() == 0) {
-//      Serial.print(F("ack "));
-//    } 
-//    else { 
-//      Serial.print(F("nack "));  
-//      return -1;
-//    }
-
     Wire.endTransmission();
 
     if (ackPolling(addressForAckPolling) == -1)
