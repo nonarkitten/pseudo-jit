@@ -196,6 +196,6 @@ pjit_cache_init(uint32_t top) {
     cache_clear();
 
     // Load our initial PC and SP
-    cpu_state.a7 = *(uint32_t*)0;
-    cpu_state.pc = *(uint32_t*)4;
+    // cpu_state.a7 = *(uint32_t*)0;
+    // cpu_state.pc = *(uint32_t*)4;
 }

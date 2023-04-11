@@ -6,76 +6,145 @@
  */
 #include "main.h"
 
+#include "ioam3358.h"
+
+#define GPMC_SIZE_256M  0x0
+#define GPMC_SIZE_128M  0x8
+#define GPMC_SIZE_64M   0xC
+#define GPMC_SIZE_32M   0xE
+#define GPMC_SIZE_16M   0xF
+
 /* Pin mux for m68k bus module */
 static const pin_muxing_t m68k_pin_mux[] = {
-		{ CONF_GPMC_A1,       (PIN_CFG_PDIS | PIN_CFG_M0) }, /*GPMC_A1        */
-		{ CONF_GPMC_A2,       (PIN_CFG_PDIS | PIN_CFG_M0) }, /*GPMC_A2        */
-		{ CONF_GPMC_A3,       (PIN_CFG_PDIS | PIN_CFG_M0) }, /*GPMC_A3        */
-		{ CONF_GPMC_A4,       (PIN_CFG_PDIS | PIN_CFG_M0) }, /*GPMC_A4        */
-		{ CONF_GPMC_A5,       (PIN_CFG_PDIS | PIN_CFG_M0) }, /*GPMC_A5        */
-		{ CONF_GPMC_A6,       (PIN_CFG_PDIS | PIN_CFG_M0) }, /*GPMC_A6        */
-		{ CONF_GPMC_A7,       (PIN_CFG_PDIS | PIN_CFG_M0) }, /*GPMC_A7        */
-		{ CONF_GPMC_A8,       (PIN_CFG_PDIS | PIN_CFG_M0) }, /*GPMC_A8        */
-		{ CONF_GPMC_A9,       (PIN_CFG_PDIS | PIN_CFG_M0) }, /*GPMC_A9        */
-		{ CONF_GPMC_A10,      (PIN_CFG_PDIS | PIN_CFG_M0) }, /*GPMC_A10       */
-		{ CONF_GPMC_A11,      (PIN_CFG_PDIS | PIN_CFG_M0) }, /*GPMC_A11       */
+		{ PINMUX_CONF_GPMC_A1,       (PIN_CFG_PDIS | PIN_CFG_M0) }, /*GPMC_A1        */
+		{ PINMUX_CONF_GPMC_A2,       (PIN_CFG_PDIS | PIN_CFG_M0) }, /*GPMC_A2        */
+		{ PINMUX_CONF_GPMC_A3,       (PIN_CFG_PDIS | PIN_CFG_M0) }, /*GPMC_A3        */
+		{ PINMUX_CONF_GPMC_A4,       (PIN_CFG_PDIS | PIN_CFG_M0) }, /*GPMC_A4        */
+		{ PINMUX_CONF_GPMC_A5,       (PIN_CFG_PDIS | PIN_CFG_M0) }, /*GPMC_A5        */
+		{ PINMUX_CONF_GPMC_A6,       (PIN_CFG_PDIS | PIN_CFG_M0) }, /*GPMC_A6        */
+		{ PINMUX_CONF_GPMC_A7,       (PIN_CFG_PDIS | PIN_CFG_M0) }, /*GPMC_A7        */
+		{ PINMUX_CONF_GPMC_A8,       (PIN_CFG_PDIS | PIN_CFG_M0) }, /*GPMC_A8        */
+		{ PINMUX_CONF_GPMC_A9,       (PIN_CFG_PDIS | PIN_CFG_M0) }, /*GPMC_A9        */
+		{ PINMUX_CONF_GPMC_A10,      (PIN_CFG_PDIS | PIN_CFG_M0) }, /*GPMC_A10       */
+		{ PINMUX_CONF_GPMC_A11,      (PIN_CFG_PDIS | PIN_CFG_M0) }, /*GPMC_A11       */
 
-		{ CONF_LCD_DATA8,     (PIN_CFG_PDIS | PIN_CFG_M1) }, /* GPMC_A12      */
-		{ CONF_LCD_DATA9,     (PIN_CFG_PDIS | PIN_CFG_M1) }, /* GPMC_A13      */
-		{ CONF_LCD_DATA10,    (PIN_CFG_PDIS | PIN_CFG_M1) }, /* GPMC_A14      */
-		{ CONF_LCD_DATA11,    (PIN_CFG_PDIS | PIN_CFG_M1) }, /* GPMC_A15      */
-		{ CONF_LCD_DATA12,    (PIN_CFG_PDIS | PIN_CFG_M1) }, /* GPMC_A16      */
-		{ CONF_LCD_DATA13,    (PIN_CFG_PDIS | PIN_CFG_M1) }, /* GPMC_A17      */
-		{ CONF_LCD_DATA14,    (PIN_CFG_PDIS | PIN_CFG_M1) }, /* GPMC_A18      */
-		{ CONF_LCD_DATA15,    (PIN_CFG_PDIS | PIN_CFG_M1) }, /* GPMC_A19      */
+		{ PINMUX_CONF_LCD_DATA8,     (PIN_CFG_PDIS | PIN_CFG_M1) }, /* GPMC_A12      */
+		{ PINMUX_CONF_LCD_DATA9,     (PIN_CFG_PDIS | PIN_CFG_M1) }, /* GPMC_A13      */
+		{ PINMUX_CONF_LCD_DATA10,    (PIN_CFG_PDIS | PIN_CFG_M1) }, /* GPMC_A14      */
+		{ PINMUX_CONF_LCD_DATA11,    (PIN_CFG_PDIS | PIN_CFG_M1) }, /* GPMC_A15      */
+		{ PINMUX_CONF_LCD_DATA12,    (PIN_CFG_PDIS | PIN_CFG_M1) }, /* GPMC_A16      */
+		{ PINMUX_CONF_LCD_DATA13,    (PIN_CFG_PDIS | PIN_CFG_M1) }, /* GPMC_A17      */
+		{ PINMUX_CONF_LCD_DATA14,    (PIN_CFG_PDIS | PIN_CFG_M1) }, /* GPMC_A18      */
+		{ PINMUX_CONF_LCD_DATA15,    (PIN_CFG_PDIS | PIN_CFG_M1) }, /* GPMC_A19      */
 
-		{ CONF_MMC0_DAT3,     (PIN_CFG_PDIS | PIN_CFG_M1) }, /* GPMC_A20      */
-		{ CONF_MMC0_DAT2,     (PIN_CFG_PDIS | PIN_CFG_M1) }, /* GPMC_A21      */
-		{ CONF_MMC0_DAT1,     (PIN_CFG_PDIS | PIN_CFG_M1) }, /* GPMC_A22      */
-		{ CONF_MMC0_DAT0,     (PIN_CFG_PDIS | PIN_CFG_M1) }, /* GPMC_A23      */
-		{ CONF_MMC0_CLK,      (PIN_CFG_PDIS | PIN_CFG_M1) }, /* GPMC_A24      */
-		{ CONF_MMC0_CMD,      (PIN_CFG_PDIS | PIN_CFG_M1) }, /* GPMC_A25/FCx  */
+		{ PINMUX_CONF_MMC0_DAT3,     (PIN_CFG_PDIS | PIN_CFG_M1) }, /* GPMC_A20      */
+		{ PINMUX_CONF_MMC0_DAT2,     (PIN_CFG_PDIS | PIN_CFG_M1) }, /* GPMC_A21      */
+		{ PINMUX_CONF_MMC0_DAT1,     (PIN_CFG_PDIS | PIN_CFG_M1) }, /* GPMC_A22      */
+		{ PINMUX_CONF_MMC0_DAT0,     (PIN_CFG_PDIS | PIN_CFG_M1) }, /* GPMC_A23      */
+		{ PINMUX_CONF_MMC0_CLK,      (PIN_CFG_PDIS | PIN_CFG_M1) }, /* GPMC_A24      */
+		{ PINMUX_CONF_MMC0_CMD,      (PIN_CFG_PDIS | PIN_CFG_M1) }, /* GPMC_A25/FCx  */
 
-		{ CONF_GPMC_AD0,      (PIN_CFG_INEN  | PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_D0       */
-		{ CONF_GPMC_AD1,      (PIN_CFG_INEN  | PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_D1       */
-		{ CONF_GPMC_AD2,      (PIN_CFG_INEN  | PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_D2       */
-		{ CONF_GPMC_AD3,      (PIN_CFG_INEN  | PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_D3       */
-		{ CONF_GPMC_AD4,      (PIN_CFG_INEN  | PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_D4       */
-		{ CONF_GPMC_AD5,      (PIN_CFG_INEN  | PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_D5       */
-		{ CONF_GPMC_AD6,      (PIN_CFG_INEN  | PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_D6       */
-		{ CONF_GPMC_AD7,      (PIN_CFG_INEN  | PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_D7       */
-		{ CONF_GPMC_AD8,      (PIN_CFG_INEN  | PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_D8       */
-		{ CONF_GPMC_AD9,      (PIN_CFG_INEN  | PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_D9       */
-		{ CONF_GPMC_AD10,     (PIN_CFG_INEN  | PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_D10      */
-		{ CONF_GPMC_AD11,     (PIN_CFG_INEN  | PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_D11      */
-		{ CONF_GPMC_AD12,     (PIN_CFG_INEN  | PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_D12      */
-		{ CONF_GPMC_AD13,     (PIN_CFG_INEN  | PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_D13      */
-		{ CONF_GPMC_AD14,     (PIN_CFG_INEN  | PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_D14      */
-		{ CONF_GPMC_AD15,     (PIN_CFG_INEN  | PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_D15      */
+		{ PINMUX_CONF_GPMC_AD0,      (PIN_CFG_INEN  | PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_D0       */
+		{ PINMUX_CONF_GPMC_AD1,      (PIN_CFG_INEN  | PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_D1       */
+		{ PINMUX_CONF_GPMC_AD2,      (PIN_CFG_INEN  | PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_D2       */
+		{ PINMUX_CONF_GPMC_AD3,      (PIN_CFG_INEN  | PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_D3       */
+		{ PINMUX_CONF_GPMC_AD4,      (PIN_CFG_INEN  | PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_D4       */
+		{ PINMUX_CONF_GPMC_AD5,      (PIN_CFG_INEN  | PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_D5       */
+		{ PINMUX_CONF_GPMC_AD6,      (PIN_CFG_INEN  | PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_D6       */
+		{ PINMUX_CONF_GPMC_AD7,      (PIN_CFG_INEN  | PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_D7       */
+		{ PINMUX_CONF_GPMC_AD8,      (PIN_CFG_INEN  | PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_D8       */
+		{ PINMUX_CONF_GPMC_AD9,      (PIN_CFG_INEN  | PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_D9       */
+		{ PINMUX_CONF_GPMC_AD10,     (PIN_CFG_INEN  | PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_D10      */
+		{ PINMUX_CONF_GPMC_AD11,     (PIN_CFG_INEN  | PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_D11      */
+		{ PINMUX_CONF_GPMC_AD12,     (PIN_CFG_INEN  | PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_D12      */
+		{ PINMUX_CONF_GPMC_AD13,     (PIN_CFG_INEN  | PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_D13      */
+		{ PINMUX_CONF_GPMC_AD14,     (PIN_CFG_INEN  | PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_D14      */
+		{ PINMUX_CONF_GPMC_AD15,     (PIN_CFG_INEN  | PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_D15      */
 
-		{ CONF_GPMC_CSN2,     (PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_nCS0     */
-//		{ CONF_GPMC_CSN3,     (PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_nCS0     */
-//		{ CONF_GPMC_ADVN_ALE, (PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_nADV_ALE */
-		{ CONF_GPMC_OEN_REN,  (PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_nOE      */
-		{ CONF_GPMC_WEN,      (PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_nWE      */
-		{ CONF_GPMC_BEN0_CLE, (PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_nBE0_CLE */
-		{ CONF_GPMC_BEN1,     (PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_nBE1     */
-		{ CONF_GPMC_WPN,      (PIN_CFG_INEN  | PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_nWP      */
-		{ CONF_GPMC_WAIT0,    (PIN_CFG_INEN  | PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_WAIT0    */
+		{ PINMUX_CONF_GPMC_CSN2,     (PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_nCS0     */
+//		{ PINMUX_CONF_GPMC_CSN3,     (PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_nCS0     */
+//		{ PINMUX_CONF_GPMC_ADVN_ALE, (PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_nADV_ALE */
+		{ PINMUX_CONF_GPMC_OEN_REN,  (PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_nOE      */
+		{ PINMUX_CONF_GPMC_WEN,      (PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_nWE      */
+		{ PINMUX_CONF_GPMC_BEN0_CLE, (PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_nBE0_CLE */
+		{ PINMUX_CONF_GPMC_BEN1,     (PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_nBE1     */
+		{ PINMUX_CONF_GPMC_WPN,      (PIN_CFG_INEN  | PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_nWP      */
+		{ PINMUX_CONF_GPMC_WAIT0,    (PIN_CFG_INEN  | PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_WAIT0    */
 
-	//	{ CONF_GPMC_NCS1,     (PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_nCS1     */
-	//	{ CONF_GPMC_NCS2,     (PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_nCS2     */
-	//	{ CONF_GPMC_NCS3,     (PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_nCS3     */
-	//	{ CONF_GPMC_NCS4,     (PIN_CFG_IEN  | PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_nCS4     */
-	//	{ CONF_GPMC_NCS5,     (PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_nCS5     */
-	//	{ CONF_GPMC_NCS6,     (PIN_CFG_IEN  | PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_nCS6     */
-	//	{ CONF_GPMC_NCS7,     (PIN_CFG_IEN  | PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_nCS7     */
-	//	{ CONF_GPMC_CLK,      (PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_CLK      */
-	//	{ CONF_GPMC_WAIT1,    (PIN_CFG_IEN  | PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_WAIT1    */
-	//	{ CONF_GPMC_WAIT2,    (PIN_CFG_IEN  | PIN_CFG_PDIS | M4) }, /* GPIO_64       */
-	//	{ CONF_GPMC_WAIT3,    (PIN_CFG_IEN  | PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_WAIT3    */
+	//	{ PINMUX_CONF_GPMC_NCS1,     (PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_nCS1     */
+	//	{ PINMUX_CONF_GPMC_NCS2,     (PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_nCS2     */
+	//	{ PINMUX_CONF_GPMC_NCS3,     (PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_nCS3     */
+	//	{ PINMUX_CONF_GPMC_NCS4,     (PIN_CFG_IEN  | PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_nCS4     */
+	//	{ PINMUX_CONF_GPMC_NCS5,     (PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_nCS5     */
+	//	{ PINMUX_CONF_GPMC_NCS6,     (PIN_CFG_IEN  | PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_nCS6     */
+	//	{ PINMUX_CONF_GPMC_NCS7,     (PIN_CFG_IEN  | PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_nCS7     */
+	//	{ PINMUX_CONF_GPMC_CLK,      (PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_CLK      */
+	//	{ PINMUX_CONF_GPMC_WAIT1,    (PIN_CFG_IEN  | PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_WAIT1    */
+	//	{ PINMUX_CONF_GPMC_WAIT2,    (PIN_CFG_IEN  | PIN_CFG_PDIS | M4) }, /* GPIO_64       */
+	//	{ PINMUX_CONF_GPMC_WAIT3,    (PIN_CFG_IEN  | PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_WAIT3    */
 		{ 0xFFFFFFFF, 0xFFFFFFFF },
 };
+
+void GPMCInit(void) {
+    // CM_DIV_M4_DPLL_CORE->BIT.HSDIVIDER_CLKOUT1_DIV = clk_div;
+    CM_PER_GPMC_CLKCTRL->BIT.MODULEMODE = 2;
+    while(CM_PER_GPMC_CLKCTRL->BIT.IDLEST);
+    CM_PER_ELM_CLKCTRL->BIT.MODULEMODE = 2;
+    while(CM_PER_ELM_CLKCTRL->BIT.IDLEST);
+
+    /* Reset GPMC */
+    GPMC_SYSCONFIG->BIT.SOFTRESET = 1;
+    while(!GPMC_SYSSTATUS->BIT.RESETDONE);
+
+    /* isr's sources masked */
+    GPMC_IRQENABLE->LONG = 0;
+    /* timeout disable */
+    GPMC_TIMEOUT_CONTROL->LONG = 0;
+    /* wait polarity */
+    GPMC_CONFIG->BIT.WAIT0PINPOLARITY = 1;
+
+    /*
+     * Disable the GPMC0 config set by ROM code
+     * It conflicts with our MPDB (both at 0x08000000)
+     */
+    GPMC_CONFIG7_0->LONG = 0;
+}
+
+void GPMCConfig(const uint32_t config[6], uint32_t cs, uint32_t base, uint32_t size) {
+    volatile __gpmc_config7_bits config7;
+
+    // Take an actual size and convert it to an address mask
+    config7.MASKADDRESS = (size > 0x08000000) ? GPMC_SIZE_256M :
+                         ((size > 0x04000000) ? GPMC_SIZE_128M :
+                         ((size > 0x02000000) ? GPMC_SIZE_64M  :
+                         ((size > 0x01000000) ? GPMC_SIZE_32M  :
+                                                GPMC_SIZE_16M)));
+
+    // Ensure base aligns to the boundary
+    config7.BASEADDRESS = (base >> 24) & (0x30 | config7.MASKADDRESS);
+
+    // Prepare for enablement
+    config7.CSVALID = 1;
+
+    if(cs == 2) {
+        GPMC_CONFIG7_2->LONG = 0;
+
+        WaitUSDMTimer(100);
+
+        GPMC_CONFIG1_2->LONG = config[0];
+        GPMC_CONFIG2_2->LONG = config[1];
+        GPMC_CONFIG3_2->LONG = config[2];
+        GPMC_CONFIG4_2->LONG = config[3];
+        GPMC_CONFIG5_2->LONG = config[4];
+        GPMC_CONFIG6_2->LONG = config[5];
+        GPMC_CONFIG7_2->BIT = config7;
+    }
+
+    GPMC_CONFIG->BIT.WAIT0PINPOLARITY = 0;
+
+    GPMC_TIMEOUT_CONTROL->BIT.TIMEOUTENABLE = 1;
+    GPMC_TIMEOUT_CONTROL->BIT.TIMEOUTSTARTVALUE = 200;
+}
 
 /**
                      REAL   CYCLE  EFFECTIVE MAIN CLOCK  FINAL  
@@ -300,21 +369,6 @@ void InitGPMC(float bus_clock) {
         extra[i] = mid_point & 1;
     }
 
-    // OLD
-    // #define RDCYCLETIME		(0x1F)		// = AccessTime + 1cycle + tOEZ
-    // #define WRCYCLETIME		(0x1F)		// = WeOffTime + AccessCompletion
-    // #define ACCESSTIME		(0x19)		//   AccessTime
-    // #define CSONTIME		    (0x04)		// 	 tCAS
-    // #define CSRDOFFTIME		(0x1C)		// = AccessTime + 1 cycle
-    // #define CSWROFFTIME		(0x16)		// = WeOffTime + 1
-    // #define OEONTIME		    (0x13)		// 	 OeOnTime >= AdvRdOffTime
-    // #define OEOFFTIME		(0x1C)		// = AccessTime + 1cycle
-    // #define WEONTIME		    (0x0A)		//   tCS
-    // #define WEOFFTIME		(0x1C)		//   WeOffTime
-    // #define ADVONTIME		(0x00)		//   tAAVDS
-    // #define ADVRDOFFTIME	    (0x00)		// = tAAVDS + tAVDP
-    // #define ADVWROFFTIME	    (0x00)		// = tAVSC + tAVDP
-
     // Total Cycle Time
     default_timing.CYCLETIME  = cycle_time;
 
@@ -343,6 +397,7 @@ void InitGPMC(float bus_clock) {
 
     // Set CS
     SetGPMCTiming(&default_timing);
+
 }
 
 static int Prompt(const char* out, uint8_t* value) {

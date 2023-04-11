@@ -13,69 +13,76 @@
 #include "gpak.h"
 
 #define PAGE_LIMIT 0x0E
-#define PAGE_DELAY 25
+#define PAGE_DELAY 100
 
-static uint8_t _bus;
-static uint8_t _slave_address;
+// static uint8_t _bus;
+// static uint8_t slave_address;
 
-static void gpak_init(uint8_t bus, uint8_t slave_address) {
-    _bus = bus;
-    _slave_address = slave_address;
+// static void gpak_init(uint8_t bus, uint8_t slave_address) {
+//     // _bus = bus;
+//     _slave_address = slave_address;
+// }
+
+static void gpak_read(uint8_t addr, uint8_t offset, uint8_t* data, uint16_t length) {
+    I2C0ReadCmd((addr << 3) | 0x02, &offset, 1, data, length);
 }
 
-static uint8_t gpak_i2caddr(uint8_t area) {
-    if(!_slave_address) return 0x88;
-    else return (_slave_address << 3) + area;
-}
+static int gpack_poll_ack(uint8_t addressForAckPolling) {
+    int nack_count = 0;
 
-static void gpak_read(uint8_t area, uint8_t offset, uint8_t* data, uint16_t length) {
-    uint8_t addr = gpak_i2caddr(area);
-    while(length > 0) {
-        uint8_t xferlen = (length > 16) ? 16 : length;
-        I2C0ReadCmd(addr, &offset, 1, data, xferlen);
-        offset += xferlen;
-        length -= xferlen;
-        data += xferlen;
+    while(1) {
+        if(I2C0Probe(addressForAckPolling)) return 0;
+        if(nack_count >= 1000) {
+            printf("Geez! Something went wrong while programming!\n");
+            return -1;
+        }
+        nack_count++;
+        WaitMSDMTimer(1);
     }
 }
 
-static void gpak_write(uint8_t area, uint8_t offset, uint8_t* data, uint16_t length) {
-    uint8_t addr = gpak_i2caddr(area);
-    //if((offset + length) >= (PAGE_LIMIT << 4)) return;
-    while(length > 0) {
-        uint8_t xferlen = (length > 16) ? 16 : length;
-        I2C0SendCmd(addr, &offset, 1, data, xferlen);
-        WaitMSDMTimer(PAGE_DELAY);
-        offset += xferlen;
-        length -= xferlen;
-        data += xferlen;
+static int gpak_write(uint8_t offset, uint8_t* data) {
+    // Set the control code to 0x00 since the chip has just been erased
+    uint8_t control_code = 0x02;
+    uint8_t addressForAckPolling = 0x00;
+
+    if(!I2C0SendCmd(control_code, &offset, 1, data, 16)) {
+        printf("Oh No! Something went wrong while programming!\n");
+        return 1;
     }
+    if(gpack_poll_ack(addressForAckPolling) == -1) 
+        return 1;
+    WaitMSDMTimer(PAGE_DELAY);
+    return 0;
 }
 
-static void gpak_write_reg(uint8_t reg, uint8_t value) {
-    uint8_t addr = gpak_i2caddr(REG_CONFIG);
-    uint8_t data[1] = { value };
-    I2C0SendCmd(addr, &reg, 1, data, 1);
-}
-
-static uint8_t gpak_read_reg(uint8_t reg) {
-    uint8_t addr = gpak_i2caddr(REG_CONFIG);
-    uint8_t data[1] = { 0 };
-    I2C0ReadCmd(addr, &reg, 1, data, 1);
-    return data[0];
-}
-
-static void gpak_erase(uint8_t area) {
+static int gpak_erase(uint8_t addr, uint8_t page) {
     static const uint8_t cmd = 0xE3;
-    uint8_t addr = gpak_i2caddr(area);
+    uint8_t control_code = addr << 3;
+    uint8_t addressForAckPolling = control_code;
+    uint8_t data = 0x80 | page;
+
+    I2C0SendCmd_GPFix(control_code, &cmd, 1, &data, 1);
+    if(gpack_poll_ack(addressForAckPolling) == -1)
+        return 1;
+    WaitMSDMTimer(PAGE_DELAY);
+    return 0;
+    // }
+}
+
+static void gpak_write_reg(uint8_t addr, uint8_t reg, uint8_t value) {
+    // uint8_t addr = gpak_i2caddr(REG_CONFIG);
+    uint8_t control_code = addr << 3;
+    uint8_t data[1] = { value };
+    I2C0SendCmd(control_code, &reg, 1, data, 1);
+}
+
+static uint8_t gpak_read_reg(uint8_t addr, uint8_t reg) {
+    // uint8_t addr = gpak_i2caddr(REG_CONFIG);
+    uint8_t control_code = addr << 3;
     uint8_t data[1] = { 0 };
-    for(int i=0; i<16; i++) {
-        //if(i >= PAGE_LIMIT) break;
-        if(area == NVM_CONFIG) data[0] = 0x80 + i;
-        else if(area == EEPROM) data[0] = 0x90 + i;
-        I2C0SendCmd(addr, &cmd, 1, data, 1);
-        WaitMSDMTimer(PAGE_DELAY);
-    }
+    I2C0ReadCmd(control_code, &reg, 1, data, 1);
+    return data[0];
 }
 
 // Mask determines all the settable (not reserved) bits
@@ -161,97 +168,136 @@ static void InitNvm(void) {
         }
     }
 
-    nvmData[0xCA] = SLAVE_ADDRESS;
-    gpak_init(0, SLAVE_ADDRESS);  
+    // nvmData[0xCA] = SLAVE_ADDRESS;
+    // gpak_init(0, SLAVE_ADDRESS);  
 }
+
+typedef enum {
+    GP_BLANK,
+    GP_GOOD,
+    GP_BAD,
+} GreenPAK_State_t;
+
+const char* GP_State[] = { "blank", "good", "bad" };
 
 ////////////////////////////////////////////////////////////////////////////////
 // ReadChip 
 ////////////////////////////////////////////////////////////////////////////////
-static int ReadChip(int dump) {
-    uint8_t data[256];
-
+static GreenPAK_State_t ReadChip(int dump, uint32_t addr) {
+    uint8_t data[16] = { 0 };
+    int blank = 1;
     int same = 1;
+
+    //if(addr > 0xF) return 0;
+    if(!I2C0Probe(addr << 3)) return 0;
+
     if (dump) printf("[I2C0] Dumping GreenPAK...\n");
-    gpak_read(NVM_CONFIG, 0, data, 256);
     for (int page = 0; page < 16; page++) {
         if (dump) printf("       %0X0: ", page);
+        gpak_read(addr, page << 4, data, 16);
         for (int b = 0; b < 16; b++) {
             uint8_t m = nvmMask[(page << 4) | b];
-            uint32_t c =
-                (nvmData[(page << 4) | b] & m)
-                ==
-                (data[(page << 4) | b] & m);
-
-            if (dump) printf(" %02X%c", data[(page << 4) | b], c ? ' ' : 'x');
+            uint32_t c = (nvmData[(page << 4) | b] & m) == (data[b] & m);
+            blank &= data[b] == 0;
+            if (dump) printf(" %02X%c", data[b], c ? ' ' : 'x');
             same &= c;
         }
         if (dump) printf("\n");
     }
-    return same;
+    return blank ? GP_BLANK : same ? GP_GOOD : GP_BAD;
+}
+
+static int GetAddr(const char* prompt) {
+    char option[4];
+    uint8_t addr = 0xFF;
+    printf("Enter %saddress (0-F): ", prompt);
+    gets(option);
+    /**/ if (option[0] >= '0' && option[0] <= '9') return option[0] - '0';
+    else if (option[0] >= 'A' && option[0] <= 'F') return option[0] - 'A' + 10;
+    else if (option[0] >= 'a' && option[0] <= 'f') return option[0] - 'a' + 10;
+    else return -1;
+}
+
+static void EraseChip(int dump) {
+    int addr = GetAddr("");
+    if(addr == -1) return;
+    printf("[I2C0] Erasing GreenPAK...\n");
+    for (int page = 0; page < 16; page++) {
+        if(gpak_erase(addr, page)) return;
+    }
+    printf("[I2C0] Resetting GreenPAK...\n");
+    gpak_write_reg(addr, 0xC8, 0x02);
+    WaitUSDMTimer(500);
+    printf("[I2C0] GreenPAK %s\n", GP_State[ReadChip(dump, 0)]);
 }
 
 static void ProgramChip(int dump) {
-    printf("[I2C0] Erasing GreenPAK...\n");
-    gpak_erase(NVM_CONFIG);
-    printf("[I2C0] Resetting GreenPAK...\n");
-    gpak_write_reg(0xC8, 0x02);
-    WaitUSDMTimer(300);
+    int addr = GetAddr("new ");
+    if(addr == -1) return;
+    nvmData[0xCA] = addr;
     printf("[I2C0] Programming GreenPAK...\n");
-    gpak_write(NVM_CONFIG, 0, nvmData, NVM_BYTES);
+    for (int page = 0; page < 16; page++) {
+        if(gpak_write(page << 4, &nvmData[page << 4])) return;
+    }
     printf("[I2C0] Resetting GreenPAK...\n");
-    gpak_write_reg(0xC8, 0x02);
-    WaitUSDMTimer(300);
-    printf("[I2C0] GreenPAK %s\n", ReadChip(dump) ? "ok." : "bad!");
+    gpak_write_reg(0, 0xC8, 0x02);
+    WaitUSDMTimer(1500);
+
+    printf("[I2C0] GreenPAK %s\n", GP_State[ReadChip(dump, addr)]);
 }
 
-static void SetGreenPAKAddr(void) {
-    char option[4];
-    uint8_t addr = 0xFF;
-    printf("Enter address (0-F): ");
-    gets(option);
-    /**/ if (option[0] >= '0' && option[0] <= '9') addr = option[0] - '0';
-    else if (option[0] >= 'A' && option[0] <= 'F') addr = option[0] - 'A' + 10;
-    else if (option[0] >= 'a' && option[0] <= 'f') addr = option[0] - 'a' + 10;
-    else return;
-    printf("Setting address to %X, ", addr);
-    if (confirm()) {
-        gpak_init(0, addr);
-        nvmData[0xCA] = addr;
-        printf("Done\n");
+static void ProbeI2C(void) {
+    for (int i = 0; i < 120; i++) {
+        if ((i & 0x7) == 0) printf("\n%02X:", i);
+        if (I2C0Probe(i)) printf(" %02x", i);
+        else printf(" --");
     }
+    printf("\n");
 }
 
 void ManageGP(void) {
     char option[4] = { 0 };
     while(option[0] != 'x' && option[0] != 'X') {
         printf("%s",
-            "1. Set GreenPAK Address\n"
-            "2. Dump & Verify GreenPAK\n"
-            "3. Erase & Program GreenPAK\n"
+            "1. Dump & Verify GreenPAK\n"
+            "2. Erase GreenPAK\n"
+            "3. Program GreenPAK\n"
+            "4. Scan I2C Bus\n"
             "X. Exit to main menu\n"
             "] "
         );
         gets(option);
         switch(option[0]) {
-        case '1': if(confirm()) SetGreenPAKAddr(); break;
-        case '2':  break;
-        case '3': if(confirm()) ProgramChip(1); break;
+        // case '1': if(confirm()) SetGreenPAKAddr(); break;
+        case '1': printf("[I2C0] GreenPAK %s\n", GP_State[ReadChip(1, GetAddr(""))]); break;
+        case '2': EraseChip(1); break;
+        case '3': ProgramChip(1); break;
+        case '4': ProbeI2C(); break;
         }
     }
 }
 
 int DetectGP(void) {
-    if (I2C0Probe(0x8)) {
-        printf("[I2C0] 000_10xx ($8~$A) GreenPAK Detected\n");
-        InitNvm();
-        if(cpu_state.config.post_enable_gpack_ok) {
-            printf("[I2C0] GreenPAK Protection Bits: $%02X $%02X $%02X\n", 
-            gpak_read_reg(0xE0), // Register Read/Write Protection Bits
-            gpak_read_reg(0xE1), // NVM Configuration Protection Bits
-            gpak_read_reg(0xE4)  // Protection Lock Bit
-            );  
-            printf("[I2C0] GreenPAK %s\n", ReadChip(0) ? "ok" : "BAD");
+    InitNvm();
+    for(int i=1; i<8; i++) {
+        if (I2C0Probe(i << 3)) {
+            nvmData[0xCA] = i;
+            printf("[I2C0] GreenPAK Detected ($%02X~$%02X) \n", (i << 3), ((i << 3) + 3));
+            if(cpu_state.config.post_enable_gpack_ok) {
+                printf("[I2C0] GreenPAK Protection Bits: $%02X $%02X $%02X\n", 
+                gpak_read_reg(i, 0xE0), // Register Read/Write Protection Bits
+                gpak_read_reg(i, 0xE1), // NVM Configuration Protection Bits
+                gpak_read_reg(i, 0xE4)  // Protection Lock Bit
+                );  
+                printf("[I2C0] GreenPAK %s\n", GP_State[ReadChip(0, i)]);
+                return;
+            }
+            break;
         }
+    }
+    if(I2C0Probe(0)) {
+        printf("[I2C0] Blank GreenPAK Detected ($00~$03)\n");
+    } else {
+        printf("[I2C0] GreenPAK Not Detected\n");
     }
 }

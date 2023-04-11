@@ -89,23 +89,14 @@ int pmic_detected;
 int gpak_detected;
 int prom_detected;
 
-static void ProbeI2C(void) {
-    for (int i = 0; i < 120; i++) {
-        if ((i & 0x7) == 0) printf("\n%02X:", i);
-        if (I2C0Probe(i)) printf(" %02x", i);
-        else printf(" --");
-    }
-    printf("\n");
-}
-
 static const char* Version = STR(VERSION);
 
 static void InitResetHalt(void) {
     InitGPIO();
     AssertReset();
     static const pin_muxing_t reset_pins[] = {
-        { CONF_UART1_RTSN,  (PIN_CFG_INEN | PIN_CFG_PTUP | PIN_CFG_M7) }, /* HALT gpio0_13 */
-        { CONF_MCASP0_AXR0, (PIN_CFG_INEN | PIN_CFG_PTUP | PIN_CFG_M7) }, /* RESET gpio3_16 */
+        { PINMUX_CONF_UART1_RTSN,  (PIN_CFG_INEN | PIN_CFG_PTUP | PIN_CFG_M7) }, /* HALT gpio0_13 */
+        { PINMUX_CONF_MCASP0_AXR0, (PIN_CFG_INEN | PIN_CFG_PTUP | PIN_CFG_M7) }, /* RESET gpio3_16 */
         { 0xFFFFFFFF, 0xFFFFFFFF },
     };
     config_mux(reset_pins);
@@ -129,9 +120,8 @@ const char* menu =
 " 3. Quick-test SPI flash\n"
 " 4. Test GPMC\n"
 " 5. Test printf\n"
-" 6. Scan I2C Bus\n"
-" 7. Run Native BogoMIPS test\n"
-" 8. Run PJIT BogoMIPS test\n"
+" 6. Run Native BogoMIPS test\n"
+" 7. Run PJIT BogoMIPS test\n"
 "SETUP:\n"
 " J. Jump to PJIT\n"
 " C. Set E Clock Divider\n"
@@ -148,8 +138,8 @@ static void JumpPJIT(void) {
 
 static void InitI2C(int bps) {
     static const pin_muxing_t i2c_pins[] = {
-        { CONF_I2C0_SCL, (PIN_CFG_INEN | PIN_CFG_PTUP | PIN_CFG_M0) },
-        { CONF_I2C0_SDA, (PIN_CFG_INEN | PIN_CFG_PTUP | PIN_CFG_M0) },
+        { PINMUX_CONF_I2C0_SCL, (PIN_CFG_INEN | PIN_CFG_PTUP | PIN_CFG_M0) },
+        { PINMUX_CONF_I2C0_SDA, (PIN_CFG_INEN | PIN_CFG_PTUP | PIN_CFG_M0) },
         { 0xFFFFFFFF, 0xFFFFFFFF },
     };
     I2C0Init(bps);
@@ -524,7 +514,6 @@ int main(void) {
     printf("[I2C0] %s mode enabled\n", pmic_detected ? "Nitro" : "Humble");
 	
     InitDDR();
-    InitMMU();
 
     if(cpu_state.config.post_enable_long_mem) DDRTest();
     
@@ -548,6 +537,7 @@ int main(void) {
     }
 
     InitGPMC((float)MHz); 
+    InitMMU();
 
 	// 3. based on EEPROM settings, initialize PJIT cache and opcode jump tables
     printf("[BOOT] Initializing cache\n");
@@ -585,9 +575,8 @@ int main(void) {
         case '3': if (confirm()) SPITest(); break;
         case '4': TestGPMC(); break;
         case '5': test_printf(); break;
-        case '6': ProbeI2C(); break;
-        case '7': test_native_bogomips(); break;
-        case '8': printf("Unimplemented\n"); break;
+        case '6': test_native_bogomips(); break;
+        case '7': printf("Unimplemented\n"); break;
 
             /* SETUP */
         case 'J': case 'j': if (confirm()) JumpPJIT(); break;
