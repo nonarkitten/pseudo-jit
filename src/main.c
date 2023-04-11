@@ -498,19 +498,6 @@ int main(void) {
 
     printf("[I2C0] %s mode enabled\n", pmic_detected ? "Nitro" : "Humble");
 	
-    if(!cpu_state.config.cpu_enable_icache) {
-        CP15ICacheFlush();
-		CP15ICacheDisable();
-	}
-	
-    if(!cpu_state.config.cpu_enable_dcache) {
-        CP15DCacheFlush();
-        CP15DCacheDisable();
-        if(!cpu_state.config.cpu_enable_icache) {
-            CP15AuxControlFeatureDisable(0x02);
-        }
-	}    
-
     InitDDR();
     InitMMU();
 
@@ -547,6 +534,19 @@ int main(void) {
     printf("[BOOT] Stack %p ~ %p (%d bytes)\n", &_stack_end, &_stack_top, (&_stack_top - &_stack_end));    
 
     if(cpu_state.config.is_dirty) SaveConfigEEPROM(1); else MakeGoodEEPROM();
+
+    if(!cpu_state.config.cpu_enable_icache) {
+        CP15ICacheFlush();
+		CP15ICacheDisable();
+	}
+	
+    if(!cpu_state.config.cpu_enable_dcache) {
+        CP15DCacheFlush();
+        CP15DCacheDisable();
+        if(!cpu_state.config.cpu_enable_icache) {
+            CP15AuxControlFeatureDisable(0x02);
+        }
+	}    
 
     ReleaseReset();
 
