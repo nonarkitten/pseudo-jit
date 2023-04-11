@@ -571,7 +571,7 @@ int main(void) {
         case 'P': case 'p': if (confirm()) WriteImage(&_image_start, &_image_end); break;
         case 'X': case 'x': if (confirm()) Reset(); break;
 
-        default: printf("Unimplemented..\n"); // fallthru
+        default: printf("Unimplemented\n"); // fallthru
         case 'H': case 'h': case '?': printf("%s", menu); break;
         } // end switch
 
