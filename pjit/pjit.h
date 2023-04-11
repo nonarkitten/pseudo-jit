@@ -149,42 +149,35 @@ typedef enum {
     PMMUACCESSV,    // 58 PMMU Access level violation
 } vector_t;
 
-typedef enum {
-    cpu_enable_68000  = 0x00,  // Enable 68000 Instructions
-    cpu_enable_68020  = 0x01,  // Enable 68020 Instructions
-    cpu_enable_68030  = 0x02,  // Enable 68030 Instructions
-    cpu_enable_68040  = 0x04,  // Enable 68040 Instructions and MMU
-    cpu_enable_32bits = 0x08,  // Enable 32-bit Addressing (68000/68EC020)
-    cpu_enable_fpu    = 0x10,  // Enable FPU Instructions (68882 w/ 68030 or 040)
-    cpu_enable_icache = 0x20,  // Enable Instruction Cache Support
-    cpu_enable_dcache = 0x40,  // Enable Data Cache Support
-    cpu_enable_mmu    = 0x80,  // Enable 68K MMU
-} cpu_feature_t;
-
-typedef enum {
-    post_enable_long_mem = 0x01,  // Enable Long Memory Test
-    post_enable_gpack_ok = 0x04,  // Enable GreenPAK Integrity Test
-    post_enable_checkclk = 0x10,  // Enable Host CLK Test
-    post_enable_autommap = 0x40,  // Enable Auto MemMap for Host Type
-} post_enable_t;
-
 typedef struct {
     // Header for EEPROM integrity check
     uint32_t ident;  // must be 0x704A4954
-    uint16_t index;  // must increment from last
     uint16_t crc16;  // must check rest of config
 
     // BOOTLOADER SECTION
 
-    // see cpu_feature_t
-    uint8_t cpu_features;
+    struct {
+        int cpu_enable_68000  : 1; // Enable 68000 Instructions
+        int cpu_enable_68020  : 1; // Enable 68020 Instructions
+        int cpu_enable_68030  : 1; // Enable 68030 Instructions
+        int cpu_enable_68040  : 1; // Enable 68040 Instructions and MMU
+        int cpu_enable_32bits : 1; // Enable 32-bit Addressing (68000/68EC020)
+        int cpu_enable_fpu    : 1; // Enable FPU Instructions (68882 w/ 68030 or 040)
+        int cpu_enable_icache : 1; // Enable Instruction Cache Support
+        int cpu_enable_dcache : 1; // Enable Data Cache Support
+        int cpu_enable_mmu    : 1; // Enable 68K MMU
+    };
 
     // see post_enable_t
-    uint8_t post_enable_t;
+    struct {
+        int post_enable_long_mem : 1; // Enable Long Memory Test
+        int post_enable_gpack_ok : 1; // Enable GreenPAK Integrity Test
+        int post_enable_checkclk : 1; // Enable Host CLK Test
+        int post_enable_autommap : 1; // Enable Auto MemMap for Host Type
+    };
 
     // CPU clock = 24 * dpll_mul / dpll_div
     uint16_t dpll_mul;
-    uint8_t  dpll_div;
 
     // Decivolts
     uint8_t pmic_voltage;
@@ -204,7 +197,10 @@ typedef struct {
     // MapROM page from 24-bit RAM (single 512KB), 0xFF to disable
     uint8_t maprom_page;
 
-    // Do we need to resave
+    // GPMC Timings (Advanced)
+    uint16_t kHz;
+
+    //
     uint8_t is_dirty;
 
 } config_t;
@@ -247,7 +243,7 @@ typedef struct {
     uint32_t srp;    // Supervisor Root Pointer
 
     // System configuration
-    config_t* config;
+    config_t config;
 
     // Pointers to everything
     uint32_t* cache_data;
@@ -273,8 +269,8 @@ typedef struct {
 
 #define INLINE __attribute__((always_inline)) static inline 
 
-extern config_t config;
-extern cpu_t    cpu_state;
+extern const config_t default_config;
+extern cpu_t cpu_state;
 
 register union { uint32_t L; uint16_t W; uint8_t B; } D0 asm("r3");
 register union { uint32_t L; uint16_t W; uint8_t B; } D1 asm("r4");

@@ -1,7 +1,7 @@
 # All critical output, source folders
 OUTDIR  := binaries
 BINARY  := pjit.elf
-SRCDIRS := . clib/ hal/
+SRCDIRS := . clib/ hal/ pjit/
 CROSS   := arm-none-eabi-
 
 # CPU type and common options

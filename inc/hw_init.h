@@ -52,9 +52,9 @@ extern uint32_t rev32(uint32_t value);
 /*Inits I2C0 Module. 400KHz*/
 extern void I2C0Init(uint32_t bus_speed);
 /*Sends data to slave*/
-extern int32_t I2C0SendCmd(uint32_t slave, uint8_t cmd, uint8_t * data, uint32_t cntr);
+extern int32_t I2C0SendCmd(uint32_t slave, uint8_t* cmd, uint32_t cmd_len, uint8_t * data, uint32_t cntr);
 /*Reads data from slave*/
-extern int32_t I2C0ReadCmd(uint32_t slave, uint8_t cmd, uint8_t * data, uint32_t cntr);
+extern int32_t I2C0ReadCmd(uint32_t slave, uint8_t* cmd, uint32_t cmd_len, uint8_t * data, uint32_t cntr);
 /*Checks if slave is present*/
 extern int32_t I2C0Probe(uint32_t slave);
 /*Assert Reset and Halt by driving low*/

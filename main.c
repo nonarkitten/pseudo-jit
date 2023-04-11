@@ -9,6 +9,7 @@
 #include "hw_flash.h"
 #include "hw_gpmc.h"
 #include "gpak.h"
+#include "pjit.h"
 
 #define NAK     0x15
 #define CANCEL  0x18
@@ -142,13 +143,7 @@ static void InitNvm(void) {
     }
 
     nvmData[0xCA] = SLAVE_ADDRESS;
-    gpak_init(0, SLAVE_ADDRESS);
-
-    printf("[I2C0] GreenPAK Protection Bits: $%02X $%02X $%02X\n", 
-        gpak_read_reg(0xE0), // Register Read/Write Protection Bits
-        gpak_read_reg(0xE1), // NVM Configuration Protection Bits
-        gpak_read_reg(0xE4)  // Protection Lock Bit
-        );    
+    gpak_init(0, SLAVE_ADDRESS);  
 }
 
 static void ProbeI2C(void) {
@@ -158,6 +153,97 @@ static void ProbeI2C(void) {
         else printf(" --");
     }
     printf("\n");
+}
+
+static unsigned short crc16_ccitt(const void *buf, uint32_t len, uint16_t init) {
+    static const unsigned short crc16_table[256]= {
+        0x0000, 0x1021, 0x2042, 0x3063, 0x4084, 0x50a5, 0x60c6, 0x70e7,
+        0x8108, 0x9129, 0xa14a, 0xb16b, 0xc18c, 0xd1ad, 0xe1ce, 0xf1ef,
+        0x1231, 0x0210, 0x3273, 0x2252, 0x52b5, 0x4294, 0x72f7, 0x62d6,
+        0x9339, 0x8318, 0xb37b, 0xa35a, 0xd3bd, 0xc39c, 0xf3ff, 0xe3de,
+        0x2462, 0x3443, 0x0420, 0x1401, 0x64e6, 0x74c7, 0x44a4, 0x5485,
+        0xa56a, 0xb54b, 0x8528, 0x9509, 0xe5ee, 0xf5cf, 0xc5ac, 0xd58d,
+        0x3653, 0x2672, 0x1611, 0x0630, 0x76d7, 0x66f6, 0x5695, 0x46b4,
+        0xb75b, 0xa77a, 0x9719, 0x8738, 0xf7df, 0xe7fe, 0xd79d, 0xc7bc,
+        0x48c4, 0x58e5, 0x6886, 0x78a7, 0x0840, 0x1861, 0x2802, 0x3823,
+        0xc9cc, 0xd9ed, 0xe98e, 0xf9af, 0x8948, 0x9969, 0xa90a, 0xb92b,
+        0x5af5, 0x4ad4, 0x7ab7, 0x6a96, 0x1a71, 0x0a50, 0x3a33, 0x2a12,
+        0xdbfd, 0xcbdc, 0xfbbf, 0xeb9e, 0x9b79, 0x8b58, 0xbb3b, 0xab1a,
+        0x6ca6, 0x7c87, 0x4ce4, 0x5cc5, 0x2c22, 0x3c03, 0x0c60, 0x1c41,
+        0xedae, 0xfd8f, 0xcdec, 0xddcd, 0xad2a, 0xbd0b, 0x8d68, 0x9d49,
+        0x7e97, 0x6eb6, 0x5ed5, 0x4ef4, 0x3e13, 0x2e32, 0x1e51, 0x0e70,
+        0xff9f, 0xefbe, 0xdfdd, 0xcffc, 0xbf1b, 0xaf3a, 0x9f59, 0x8f78,
+        0x9188, 0x81a9, 0xb1ca, 0xa1eb, 0xd10c, 0xc12d, 0xf14e, 0xe16f,
+        0x1080, 0x00a1, 0x30c2, 0x20e3, 0x5004, 0x4025, 0x7046, 0x6067,
+        0x83b9, 0x9398, 0xa3fb, 0xb3da, 0xc33d, 0xd31c, 0xe37f, 0xf35e,
+        0x02b1, 0x1290, 0x22f3, 0x32d2, 0x4235, 0x5214, 0x6277, 0x7256,
+        0xb5ea, 0xa5cb, 0x95a8, 0x8589, 0xf56e, 0xe54f, 0xd52c, 0xc50d,
+        0x34e2, 0x24c3, 0x14a0, 0x0481, 0x7466, 0x6447, 0x5424, 0x4405,
+        0xa7db, 0xb7fa, 0x8799, 0x97b8, 0xe75f, 0xf77e, 0xc71d, 0xd73c,
+        0x26d3, 0x36f2, 0x0691, 0x16b0, 0x6657, 0x7676, 0x4615, 0x5634,
+        0xd94c, 0xc96d, 0xf90e, 0xe92f, 0x99c8, 0x89e9, 0xb98a, 0xa9ab,
+        0x5844, 0x4865, 0x7806, 0x6827, 0x18c0, 0x08e1, 0x3882, 0x28a3,
+        0xcb7d, 0xdb5c, 0xeb3f, 0xfb1e, 0x8bf9, 0x9bd8, 0xabbb, 0xbb9a,
+        0x4a75, 0x5a54, 0x6a37, 0x7a16, 0x0af1, 0x1ad0, 0x2ab3, 0x3a92,
+        0xfd2e, 0xed0f, 0xdd6c, 0xcd4d, 0xbdaa, 0xad8b, 0x9de8, 0x8dc9,
+        0x7c26, 0x6c07, 0x5c64, 0x4c45, 0x3ca2, 0x2c83, 0x1ce0, 0x0cc1,
+        0xef1f, 0xff3e, 0xcf5d, 0xdf7c, 0xaf9b, 0xbfba, 0x8fd9, 0x9ff8,
+        0x6e17, 0x7e36, 0x4e55, 0x5e74, 0x2e93, 0x3eb2, 0x0ed1, 0x1ef0
+    };
+    uint8_t *_b = (uint8_t *)buf;
+    uint16_t crc = init;
+    while (len--) {
+        crc = (crc << 8) ^ crc16_table[((crc >> 8) ^ *_b++) & 0x00FF];
+    }
+    return crc;
+}
+
+static void SaveConfigI2C(int boot_good) {
+    uint8_t addr[2] = { 0 };
+    const uint8_t* config = 6 + (uint8_t*)&cpu_state.config;
+    config_t i2c_config;
+
+    cpu_state.config.is_dirty = 0;
+    cpu_state.config.last_boot_good = boot_good;
+    cpu_state.config.crc16 = crc16_ccitt(config, sizeof(config_t) - 6, 0xFFFF);    
+    printf("[I2C0] Saving and verifying settings\n");
+    I2C0SendCmd( 0x50, addr, 2, &cpu_state.config, sizeof(config_t));
+    I2C0ReadCmd( 0x50, addr, 2, &i2c_config, sizeof(config_t));
+    if(memcmp(&i2c_config, &cpu_state.config, sizeof(config_t))) {
+        printf("[I2C0] Verify failed! EEPROM may be bad\n");
+    }
+}
+static const char zero = 0;
+static const char one = 1;
+
+static void MakeGoodI2C(void) {
+    uint8_t addr[2] = { 0 };
+    addr[1] = __offsetof(config_t, last_boot_good);
+    I2C0SendCmd( 0x50, addr, 2, &zero, 1);
+}
+
+static void LoadConfigI2C(void) {
+    uint8_t addr[2] = { 0 };
+    const uint8_t* config = 6 + (uint8_t*)&cpu_state.config;
+    config_t i2c_config;
+	int err = 0;
+
+    I2C0ReadCmd( 0x50, addr, 2, &i2c_config, sizeof(config_t));
+    if(i2c_config.ident == 0x704A4954) {
+        uint16_t calc_crc = crc16_ccitt(config, sizeof(config_t) - 6, 0xFFFF);
+        if(calc_crc == i2c_config.crc16) {
+            printf("[I2C0] Settings loaded, last boot was %s\n", i2c_config.last_boot_good ? "good" : "bad");
+            MakeGoodI2C();
+            cpu_state.config = i2c_config;
+            return;
+        } else {
+            printf("[I2C0] CRC fail, default settings loaded\n");
+        }
+    } else {
+        printf("[I2C0] Ident wrong, default settings loaded\n");
+    }
+    cpu_state.config = default_config;
+    cpu_state.config.is_dirty = 1;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -230,7 +316,7 @@ static void ManageGP(void) {
         gets(option);
         switch(option[0]) {
         case '1': if(confirm()) SetGreenPAKAddr(); break;
-        case '2': printf("[I2C0] GreenPAK %s\n", ReadChip(1) ? "ok." : "bad!"); break;
+        case '2':  break;
         case '3': if(confirm()) ProgramChip(1); break;
         }
     }
@@ -286,13 +372,13 @@ static void JumpPJIT(void) {
     ((void(*)(void))0x80000000)();
 }
 
-static void InitI2C(void) {
+static void InitI2C(int bps) {
     static const pin_muxing_t i2c_pins[] = {
         { CONF_I2C0_SCL, (PIN_CFG_INEN | PIN_CFG_PTUP | PIN_CFG_M0) },
         { CONF_I2C0_SDA, (PIN_CFG_INEN | PIN_CFG_PTUP | PIN_CFG_M0) },
         { 0xFFFFFFFF, 0xFFFFFFFF },
     };
-    I2C0Init(400000);
+    I2C0Init(bps);
     config_mux(i2c_pins);
 }
 
@@ -639,9 +725,10 @@ int main(void) {
     InitPERPLL(); // works
     EnableL3L4Wakeup();
     UART0Init(115200); // works
+    InitPRU(); // works
 
     printf("%c%c%c%c\n\n", NAK, CANCEL, CANCEL, CANCEL); // flush XMODEM
-    DebugBoot();
+    // DebugBoot();
 
     printf("%s", banner);
 
@@ -650,51 +737,100 @@ int main(void) {
     SPIInit(24000000); // works
     EmergencyErase();
 
-    InitI2C();
+    InitI2C(100000);
+
     printf("[I2C0] Scanning bus..\n");
     if ((prom_detected = I2C0Probe(0x50))) {
         printf("[I2C0] 101_0000 ($50) EEPROM Detected\n");
-        // Load settings?
+        LoadConfigI2C();
+    } else {
+        printf("[I2C0] Default settings loaded\n");
+        cpu_state.config = default_config;
+    }
+
+    if(cpu_state.config.post_enable_checkclk) {
+        t1 = ReadDMTimerSeconds();
+        clk1 = GetPRUClock();
     }
 
     if ((gpak_detected = I2C0Probe(0x8))) {
         printf("[I2C0] 000_10xx ($8~$A) GreenPAK Detected\n");
         InitNvm();
+        if(cpu_state.config.post_enable_gpack_ok) {
+            printf("[I2C0] GreenPAK Protection Bits: $%02X $%02X $%02X\n", 
+            gpak_read_reg(0xE0), // Register Read/Write Protection Bits
+            gpak_read_reg(0xE1), // NVM Configuration Protection Bits
+            gpak_read_reg(0xE4)  // Protection Lock Bit
+            );  
+            printf("[I2C0] GreenPAK %s\n", ReadChip(0) ? "ok." : "bad!");
+        }
     }
 
-    if ((pmic_detected = I2C0Probe(0x24))) {
-        printf("[I2C0] 010_0100 ($24) PMIC Detected, Nitro mode enabled\n");
-        InitPower(RAIL_DCDC2, 1.35); // works
-        InitMPUPLL(1000); // works
+    if (pmic_detected = I2C0Probe(0x24)) {
+        //cpu_state.config.last_boot_good
+        if(InitPower(RAIL_DCDC2, cpu_state.config.pmic_voltage * 0.01)) {
+            InitMPUPLL(cpu_state.config.dpll_mul); // works
+            printf("[I2C0] Nitro mode enabled\n");
+        } else {
+            printf("[I2C0] Humble mode enabled\n");
+            InitMPUPLL(300); // works
+        }
+
     } else {
+            printf("[I2C0] Humble mode enabled\n");
         InitMPUPLL(300); // works
     }
+	
+    if(!cpu_state.config.cpu_enable_icache) {
+        CP15ICacheFlush();
+		CP15ICacheDisable();
+	}
+	
+    if(!cpu_state.config.cpu_enable_dcache) {
+        CP15DCacheFlush();
+        CP15DCacheDisable();
+        if(!cpu_state.config.cpu_enable_icache) {
+            CP15AuxControlFeatureDisable(0x02);
+        }
+	}    
 
-    InitPRU(); // works
-    t1 = ReadDMTimerSeconds();
-    clk1 = GetPRUClock();
-
-    WaitMSDMTimer(20);
     DDRInit(); // works
+    if(cpu_state.config.post_enable_long_mem) DDRTest();
+    
     InitMMU(); // works
     setecho(1);
 
-    t2 = ReadDMTimerSeconds(); 
-    clk2 = GetPRUClock(); // this will be in E-clocks, so 1/10th the actual
-    double MHz = (clk2 - clk1) * 0.00001 / (t2 - t1);
+    if(cpu_state.config.post_enable_checkclk) {
+        WaitMSDMTimer(20);
+        t2 = ReadDMTimerSeconds(); 
+        clk2 = GetPRUClock(); // this will be in E-clocks, so 1/10th the actual
+        double MHz = (clk2 - clk1) * 0.00001 / (t2 - t1);
 
-    // works partially, no CIA, update to real CLK
-    if(MHz < 5.0 || MHz > 16.0) {
-        printf("[CLK7] Unable to read main bus CLK\n");
-        MHz = 8.0;
+        // works partially, no CIA, update to real CLK
+        if(MHz < 5.0 || MHz > 16.0) {
+            printf("[CLK7] Unable to read main bus CLK\n");
+            MHz = 8.0;
+        } else {
+            printf("[CLK7] Main bus clock measured at %0.3f\n", MHz);
+        }
+        cpu_state.config.kHz = MHz * 1000.0 + 0.5;
+        cpu_state.config.is_dirty = 1;
+        InitGPMC((float)MHz); 
     } else {
-        printf("[CLK7] Main bus clock measured at %0.3f\n", MHz);
+        double MHz = cpu_state.config.kHz * 0.001;
+        printf("[CLK7] Main bus clock set to %0.3f\n", MHz);
+        InitGPMC((float)MHz); 
     }
-    InitGPMC((float)MHz); 
 
+	// 3. based on EEPROM settings, initialize PJIT cache and opcode jump tables
+	// pjit_cache_init(0xA0000000); // has to come after DDR init, before MMU init
+	// emit_opcode_table();
+
+    printf("[BOOT] Image %p ~ %p (%d bytes)\n", &_image_start, &_image_end, (&_image_end - &_image_start));    
+    printf("[BOOT] Stack %p ~ %p (%d bytes)\n", &_stack_end, &_stack_top, (&_stack_top - &_stack_end));    
+    if(cpu_state.config.is_dirty) SaveConfigI2C(1);
+    else MakeGoodI2C();
     ReleaseReset();
-
-    printf("[BOOT] Image %p ~ %p (%d bytes)\n", &_image_start, &_image_end, (&_image_end - &_image_start));
     printf("[BOOT] Completed in %0.5f seconds\n", ReadDMTimerSeconds());
 
     while (1) {
@@ -712,7 +848,7 @@ int main(void) {
 
             /* SETUP */
         case 'J': case 'j': if (confirm()) JumpPJIT(); break;
-        case 'R': case 'r': if (confirm()) run_mcl68k(0); break;
+        // case 'R': case 'r': if (confirm()) run_mcl68k(0); break;
         case 'C': case 'c': SetEClock(); break;
         case 'G': case 'g': ManageGP(); break;
         case 'E': case 'e': if (confirm()) EraseSPI(0, ERASE_ALL); break;

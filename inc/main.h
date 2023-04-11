@@ -54,6 +54,7 @@ extern int gpak_detected;
 extern int prom_detected;
 
 extern char _image_start, _image_end;
+extern char _stack_end, _stack_top;
 extern void test_printf(void);
 
 extern void WriteImage(void* start, void* end);

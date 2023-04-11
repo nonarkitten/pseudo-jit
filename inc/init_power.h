@@ -9,6 +9,6 @@ typedef enum {
     RAIL_DCDC3,
 } PowerRail_t;
 
-extern void InitPower(PowerRail_t rail, double voltage);
+extern int InitPower(PowerRail_t rail, double voltage);
 
 #endif

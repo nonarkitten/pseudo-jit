@@ -165,9 +165,6 @@ typedef enum {
     CPSR_fs
 } msr_mask_t;
 
-/* Converts generated ARM instruction to little-endian */
-#define LE(X) LE32(X)
-
 /* Calculate flexible second operand -- Immediate with Rotation */
 static inline uint32_t imm(uint32_t value) {
     int shift;
@@ -199,7 +196,7 @@ static inline uint32_t alu_cc(alu_t op, condition_t cc, uint8_t sf, uint8_t d, u
     d &= 0xF;
     s &= 0xF;
     sf &= 1;
-    return LE((cc << 28) | (op << 21) | (sf << 20) | (s << 16) | (d << 12) | (op2));
+    return ((cc << 28) | (op << 21) | (sf << 20) | (s << 16) | (d << 12) | (op2));
 }
 
 // alu conditional operations
@@ -374,16 +371,16 @@ static inline uint32_t rors_reg(uint8_t d, uint8_t s, uint8_t r) { return alu_cc
 static inline int32_t calc_offset(uint32_t current, uint32_t target) { return target - current - 8; }
 
 // Branch immediate
-static inline uint32_t b_cc_imm(condition_t cc, int32_t offset) { return LE(0x0a000000 | (cc << 28) | ((offset >> 2) & 0x00ffffff)); }
-static inline uint32_t bl_cc_imm(condition_t cc, int32_t offset) { return LE(0x0b000000 | (cc << 28) | ((offset >> 2) & 0x00ffffff)); }
-static inline uint32_t blx_imm(condition_t cc, int32_t offset) { return LE(0xfa000000 | ((offset & 0x2) << 23) | ((offset >> 2) & 0x00ffffff)); }
+static inline uint32_t b_cc_imm(condition_t cc, int32_t offset) { return (0x0a000000 | (cc << 28) | ((offset >> 2) & 0x00ffffff)); }
+static inline uint32_t bl_cc_imm(condition_t cc, int32_t offset) { return (0x0b000000 | (cc << 28) | ((offset >> 2) & 0x00ffffff)); }
+static inline uint32_t blx_imm(condition_t cc, int32_t offset) { return (0xfa000000 | ((offset & 0x2) << 23) | ((offset >> 2) & 0x00ffffff)); }
 static inline uint32_t b_imm(int32_t offset) { return b_cc_imm(ARM_CC_AL, offset); }
 static inline uint32_t bl_imm(int32_t offset) { return bl_cc_imm(ARM_CC_AL, offset); }
 
 // Branch register
-static inline uint32_t blx_cc_reg(condition_t cc, uint8_t reg) { return LE(0x012fff30 | (cc << 28) | (reg)); }
+static inline uint32_t blx_cc_reg(condition_t cc, uint8_t reg) { return (0x012fff30 | (cc << 28) | (reg)); }
 static inline uint32_t blx_reg(uint8_t reg) { return blx_cc_reg(ARM_CC_AL, reg); }
-static inline uint32_t bx_cc(condition_t cc, uint8_t reg) { return LE(0x012fff10 | (cc << 28) | (reg)); }
+static inline uint32_t bx_cc(condition_t cc, uint8_t reg) { return (0x012fff10 | (cc << 28) | (reg)); }
 static inline uint32_t bx(uint8_t reg) { return bx_cc(ARM_CC_AL, reg); }
 static inline uint32_t bx_lr() { return bx(lr); }
 
@@ -394,7 +391,7 @@ static inline uint32_t index_imm(index_t pre, int wb, int32_t offset) {
                       : 0x00000000 | (0xFFF & (uint32_t)(-offset));
     if (pre) ls |= 0x01000000;
     if (wb) ls |= 0x00200000;
-    return LE(ls);
+    return (ls);
 }
 // Calculate the LDR/STR index for adding register and shift offset
 static inline uint32_t index_add_reg_shift(index_t pre, int wb, uint8_t regModifed, shift_t shiftType, uint8_t shiftAmmount) {
@@ -402,7 +399,7 @@ static inline uint32_t index_add_reg_shift(index_t pre, int wb, uint8_t regModif
     uint32_t ls     = 0x02800000;
     if (pre) ls |= 0x01000000;
     if (wb) ls |= 0x00200000;
-    return LE(ls | offset);
+    return (ls | offset);
 }
 static inline uint32_t index_add_reg(index_t pre, int wb, uint8_t reg) {
     return index_add_reg_shift(pre, wb, reg, ARM_SHIFT_LSL, 0);
@@ -413,7 +410,7 @@ static inline uint32_t index_sub_reg_shift(index_t pre, int wb, uint8_t regModif
     uint32_t ls     = 0x02000000;
     if (pre) ls |= 0x01000000;
     if (wb) ls |= 0x00200000;
-    return LE(ls | offset);
+    return (ls | offset);
 }
 static inline uint32_t index_sub_reg(index_t pre, int wb, uint8_t reg) {
     return index_sub_reg_shift(pre, wb, reg, ARM_SHIFT_LSL, 0);
@@ -424,7 +421,7 @@ static inline uint32_t ldsr_cc(condition_t cc, int byte, int load, uint8_t regDa
     if (byte) ls |= 0x00400000;
     regData &= 0xF;
     regAddr &= 0xF;
-    return LE(ls | (regData << 16) | (regAddr << 12) | index);
+    return (ls | (regData << 16) | (regAddr << 12) | index);
 }
 
 static inline uint32_t ldr_cc(condition_t cc, uint8_t d, uint8_t a, uint32_t idx) { return ldsr_cc(cc, 0, 1, d, a, idx); }
@@ -449,7 +446,7 @@ static inline uint32_t ldsr_hw_cc(condition_t cc, int sex, int word, int load, u
     if (sex) index |= 0x400;
     regData &= 0xF;
     regAddr &= 0xF;
-    return LE(index | (regData << 16) | (regAddr << 12));
+    return (index | (regData << 16) | (regAddr << 12));
 }
 static inline uint32_t strh_cc(condition_t cc, uint8_t d, uint8_t a, uint32_t idx) { return ldsr_hw_cc(cc, 0, 1, 0, d, a, idx); }
 static inline uint32_t ldrh_cc(condition_t cc, uint8_t d, uint8_t a, uint32_t idx) { return ldsr_hw_cc(cc, 0, 1, 1, d, a, idx); }
@@ -479,14 +476,14 @@ static inline uint32_t mul_cc(condition_t cc, uint8_t dest, uint8_t n, uint8_t m
     dest &= 0xF;
     n &= 0xF;
     m &= 0xF;
-    return LE(0x00000090 | (cc << 28) | (MUL_OP_MUL << 21) | (dest << 16) | (m << 8) | (n));
+    return (0x00000090 | (cc << 28) | (MUL_OP_MUL << 21) | (dest << 16) | (m << 8) | (n));
 }
 // Conditionally Multiply, Set-flags
 static inline uint32_t muls_cc(condition_t cc, int8_t dest, uint8_t n, uint8_t m) {
     dest &= 0xF;
     n &= 0xF;
     m &= 0xF;
-    return LE(0x00000090 | (cc << 28) | (MUL_OP_MUL << 21) | (1 << 20) | (dest << 16) | (m << 8) | (n));
+    return (0x00000090 | (cc << 28) | (MUL_OP_MUL << 21) | (1 << 20) | (dest << 16) | (m << 8) | (n));
 }
 // Multiply
 static inline uint32_t mul(uint8_t dest, uint8_t n, uint8_t m) { return mul_cc(ARM_CC_AL, dest, n, m); }
@@ -499,7 +496,7 @@ static inline uint32_t mla_cc(condition_t cc, uint8_t dest, uint8_t acc, uint8_t
     acc &= 0xF;
     n &= 0xF;
     m &= 0xF;
-    return LE(0x00000090 | (cc << 28) | (MUL_OP_MLA << 21) | (dest << 16) | (acc << 16) | (m << 8) | (n));
+    return (0x00000090 | (cc << 28) | (MUL_OP_MLA << 21) | (dest << 16) | (acc << 16) | (m << 8) | (n));
 }
 // Conditionally Multiply and Accumulate, Set-flags
 static inline uint32_t mlas_cc(condition_t cc, uint8_t dest, uint8_t acc, uint8_t n, uint8_t m) {
@@ -507,7 +504,7 @@ static inline uint32_t mlas_cc(condition_t cc, uint8_t dest, uint8_t acc, uint8_
     acc &= 0xF;
     n &= 0xF;
     m &= 0xF;
-    return LE(0x00000090 | (cc << 28) | (MUL_OP_MLA << 21) | (1 << 20) | (dest << 16) | (acc << 16) | (m << 8) | (n));
+    return (0x00000090 | (cc << 28) | (MUL_OP_MLA << 21) | (1 << 20) | (dest << 16) | (acc << 16) | (m << 8) | (n));
 }
 // Multiply and Accumulate
 static inline uint32_t mla(uint8_t dest, uint8_t acc, uint8_t n, uint8_t m) { return mla_cc(ARM_CC_AL, dest, acc, n, m); }
@@ -520,7 +517,7 @@ static inline uint32_t mls_cc(condition_t cc, uint8_t dest, uint8_t acc, uint8_t
     acc &= 0xF;
     n &= 0xF;
     m &= 0xF;
-    return LE(0x00000090 | (cc << 28) | (MUL_OP_MLS << 21) | (dest << 16) | (acc << 16) | (m << 8) | (n));
+    return (0x00000090 | (cc << 28) | (MUL_OP_MLS << 21) | (dest << 16) | (acc << 16) | (m << 8) | (n));
 }
 // Conditionally Multiply and Subtract, Set-flags
 static inline uint32_t mlss_cc(condition_t cc, uint8_t dest, uint8_t acc, uint8_t n, uint8_t m) {
@@ -528,7 +525,7 @@ static inline uint32_t mlss_cc(condition_t cc, uint8_t dest, uint8_t acc, uint8_
     acc &= 0xF;
     n &= 0xF;
     m &= 0xF;
-    return LE(0x00000090 | (cc << 28) | (MUL_OP_MLS << 21) | (1 << 20) | (dest << 16) | (acc << 16) | (m << 8) | (n));
+    return (0x00000090 | (cc << 28) | (MUL_OP_MLS << 21) | (1 << 20) | (dest << 16) | (acc << 16) | (m << 8) | (n));
 }
 // Multiply and Subtract
 static inline uint32_t mls(uint8_t dest, uint8_t acc, uint8_t n, uint8_t m) { return mls_cc(ARM_CC_AL, dest, acc, n, m); }
@@ -541,7 +538,7 @@ static inline uint32_t mul_long_cc(condition_t cc, mul_t op, int sf, int8_t dest
     n &= 0xF;
     m &= 0xF;
     sf &= 1;
-    return LE(0x00000090 | (cc << 28) | (MUL_OP_UMULL << 21) | (sf << 20) | (destHi << 16) | (destLo << 12) | (m << 8) | (n));
+    return (0x00000090 | (cc << 28) | (MUL_OP_UMULL << 21) | (sf << 20) | (destHi << 16) | (destLo << 12) | (m << 8) | (n));
 }
 
 // Conditionally Multiply Unsigned, Long
@@ -582,67 +579,67 @@ static inline uint32_t smlals(uint8_t destLo, uint8_t destHi, uint8_t n, uint8_t
 
 // Processor State Instructions
 // Set endianess to big
-static inline uint32_t setend_be() { return LE(0xf1010200); }
+static inline uint32_t setend_be() { return (0xf1010200); }
 // Set endianess to little
-static inline uint32_t setend_le() { return LE(0xf1010000); }
+static inline uint32_t setend_le() { return (0xf1010000); }
 // Do nothing
-static inline uint32_t nop(void) { return LE(0xe1a00000); }
+static inline uint32_t nop(void) { return (0xe1a00000); }
 // Move to Coprocessor from ARM register
 static inline uint32_t mcr(uint8_t cp, uint8_t op1, uint8_t rd, uint8_t crn, uint8_t crm, uint8_t op2) {
-    return LE(0xee000010 | (op1 << 21) | (crn << 16) | ((rd & 0xF) << 12) | (cp << 8) | (op2 << 5) | crm);
+    return (0xee000010 | (op1 << 21) | (crn << 16) | ((rd & 0xF) << 12) | (cp << 8) | (op2 << 5) | crm);
 }
 // Move to ARM register from Coprocessor
 static inline uint32_t mrc(uint8_t cp, uint8_t op1, uint8_t rd, uint8_t crn, uint8_t crm, uint8_t op2) {
-    return LE(0xee100010 | (op1 << 21) | (crn << 16) | ((rd & 0xF) << 12) | (cp << 8) | (op2 << 5) | crm);
+    return (0xee100010 | (op1 << 21) | (crn << 16) | ((rd & 0xF) << 12) | (cp << 8) | (op2 << 5) | crm);
 }
 // Move to Register from Special register
 static inline uint32_t mrs(uint8_t reg) {
-    return LE(0xe10f0000 | ((reg & 0xF) << 12));
+    return (0xe10f0000 | ((reg & 0xF) << 12));
 }
 // Move to Special register from ARM register
 static inline uint32_t msr(uint8_t reg, msr_mask_t mask) {
-    return LE(0xe120f000 | (reg & 0xF) | (mask << 16));
+    return (0xe120f000 | (reg & 0xF) | (mask << 16));
 }
 // Supervisor call
 static inline uint32_t svc_cc(condition_t cc, uint32_t exception) {
-    return LE(0x0F000000 | (cc << 28) | exception);
+    return (0x0F000000 | (cc << 28) | exception);
 }
 static inline uint32_t svc(uint32_t exception) { return svc_cc(ARM_CC_AL, exception); }
 // Undefined instruction
 static inline uint32_t udf(uint16_t imm) {
-    return LE(0xe7f000f0 | (imm & 0x0f) | ((imm & 0xfff0) << 4));
+    return (0xe7f000f0 | (imm & 0x0f) | ((imm & 0xfff0) << 4));
 }
 // Halt
 static inline uint32_t hlt_cc(condition_t cc, uint16_t immediate) {
-    return LE(0x01000070 | (cc << 28) | ((immediate & 0xFFF0) << 4) | (immediate & 0xF));
+    return (0x01000070 | (cc << 28) | ((immediate & 0xFFF0) << 4) | (immediate & 0xF));
 }
 static inline uint32_t hlt(uint16_t immediate) { return svc_cc(ARM_CC_AL, immediate); }
 
 // Bit-field Instructions
 // Signed Bit-field Extract
 static inline uint32_t sbfx_cc(condition_t cc, uint8_t reg, uint8_t s, uint8_t lsb, uint8_t width) {
-    return LE(0x07a00050 | (cc << 28) | (reg << 12) | (lsb << 7) | ((width - 1) << 16) | s);
+    return (0x07a00050 | (cc << 28) | (reg << 12) | (lsb << 7) | ((width - 1) << 16) | s);
 }
 static inline uint32_t sbfx(uint8_t reg, uint8_t s, uint8_t lsb, uint8_t width) { return sbfx_cc(ARM_CC_AL, reg, s, lsb, width); }
 // Unsigned Bit-field Extract
 static inline uint32_t ubfx_cc(condition_t cc, uint8_t reg, uint8_t s, uint8_t lsb, uint8_t width) {
-    return LE(0x07e00050 | (cc << 28) | (reg << 12) | (lsb << 7) | ((width - 1) << 16) | s);
+    return (0x07e00050 | (cc << 28) | (reg << 12) | (lsb << 7) | ((width - 1) << 16) | s);
 }
 static inline uint32_t ubfx(uint8_t reg, uint8_t s, uint8_t lsb, uint8_t width) { return ubfx_cc(ARM_CC_AL, reg, s, lsb, width); }
 // Bit-field Clear
 static inline uint32_t bfc_cc(condition_t cc, uint8_t reg, uint8_t lsb, uint8_t width) {
-    return LE(0x07c0001f | (cc << 28) | ((reg & 0xF) << 12) | ((lsb & 0x1F) << 7) | (((lsb + width - 1) & 0x1F) << 16));
+    return (0x07c0001f | (cc << 28) | ((reg & 0xF) << 12) | ((lsb & 0x1F) << 7) | (((lsb + width - 1) & 0x1F) << 16));
 }
 static inline uint32_t bfc(uint8_t reg, uint8_t lsb, uint8_t width) { return bfc_cc(ARM_CC_AL, reg, lsb, width); }
 // Conditionally Bit-field Insert
 static inline uint32_t bfi_cc(condition_t cc, uint8_t reg, uint8_t s, uint8_t lsb, uint8_t width) {
-    return LE(0x07c00010 | (cc << 28) | ((reg & 0xF) << 12) | ((lsb & 0x1F) << 7) | (((lsb + width - 1) & 0x1F) << 16) | s);
+    return (0x07c00010 | (cc << 28) | ((reg & 0xF) << 12) | ((lsb & 0x1F) << 7) | (((lsb + width - 1) & 0x1F) << 16) | s);
 }
 // Bit-field Insert
 static inline uint32_t bfi(uint8_t reg, uint8_t s, uint8_t lsb, uint8_t width) { return bfi_cc(ARM_CC_AL, reg, s, lsb, width); }
 // Conditionally Count Leading Zeroes
 static inline uint32_t clz_cc(condition_t cc, uint8_t rd, uint8_t rm) {
-    return LE(0x016f0f10 | (cc << 28) | ((rd & 0xF) << 12) | (rm & 0xF));
+    return (0x016f0f10 | (cc << 28) | ((rd & 0xF) << 12) | (rm & 0xF));
 }
 // Count Leading Zeroes
 static inline uint32_t clz(uint8_t rd, uint8_t rm) { return clz_cc(ARM_CC_AL, rd, rm); }
@@ -655,7 +652,7 @@ static inline uint32_t ldst_m(condition_t cc, int pre, int up, int s, int wb, in
     if (s) op |= 1 << 22;
     if (wb) op |= 1 << 21;
     if (load) op |= 1 << 20;
-    return LE(op);
+    return (op);
 }
 // Conditionally Store Multiple
 static inline uint32_t stm_cc(condition_t cc, uint8_t rd, uint16_t registers) { return ldst_m(cc, 0, 0, 0, 0, 0, rd, registers); }
@@ -675,7 +672,7 @@ static inline uint32_t movt_cc(condition_t cc, uint8_t reg, uint16_t val) {
     reg &= 0xF;
     uint8_t  imm4  = val >> 12;
     uint16_t imm12 = val & 0xFFF;
-    return LE(0x03400000 | (cc << 28) | (imm4 << 16) | (imm12) | (reg << 12));
+    return (0x03400000 | (cc << 28) | (imm4 << 16) | (imm12) | (reg << 12));
 }
 // 16-bit Move to top half (leave lower half_
 static inline uint32_t movt(uint8_t reg, uint16_t val) { return movt_cc(ARM_CC_AL, reg, val); }
@@ -684,20 +681,20 @@ static inline uint32_t movw_cc(condition_t cc, uint8_t reg, uint16_t val) {
     reg &= 0xF;
     uint8_t  imm4  = val >> 12;
     uint16_t imm12 = val & 0xFFF;
-    return LE(0x03000000 | (cc << 28) | (imm4 << 16) | (imm12) | (reg << 12));
+    return (0x03000000 | (cc << 28) | (imm4 << 16) | (imm12) | (reg << 12));
 }
 // 16-bit Move word, zero extend
 static inline uint32_t movw(uint8_t reg, uint16_t val) { return movw_cc(ARM_CC_AL, reg, val); }
 // Conditionally Reverse byte order (change endianess)
 static inline uint32_t rev_cc(condition_t cc, uint8_t d, uint8_t s) {
-    return LE(0x06bf0f30 | (cc << 28) | (d << 12) | s);
+    return (0x06bf0f30 | (cc << 28) | (d << 12) | s);
 }
 // Reverse byte order (change endianess)
 static inline uint32_t rev(uint8_t d, uint8_t s) { return rev_cc(ARM_CC_AL, d, s); }
 
 // Conditionally Reverse bit order
 static inline uint32_t rbit_cc(condition_t cc, uint8_t d, uint8_t s) {
-    return LE(0x06FF0F30 | (cc << 28) | (d << 12) | s);
+    return (0x06FF0F30 | (cc << 28) | (d << 12) | s);
 }
 // Reverse byte order (change endianess)
 static inline uint32_t rbit(uint8_t d, uint8_t s) { return rev_cc(ARM_CC_AL, d, s); }
@@ -707,13 +704,13 @@ static inline uint32_t rbit(uint8_t d, uint8_t s) { return rev_cc(ARM_CC_AL, d, 
 // Sign-Extend and transfer
 // Conditionally Sign-Extend and transfer byte
 static inline uint32_t sxtb_cc(condition_t cc, uint8_t d, uint8_t s, uint8_t rot) {
-    return LE(0x06af0070 | (cc << 28) | (d << 12) | (s) | (rot << 10));
+    return (0x06af0070 | (cc << 28) | (d << 12) | (s) | (rot << 10));
 }
 // Sign-Extend and transfer byte
 static inline uint32_t sxtb(uint8_t d, uint8_t s, uint8_t rot) { return sxtb_cc(ARM_CC_AL, d, s, rot); }
 // Conditionally Sign-Extend and transfer halfword
 static inline uint32_t sxth_cc(condition_t cc, uint8_t d, uint8_t s, uint8_t rot) {
-    return LE(0x06bf0070 | (cc << 28) | (d << 12) | (s) | (rot << 10));
+    return (0x06bf0070 | (cc << 28) | (d << 12) | (s) | (rot << 10));
 }
 // Sign-Extend and transfer halfword
 static inline uint32_t sxth(uint8_t d, uint8_t s, uint8_t rot) { return sxth_cc(ARM_CC_AL, d, s, rot); }
@@ -721,13 +718,13 @@ static inline uint32_t sxth(uint8_t d, uint8_t s, uint8_t rot) { return sxth_cc(
 // Unsigned-Extend and transfer
 // Conditionally Unsigned-Extend and transfer byte
 static inline uint32_t uxtb_cc(condition_t cc, uint8_t d, uint8_t s, uint8_t rot) {
-    return LE(0x06ef0070 | (cc << 28) | (d << 12) | (s) | (rot << 10));
+    return (0x06ef0070 | (cc << 28) | (d << 12) | (s) | (rot << 10));
 }
 // Unsigned-Extend and transfer byte
 static inline uint32_t uxtb(uint8_t d, uint8_t s, uint8_t rot) { return uxtb_cc(ARM_CC_AL, d, s, rot); }
 // Conditionally Unsigned-Extend and transfer halfword
 static inline uint32_t uxth_cc(condition_t cc, uint8_t d, uint8_t s, uint8_t rot) {
-    return LE(0x06ff0070 | (cc << 28) | (d << 12) | (s) | (rot << 10));
+    return (0x06ff0070 | (cc << 28) | (d << 12) | (s) | (rot << 10));
 }
 // Unsigned-Extend and transfer halfword
 static inline uint32_t uxth(uint8_t d, uint8_t s, uint8_t rot) { return uxth_cc(ARM_CC_AL, d, s, rot); }
@@ -735,13 +732,13 @@ static inline uint32_t uxth(uint8_t d, uint8_t s, uint8_t rot) { return uxth_cc(
 // Division
 // Signed divide
 static inline uint32_t sdiv_cc(condition_t cc, uint8_t d, uint8_t dividend, uint8_t divisor) {
-    return LE(0x0710f010 | (cc << 28) | (d << 16) | (divisor << 8) | dividend);
+    return (0x0710f010 | (cc << 28) | (d << 16) | (divisor << 8) | dividend);
 }
 // Signed divide
 static inline uint32_t sdiv(uint8_t d, uint8_t dividend, uint8_t divisor) { return sdiv_cc(ARM_CC_AL, d, dividend, divisor); }
 // Unsigned divide
 static inline uint32_t udiv_cc(condition_t cc, uint8_t d, uint8_t dividend, uint8_t divisor) {
-    return LE(0x0730f010 | (cc << 28) | (d << 16) | (divisor << 8) | dividend);
+    return (0x0730f010 | (cc << 28) | (d << 16) | (divisor << 8) | dividend);
 }
 // Unsigned divide
 static inline uint32_t udiv(uint8_t d, uint8_t dividend, uint8_t divisor) { return udiv_cc(ARM_CC_AL, d, dividend, divisor); }

@@ -187,17 +187,17 @@ static void emit_is_SVC(uint32_t** emit) {
 __attribute__((target("thumb")))
 static void emit_load_X(uint32_t** emit) {
     // restore X -> C
-    *(*emit)++ = ldrb(r0, r5, index_imm(1, 0, (1 + offsetof(cpu_t, sr))));
+    *(*emit)++ = ldrb(r0, r5, index_imm(1, 0, (1 + __offsetof(cpu_t, sr))));
     *(*emit)++ = rsbs(r0, r0, imm(0xf));
 }
 // @brief save out C flag back into the X, destroys r0
 __attribute__((target("thumb")))
 static void emit_save_X(uint32_t** emit) {
     // put C back into X, leave everything else
-    *(*emit)++ = ldrb(r0, r5, index_imm(1, 0, (1 + offsetof(cpu_t, sr))));
+    *(*emit)++ = ldrb(r0, r5, index_imm(1, 0, (1 + __offsetof(cpu_t, sr))));
     *(*emit)++ = orr_cc(ARM_CC_CS, r0, r0, imm(0x10));
     *(*emit)++ = bic_cc(ARM_CC_CC, r0, r0, imm(0x10));
-    *(*emit)++ = strb(r0, r5, index_imm(1, 0, (1 + offsetof(cpu_t, sr))));
+    *(*emit)++ = strb(r0, r5, index_imm(1, 0, (1 + __offsetof(cpu_t, sr))));
 }
 // @brief convert a value in r1 (e.g., 3) into a mask (e.g., 1<<3)
 __attribute__((target("thumb")))
@@ -229,35 +229,35 @@ static void emit_arm_to_68k_cc(uint32_t** emit, uint8_t reg) {
 // @brief load the 68K SR into reg
 __attribute__((target("thumb")))
 static void emit_load_SR(uint32_t** emit, uint8_t reg) {
-    *(*emit)++ = ldrh(reg, r5, index_imm(1, 0, offsetof(cpu_t, sr)));
+    *(*emit)++ = ldrh(reg, r5, index_imm(1, 0, __offsetof(cpu_t, sr)));
     // save our stack pointer depending on current mode
     *(*emit)++ = tst(reg, imm(0x2000));
-    *(*emit)++ = str_cc(ARM_CC_EQ, reg, sp, index_imm(1, 0, offsetof(cpu_t, ssp)));
-    *(*emit)++ = str_cc(ARM_CC_NE, reg, sp, index_imm(1, 0, offsetof(cpu_t, usp)));
+    *(*emit)++ = str_cc(ARM_CC_EQ, reg, sp, index_imm(1, 0, __offsetof(cpu_t, ssp)));
+    *(*emit)++ = str_cc(ARM_CC_NE, reg, sp, index_imm(1, 0, __offsetof(cpu_t, usp)));
     emit_arm_to_68k_cc(emit, reg);
 }
 // @brief save the 68K SR in reg to cpu_t state
 __attribute__((target("thumb")))
 static void emit_save_SR(uint32_t** emit, uint8_t reg) {
     // put reg -> sr
-    *(*emit)++ = strh(reg, r5, index_imm(1, 0, offsetof(cpu_t, sr)));
+    *(*emit)++ = strh(reg, r5, index_imm(1, 0, __offsetof(cpu_t, sr)));
     // load our stack pointer depending on our new mode
     *(*emit)++ = tst(reg, imm(0x2000));
-    *(*emit)++ = ldr_cc(ARM_CC_EQ, sp, r5, index_imm(1, 0, offsetof(cpu_t, ssp)));
-    *(*emit)++ = ldr_cc(ARM_CC_NE, sp, r5, index_imm(1, 0, offsetof(cpu_t, usp)));
+    *(*emit)++ = ldr_cc(ARM_CC_EQ, sp, r5, index_imm(1, 0, __offsetof(cpu_t, ssp)));
+    *(*emit)++ = ldr_cc(ARM_CC_NE, sp, r5, index_imm(1, 0, __offsetof(cpu_t, usp)));
     emit_68k_to_arm_cc(emit, reg);
 }
 // @brief load the 68K CCR into reg
 __attribute__((target("thumb")))
 static void emit_load_CR(uint32_t** emit, uint8_t reg) {
-    *(*emit)++ = ldrb(reg, r5, index_imm(1, 0, 1 + offsetof(cpu_t, sr)));
+    *(*emit)++ = ldrb(reg, r5, index_imm(1, 0, 1 + __offsetof(cpu_t, sr)));
     emit_arm_to_68k_cc(emit, reg);
 }
 // @brief save the 68K CCR in reg to cpu_t state
 __attribute__((target("thumb")))
 static void emit_save_CR(uint32_t** emit, uint8_t reg) {
     // put reg -> sr
-    *(*emit)++ = strb(reg, r5, index_imm(1, 0, 1 + offsetof(cpu_t, sr)));
+    *(*emit)++ = strb(reg, r5, index_imm(1, 0, 1 + __offsetof(cpu_t, sr)));
     emit_68k_to_arm_cc(emit, reg);
 }
 // @brief return the ARM condition code based on the 68K cc field
@@ -594,7 +594,7 @@ static void emit_ROXd_opcode(uint32_t** emit, uint16_t opcode) {
     if(opcode & 0x0020) {
         // Register
         if(shift < 2) *(*emit)++ = mov(r1, reg(r3 + shift));
-        else *(*emit)++ = ldrb(r1, r5, index_imm(1, 0, offsetof(cpu_t, d0) + 3 + shift * 4));
+        else *(*emit)++ = ldrb(r1, r5, index_imm(1, 0, __offsetof(cpu_t, d0) + 3 + shift * 4));
     } else {
         // Immediate
         if(shift == 0) shift = 8;
@@ -603,7 +603,7 @@ static void emit_ROXd_opcode(uint32_t** emit, uint16_t opcode) {
 
     uint8_t regD = (opcode & 7);
     if(regD < 2) *(*emit)++ = mov(r0, reg(r3 + regD));
-    else *(*emit)++ = ldr(r1, r5, index_imm(1, 0, offsetof(cpu_t, d0) + regD * 4));
+    else *(*emit)++ = ldr(r1, r5, index_imm(1, 0, __offsetof(cpu_t, d0) + regD * 4));
 
     switch(opcode & 0x01C0) {
     // Right
@@ -626,15 +626,15 @@ static void emit_ROXd_opcode(uint32_t** emit, uint16_t opcode) {
         uint32_t idx;
         switch(opcode & 0x00C0) {
         case 0x0000: 
-            idx = index_imm(1, 0, offsetof(cpu_t, d0) + regD * 4 + 2);
+            idx = index_imm(1, 0, __offsetof(cpu_t, d0) + regD * 4 + 2);
             *(*emit)++ = strb(r1, r5, idx);
             break;
         case 0x0040:
-            idx = index_imm(1, 0, offsetof(cpu_t, d0) + regD * 4 + 2);
+            idx = index_imm(1, 0, __offsetof(cpu_t, d0) + regD * 4 + 2);
             *(*emit)++ = strh(r1, r5, idx);
             break;
         case 0x0080:
-            idx = index_imm(1, 0, offsetof(cpu_t, d0) + regD * 4);
+            idx = index_imm(1, 0, __offsetof(cpu_t, d0) + regD * 4);
             *(*emit)++ = str(r1, r5, idx);
             break;
         }
@@ -668,11 +668,11 @@ void emit_ABCD(uint32_t** emit, uint16_t opcode) {
     } else {
         // Dx, Dy
         if(sReg < 2) *(*emit)++ = uxtb(r0, r3 + sReg, 0);
-        else *(*emit)++ = ldrb(r0, r5, index_imm(1, 0, sReg * 4 + 3 + offsetof(cpu_t, d0)));
+        else *(*emit)++ = ldrb(r0, r5, index_imm(1, 0, sReg * 4 + 3 + __offsetof(cpu_t, d0)));
         if(dReg == 0) **emit = b_imm(calc_offset((uint32_t)emit, (uint32_t)abcd_d0));
         else if(dReg == 1) **emit = b_imm(calc_offset((uint32_t)emit, (uint32_t)abcd_d1));
         else {
-            *(*emit)++ = add(r1, r5, imm(offsetof(cpu_t, d0) + dReg * 4 + 3));
+            *(*emit)++ = add(r1, r5, imm(__offsetof(cpu_t, d0) + dReg * 4 + 3));
             **emit = b_imm(calc_offset((uint32_t)emit, (uint32_t)abcd_an));
         }
     }
@@ -1152,7 +1152,7 @@ void emit_MOVE_TO_USP(uint32_t** emit, uint16_t opcode) {
     emit_load_SR(emit, 2);  // r2=sr, r1=imm
     emit_is_SVC(emit);
     uint8_t aReg = 6 + (opcode & 0x7);
-    *(*emit)++ = str(aReg, r5, index_imm(1, 0, offsetof(cpu_t, usp)));
+    *(*emit)++ = str(aReg, r5, index_imm(1, 0, __offsetof(cpu_t, usp)));
     *(*emit)++ = bx(lr);
 }
 __attribute__((target("thumb")))
@@ -1160,7 +1160,7 @@ void emit_MOVE_USP_TO(uint32_t** emit, uint16_t opcode) {
     emit_load_SR(emit, 2);  // r2=sr, r1=imm
     emit_is_SVC(emit);
     uint8_t aReg = 6 + (opcode & 0x7);
-    *(*emit)++ = ldr(aReg, r5, index_imm(1, 0, offsetof(cpu_t, usp)));
+    *(*emit)++ = ldr(aReg, r5, index_imm(1, 0, __offsetof(cpu_t, usp)));
     *(*emit)++ = bx(lr);
 }
 __attribute__((target("thumb")))
@@ -1203,8 +1203,8 @@ void emit_MOVEM(uint32_t** emit, uint16_t opcode) {
         for(int i=2; i<8; i++) {
             *(*emit)++ = ror_imm(r1, r1, 1);
             *(*emit)++ = word
-                ? ldrh_cc(ARM_CC_CS, r0, r5, index_imm(0, 0, offsetof(cpu_t, d0) + 2 + i * 4))
-                : ldr_cc(ARM_CC_CS, r0, r5, index_imm(0, 0, offsetof(cpu_t, d0) + i * 4));
+                ? ldrh_cc(ARM_CC_CS, r0, r5, index_imm(0, 0, __offsetof(cpu_t, d0) + 2 + i * 4))
+                : ldr_cc(ARM_CC_CS, r0, r5, index_imm(0, 0, __offsetof(cpu_t, d0) + i * 4));
             *(*emit)++ = word
                 ? strh_cc(ARM_CC_CS, r0, aReg, index_imm(0, 1, 2))
                 : str_cc(ARM_CC_CS, r0, aReg, index_imm(0, 1, 4));
@@ -1232,8 +1232,8 @@ void emit_MOVEM(uint32_t** emit, uint16_t opcode) {
                 ? ldrh_cc(ARM_CC_CS, r0, aReg, index_imm(1, 1, -2))
                 : ldr_cc(ARM_CC_CS, r0, aReg, index_imm(1, 1, -4));
             *(*emit)++ = word
-                ? strh_cc(ARM_CC_CS, r0, r5, index_imm(0, 0, offsetof(cpu_t, d0) + 2 + i * 4))
-                : str_cc(ARM_CC_CS, r0, r5, index_imm(0, 0, offsetof(cpu_t, d0) + i * 4));
+                ? strh_cc(ARM_CC_CS, r0, r5, index_imm(0, 0, __offsetof(cpu_t, d0) + 2 + i * 4))
+                : str_cc(ARM_CC_CS, r0, r5, index_imm(0, 0, __offsetof(cpu_t, d0) + i * 4));
         }
         for(int i=0; i<2; i++) {
             *(*emit)++ = ror_imm(r2, r2, 1);
@@ -1358,7 +1358,7 @@ void emit_NBCD(uint32_t** emit, uint16_t opcode) {
     else {
         switch(dEA & 0x38) {
         case 0x00: /* Dx */ 
-            *(*emit)++ = add(r1, r5, imm(offsetof(cpu_t, d0) + (dEA & 7) * 4 + 3));
+            *(*emit)++ = add(r1, r5, imm(__offsetof(cpu_t, d0) + (dEA & 7) * 4 + 3));
             break;
         case 0x08: /* Ax, INVALID */ break;
         case 0x10: /* (Ax) */ 
@@ -1545,11 +1545,11 @@ void emit_SBCD(uint32_t** emit, uint16_t opcode) {
     } else {
         // Dx, Dy
         if(sReg < 2) *(*emit)++ = uxtb(r0, r3 + sReg, 0);
-        else *(*emit)++ = ldrb(r0, r5, index_imm(1, 0, sReg * 4 + 3 + offsetof(cpu_t, d0)));
+        else *(*emit)++ = ldrb(r0, r5, index_imm(1, 0, sReg * 4 + 3 + __offsetof(cpu_t, d0)));
         if(dReg == 0) **emit = b_imm(calc_offset((uint32_t)emit, (uint32_t)sbcd_d0));
         else if(dReg == 1) **emit = b_imm(calc_offset((uint32_t)emit, (uint32_t)sbcd_d1));
         else {
-            *(*emit)++ = add(r1, r5, imm(offsetof(cpu_t, d0) + dReg * 4 + 3));
+            *(*emit)++ = add(r1, r5, imm(__offsetof(cpu_t, d0) + dReg * 4 + 3));
             **emit = b_imm(calc_offset((uint32_t)emit, (uint32_t)sbcd_an));
         }
     }
@@ -2333,33 +2333,33 @@ void emit_opcode_table() {
     uint16_t  stub_count = 0;
 
     // check opcode mode
-    uint8_t c = config.cpu_features;
+    config_t c = cpu_state.config;
 
     // We can only be one CPU at a time
-         if(c & cpu_enable_68040) c &= ~(cpu_enable_68000 | cpu_enable_68020 | cpu_enable_68030);
-    else if(c & cpu_enable_68030) c &= ~(cpu_enable_68000 | cpu_enable_68020 | cpu_enable_68040);
-    else if(c & cpu_enable_68020) c &= ~(cpu_enable_68000 | cpu_enable_68030 | cpu_enable_68040);
-    else                          c &= ~(cpu_enable_68020 | cpu_enable_68030 | cpu_enable_68040);
+    if(c.cpu_enable_68040) {
+        c.cpu_enable_68000 = c.cpu_enable_68020 = c.cpu_enable_68030 = 0;
+        c.cpu_enable_32bits = 1;
+    } else if(c.cpu_enable_68030) {
+        c.cpu_enable_68000 = c.cpu_enable_68020 = c.cpu_enable_68040 = 0;
+        c.cpu_enable_32bits = 1;
+        c.cpu_enable_mmu = 0;
+    } else if(c.cpu_enable_68020) {
+        c.cpu_enable_68000 = c.cpu_enable_68030 = c.cpu_enable_68040 = 0;
+        c.cpu_enable_dcache = 0;
+        c.cpu_enable_mmu = 0;
+    } else { // 68000
+        c.cpu_enable_68020 = c.cpu_enable_68030 = c.cpu_enable_68040 = 0;
+        c.cpu_enable_68000 = 1;
+        c.cpu_enable_32bits = 0;
+        c.cpu_enable_fpu = 0;
+        c.cpu_enable_icache = 0;
+        c.cpu_enable_dcache = 0;
+        c.cpu_enable_mmu = 0;
+    }
 
-    // 24 bit mode is only allowed with 68EC020 and 68000
-    if(!(c & (cpu_enable_68000 | cpu_enable_68020)))
-        c |= cpu_enable_32bits;
-
-    // Instruction cache is allowed on 020+
-    if(~(c & (cpu_enable_68020 | cpu_enable_68030 | cpu_enable_68040)))
-        c &= ~cpu_enable_icache;
-
-    // Data cache is allowed on 030+
-    if(~(c & (cpu_enable_68030 | cpu_enable_68040)))
-        c &= ~cpu_enable_icache;
-
-    // MMU is only permitted on the 68040
-    if(~(c & cpu_enable_68040))
-        c &= ~cpu_enable_mmu;
-
-    if(c != config.cpu_features) {
-        config.cpu_features = c;
-        config.is_dirty = 1;
+    if(memcmp(&c, &cpu_state.config, sizeof(config_t))) {
+        cpu_state.config = c;
+        cpu_state.config.is_dirty = 1;
     }
 
     for (int opcode = 0; opcode < 65536; opcode++) {
@@ -2373,23 +2373,23 @@ void emit_opcode_table() {
         emit_op(&b, optab_68000, opcode);
 
         // Add applicable 680x0 opcodes
-             if(c & cpu_enable_68040) emit_op(&b, optab_68040, opcode);
-        else if(c & cpu_enable_68030) emit_op(&b, optab_68030, opcode);
-        else if(c & cpu_enable_68020) emit_op(&b, optab_68020, opcode);
+             if(c.cpu_enable_68040) emit_op(&b, optab_68040, opcode);
+        else if(c.cpu_enable_68030) emit_op(&b, optab_68030, opcode);
+        else if(c.cpu_enable_68020) emit_op(&b, optab_68020, opcode);
 
         // Add applicable FPU opcodes
-        if(c & cpu_enable_fpu) {
+        if(c.cpu_enable_fpu) {
             // 68040 has a very different FPU
-            if(c & cpu_enable_68040)
+            if(c.cpu_enable_68040)
                 emit_op(&b, optab_040fpu, opcode);
             // ...than the 68020 and 68030 (the 68882)
-            else if(c & (cpu_enable_68020 | cpu_enable_68030))
+            else if(c.cpu_enable_68020 | c.cpu_enable_68030)
                 emit_op(&b, optab_68882, opcode);
             // and the 68000 does not have an FPU
         }
 
         // Add applicable MMU opcodes
-        if(c & cpu_enable_mmu)
+        if(c.cpu_enable_mmu)
             emit_op(&b, optab_040mmu, opcode);
 
         len = b - buffer;

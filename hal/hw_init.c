@@ -602,33 +602,50 @@ static int wait_for_status(void) {
  * Description: Sends data to slave
  *
  *************************************************************************/
-int32_t  I2C0SendCmd(uint32_t slave, uint8_t cmd, uint8_t * data, uint32_t cntr)
-{
-    /*Enable peripheral*/
-    I2C0_CON->BIT.I2C_EN = 1;
-    /*Check for bus busy*/
-    while(I2C0_IRQSTATUS_RAW->BIT.BB);
-    /*Set data count*/
-    I2C0_CNT->BIT.DCOUNT = cntr + 1;
+int32_t  I2C0SendCmd(uint32_t slave, uint8_t* cmd, uint32_t cmd_len, uint8_t * data, uint32_t cntr) {
+    int status = 0;
+
     /*Set Slave Addr*/
     I2C0_SA->BIT.SA = slave;
+    /*Set data count*/
+    I2C0_CNT->BIT.DCOUNT = cntr + cmd_len;
     /*Clear IRQ Status*/
     I2C0_IRQSTATUS->LONG = 0x7FFF;
+    /*Set mode*/
+    I2C0_CON->LONG = CON_I2C_EN | CON_TRX | CON_MST;
+
+    /*Check for bus busy*/
+    while(I2C0_IRQSTATUS_RAW->BIT.BB);
+
     /*Start command*/
-    I2C0_CON->LONG = CON_I2C_EN | CON_TRX | CON_MST | CON_STT | CON_STP;
+    I2C0_CON->LONG |= CON_STT;
 
-    while(!I2C0_IRQSTATUS_RAW->BIT.XRDY);
-    I2C0_DATA->BIT.DATA = cmd;
-    I2C0_IRQSTATUS->BIT.XRDY = 1;
-
-    while(cntr) {
+    while(!I2C0_IRQSTATUS_RAW->BIT.NACK && (cntr || cmd_len)) {
         while(!I2C0_IRQSTATUS_RAW->BIT.XRDY);
-        I2C0_DATA->BIT.DATA = *data++;
+        if(cmd_len) {
+            I2C0_DATA->BIT.DATA = *cmd++;
+            cmd_len--;
+        } else {
+            I2C0_DATA->BIT.DATA = *data++;
+            cntr--;
+        }
         I2C0_IRQSTATUS->BIT.XRDY = 1;
-        cntr--;
     }
 
-    return 0;
+    /*Wait for bus access*/
+    while(!I2C0_IRQSTATUS_RAW->BIT.ARDY);
+    /*Stop command*/
+    I2C0_CON->LONG |= CON_STP;
+    /*Wait for bus stop (free)*/
+    while(!I2C0_IRQSTATUS_RAW->BIT.BF);
+    /*Flush FIFO*/
+    I2C0_BUF->BIT.RXFIFO_CLR = 1;
+    I2C0_BUF->BIT.TXFIFO_CLR = 1;
+    /*Clear IRQ Status*/
+    I2C0_IRQSTATUS->LONG = 0x7FFF;
+    /*Clear buffer length*/
+    I2C0_CNT->BIT.DCOUNT = 0;
+    return cntr == 0;
 }
 
 /*************************************************************************
@@ -643,44 +660,100 @@ int32_t  I2C0SendCmd(uint32_t slave, uint8_t cmd, uint8_t * data, uint32_t cntr)
  * Description:  Reads data from slave
  *
  *************************************************************************/
-int32_t  I2C0ReadCmd(uint32_t slave, uint8_t cmd, uint8_t * data, uint32_t cntr)
+int32_t  I2C0ReadCmd(uint32_t slave, uint8_t* cmd, uint32_t cmd_len, uint8_t * data, uint32_t cntr)
 {
-    /*Enable peripheral*/
-    I2C0_CON->BIT.I2C_EN = 1;
-    /*Flush buffer*/
-    (void)I2C0_DATA->BIT.DATA;
-    /*Check for bus busy*/
-    while(I2C0_IRQSTATUS_RAW->BIT.BB);
-    /*Set data count*/
-    I2C0_CNT->BIT.DCOUNT = 1;
     /*Set Slave Addr*/
     I2C0_SA->BIT.SA = slave;
+    /*Set data count*/
+    I2C0_CNT->BIT.DCOUNT = cmd_len;
     /*Clear IRQ Status*/
     I2C0_IRQSTATUS->LONG = 0x7FFF;
+    /*Set mode*/
+    I2C0_CON->LONG = CON_I2C_EN | CON_TRX | CON_MST;
+
+    /*Check for bus busy*/
+    while(I2C0_IRQSTATUS_RAW->BIT.BB);
+
     /*Start command*/
-    I2C0_CON->LONG = CON_I2C_EN | CON_TRX | CON_MST | CON_STT;
+    I2C0_CON->LONG |= CON_STT;
 
-    while(!I2C0_IRQSTATUS_RAW->BIT.XRDY);
-    I2C0_DATA->BIT.DATA = cmd;
-    I2C0_IRQSTATUS->BIT.XRDY = 1;
+    while(!I2C0_IRQSTATUS_RAW->BIT.NACK && cmd_len) {
+        while(!I2C0_IRQSTATUS_RAW->BIT.XRDY);
+        I2C0_DATA->BIT.DATA = *cmd++;
+        cmd_len--;
+        I2C0_IRQSTATUS->BIT.XRDY = 1;
+    }
 
-    /* TODO check NACK */
+    /*Wait for bus access*/
     while(!I2C0_IRQSTATUS_RAW->BIT.ARDY);
+    I2C0_IRQSTATUS->BIT.ARDY = 1;
 
+    /*Set data count*/
     I2C0_CNT->BIT.DCOUNT = cntr;
-    I2C0_CON->LONG = CON_I2C_EN | CON_MST | CON_STT | CON_STP;
+    /*Restart command in read mode*/
+    I2C0_CON->LONG = (I2C0_CON->LONG | CON_STT) & ~CON_TRX;
 
     while(cntr) {
-        while(!I2C0_IRQSTATUS_RAW->BIT.RRDY);
+        while(!(I2C0_IRQSTATUS_RAW->BIT.RRDY)) {
+            if(I2C0_IRQSTATUS_RAW->BIT.NACK) break;
+        }
         *data++ = I2C0_DATA->BIT.DATA;
         I2C0_IRQSTATUS->BIT.RRDY = 1;
         cntr--;
     }
 
+    /*Wait for bus access*/
+    while(!I2C0_IRQSTATUS_RAW->BIT.ARDY);
+    /*Stop command*/
+    I2C0_CON->LONG |= CON_STP;
+    /*Wait for bus stop (free)*/
+    while(!I2C0_IRQSTATUS_RAW->BIT.BF);
+    /*Flush FIFO*/
+    I2C0_BUF->BIT.RXFIFO_CLR = 1;
+    I2C0_BUF->BIT.TXFIFO_CLR = 1;
     /*Clear IRQ Status*/
     I2C0_IRQSTATUS->LONG = 0x7FFF;
+    /*Clear buffer length*/
+    I2C0_CNT->BIT.DCOUNT = 0;
+    return cntr == 0;
 
-    return 0;
+
+    // /*Enable peripheral*/
+    // I2C0_CON->BIT.I2C_EN = 1;
+    // /*Flush buffer*/
+    // (void)I2C0_DATA->BIT.DATA;
+    // /*Check for bus busy*/
+    // while(I2C0_IRQSTATUS_RAW->BIT.BB);
+    // /*Set data count*/
+    // I2C0_CNT->BIT.DCOUNT = 1;
+    // /*Set Slave Addr*/
+    // I2C0_SA->BIT.SA = slave;
+    // /*Clear IRQ Status*/
+    // I2C0_IRQSTATUS->LONG = 0x7FFF;
+    // /*Start command*/
+    // I2C0_CON->LONG = CON_I2C_EN | CON_TRX | CON_MST | CON_STT;
+
+    // while(!I2C0_IRQSTATUS_RAW->BIT.XRDY);
+    // I2C0_DATA->BIT.DATA = cmd;
+    // I2C0_IRQSTATUS->BIT.XRDY = 1;
+
+    // /* TODO check NACK */
+    // while(!I2C0_IRQSTATUS_RAW->BIT.ARDY);
+
+    // I2C0_CNT->BIT.DCOUNT = cntr;
+    // I2C0_CON->LONG = CON_I2C_EN | CON_MST | CON_STT | CON_STP;
+
+    // while(cntr) {
+    //     while(!I2C0_IRQSTATUS_RAW->BIT.RRDY);
+    //     *data++ = I2C0_DATA->BIT.DATA;
+    //     I2C0_IRQSTATUS->BIT.RRDY = 1;
+    //     cntr--;
+    // }
+
+    // /*Clear IRQ Status*/
+    // I2C0_IRQSTATUS->LONG = 0x7FFF;
+
+    // return 0;
 }
 
 /*************************************************************************
@@ -694,33 +767,73 @@ int32_t  I2C0ReadCmd(uint32_t slave, uint8_t cmd, uint8_t * data, uint32_t cntr)
  *
  *************************************************************************/
 int32_t  I2C0Probe(uint32_t slave) {
-    /*Enable peripheral*/
-    I2C0_CON->BIT.I2C_EN = 1;
-    /*Flush buffer*/
-    (void)I2C0_DATA->BIT.DATA;
-    /*Check for bus busy*/
-    while(I2C0_IRQSTATUS_RAW->BIT.BB);
-    /*Set data count*/
-    I2C0_CNT->BIT.DCOUNT = 1;
+    int present = 0;
     /*Set Slave Addr*/
     I2C0_SA->BIT.SA = slave;
+    /*Set data count*/
+    I2C0_CNT->BIT.DCOUNT = 1;
     /*Clear IRQ Status*/
     I2C0_IRQSTATUS->LONG = 0x7FFF;
-    /*Start immediate RX*/
-    I2C0_CON->LONG = CON_I2C_EN | CON_MST | CON_STT | CON_STP;
-    /*Wait until transfer complete and check if done correctly*/
-    if ((wait_for_status() == 0)) {
-        if(I2C0_IRQSTATUS_RAW->BIT.NACK) return 0;
-        //if(I2C0_IRQSTATUS_RAW->BIT.AERR) return 0;
-    } 
-    //else return 0;
-    /*Found, receive dummy byte*/
-    while(!I2C0_IRQSTATUS_RAW->BIT.RRDY);
-    (void)I2C0_DATA->BIT.DATA;
-    /*Clear IRQ Status*/
-    I2C0_IRQSTATUS->LONG = I2C0_IRQSTATUS_RAW->LONG;
+    /*Set mode*/
+    I2C0_CON->LONG = CON_I2C_EN | CON_MST;
 
-    return 1;
+    /*Check for bus busy*/
+    while(I2C0_IRQSTATUS_RAW->BIT.BB);
+
+    /*Start command*/
+    I2C0_CON->LONG |= CON_STT;
+
+    do {
+        while(!(I2C0_IRQSTATUS_RAW->BIT.RRDY)) {
+            if(I2C0_IRQSTATUS_RAW->BIT.NACK) break;
+        }
+        (void)I2C0_DATA->BIT.DATA;
+        present = 1;
+    } while(0);
+
+    /*Wait for bus access*/
+    while(!I2C0_IRQSTATUS_RAW->BIT.ARDY);
+    /*Stop command*/
+    I2C0_CON->LONG |= CON_STP;
+    /*Wait for bus stop (free)*/
+    while(!I2C0_IRQSTATUS_RAW->BIT.BF);
+    /*Flush FIFO*/
+    I2C0_BUF->BIT.RXFIFO_CLR = 1;
+    I2C0_BUF->BIT.TXFIFO_CLR = 1;
+    /*Clear IRQ Status*/
+    I2C0_IRQSTATUS->LONG = 0x7FFF;
+    /*Clear buffer length*/
+    I2C0_CNT->BIT.DCOUNT = 0;
+
+    return present;
+
+    // /*Enable peripheral*/
+    // I2C0_CON->BIT.I2C_EN = 1;
+    // /*Flush buffer*/
+    // (void)I2C0_DATA->BIT.DATA;
+    // /*Check for bus busy*/
+    // while(I2C0_IRQSTATUS_RAW->BIT.BB);
+    // /*Set data count*/
+    // I2C0_CNT->BIT.DCOUNT = 1;
+    // /*Set Slave Addr*/
+    // I2C0_SA->BIT.SA = slave;
+    // /*Clear IRQ Status*/
+    // I2C0_IRQSTATUS->LONG = 0x7FFF;
+    // /*Start immediate RX*/
+    // I2C0_CON->LONG = CON_I2C_EN | CON_MST | CON_STT | CON_STP;
+    // /*Wait until transfer complete and check if done correctly*/
+    // if ((wait_for_status() == 0)) {
+    //     if(I2C0_IRQSTATUS_RAW->BIT.NACK) return 0;
+    //     //if(I2C0_IRQSTATUS_RAW->BIT.AERR) return 0;
+    // } 
+    // //else return 0;
+    // /*Found, receive dummy byte*/
+    // while(!I2C0_IRQSTATUS_RAW->BIT.RRDY);
+    // (void)I2C0_DATA->BIT.DATA;
+    // /*Clear IRQ Status*/
+    // I2C0_IRQSTATUS->LONG = I2C0_IRQSTATUS_RAW->LONG;
+
+    // return 1;
 }
 
 

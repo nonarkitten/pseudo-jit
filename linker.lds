@@ -42,37 +42,41 @@
 
 ENTRY(Entry)
 
- SECTIONS
- {
-    . = 0x402F0400;
+MEMORY
+{
+    OCRAM : ORIGIN = 0x402F0400, LENGTH = 0x1FC00
+}
 
+SECTIONS
+{
     .text : {
          _image_start = .;
          *(.startup)
          /* KEEP(*bl_init.o(.text)) */
          *(.rodata*)
          *(.text*)
-     }
+    } > OCRAM
  	/* non-zero global and static variables */
  	. = ALIGN(32);
  	.data : {
          *(.data*)
          _image_end = .;
-     }
+    } > OCRAM
 
  	/* zeroed global and static variables */
  	. = ALIGN(32);
  	_bss_start = .;
- 	.bss :  { *(.bss) }
+ 	.bss :  { *(.bss) } > OCRAM
 
  	/* Put the stack inside the BSS to simplify clearing */
  	. = ALIGN(32);
  	.stack :
  	{
  		_stack_end = .;  /* the danger zone! */
- 		. = . + 0x1000;  /* 4kB of stack memory */
- 		_stack_top = .;  /* stack grows upwards */
- 	}
+ 		/* . = . + 0x2000;  4kB of stack memory */
+        _stack_top = ORIGIN(OCRAM) + LENGTH(OCRAM) - 8;
+ 		/* _stack_top = .;  stack grows upwards */
+ 	} > OCRAM
 
  	. = ALIGN(32);
  	_bss_end = .;

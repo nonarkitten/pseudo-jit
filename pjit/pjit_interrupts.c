@@ -130,8 +130,8 @@
 
 __attribute__((naked)) void C_SVC_Handler(uint32_t svc, uint32_t* stack) {
     // save r0~r3 immediately
-    asm("strd   r0, r1, [r5, %0]" :: "i"(offsetof(cpu_t, r0)));
-    asm("strd   r2, r3, [r5, %0]" :: "i"(offsetof(cpu_t, r2)));
+    asm("strd   r0, r1, [r5, %0]" :: "i"(__offsetof(cpu_t, r0)));
+    asm("strd   r2, r3, [r5, %0]" :: "i"(__offsetof(cpu_t, r2)));
 
     // change to system mode so we're using the same stack and LR
     register uint32_t *out asm("lr");
@@ -139,8 +139,8 @@ __attribute__((naked)) void C_SVC_Handler(uint32_t svc, uint32_t* stack) {
 
     // switch User SP with Supervisor SP
     if(!(cpu->sr & 0x2000)) {
-        asm("str    sp, [r5, %0]" :: "i"(offsetof(cpu_t, usp)));
-        asm("ldr    sp, [r5, %0]" :: "i"(offsetof(cpu_t, ssp)));
+        asm("str    sp, [r5, %0]" :: "i"(__offsetof(cpu_t, usp)));
+        asm("ldr    sp, [r5, %0]" :: "i"(__offsetof(cpu_t, ssp)));
     }
     // regardless of exception group, all will push the PC and SR
     asm("str    %0, [sp, #-4]!" :: "r"(m68k_pc));
@@ -161,11 +161,11 @@ __attribute__((naked)) void C_SVC_Handler(uint32_t svc, uint32_t* stack) {
             uint16_t opcode = *(uint16_t*)m68k_pc;
             asm("strh   %0, [sp, #-2]!" :: "r"(opcode));
             // push Access address
-            asm("ldr    r0, [r5, %0]!" :: "i"(offsetof(cpu_t, r0)));
+            asm("ldr    r0, [r5, %0]!" :: "i"(__offsetof(cpu_t, r0)));
             asm("str    r0, [sp, #-4]!");
             // push Access type, b4=read, b3=instr, b2~0 = FC2~0
             uint16_t fc;
-            asm("ldr    %0, [r5, %1]!" : "=r"(fc) : "i"(offsetof(cpu_t, r1)));
+            asm("ldr    %0, [r5, %1]!" : "=r"(fc) : "i"(__offsetof(cpu_t, r1)));
             fc |= (fc & 0x0008) ? 0x0002 : 0x0001;
             if (cpu->sr & 0x2000) fc |= 0x0004;
             asm("strh   %0, [sp, #-2]!" :: "r"(fc));

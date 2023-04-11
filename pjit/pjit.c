@@ -79,15 +79,15 @@ __attribute__((used)) const char *buffe_c = "Copyright (c) 2020-2023 Renee Cousi
 
 // save and restore the CPU registers
 INLINE void save_cpu(void) {
-    asm __volatile("str\tr3, [%0,%1]" ::"r"(cpu), "i"(offsetof(cpu_t, d0)));
-    asm __volatile("str\tr4, [%0,%1]" ::"r"(cpu), "i"(offsetof(cpu_t, d1)));
+    asm __volatile("str\tr3, [%0,%1]" ::"r"(cpu), "i"(__offsetof(cpu_t, d0)));
+    asm __volatile("str\tr4, [%0,%1]" ::"r"(cpu), "i"(__offsetof(cpu_t, d1)));
     uint32_t *base = &cpu->a0;
     asm __volatile("stm\t%0!, {r6-r13}" ::"r"(base));
 }
 
 INLINE void restore_cpu(void) {
-    asm __volatile("ldr\tr3, [%0,%1]" ::"r"(cpu), "i"(offsetof(cpu_t, d0)));
-    asm __volatile("ldr\tr4, [%0,%1]" ::"r"(cpu), "i"(offsetof(cpu_t, d1)));
+    asm __volatile("ldr\tr3, [%0,%1]" ::"r"(cpu), "i"(__offsetof(cpu_t, d0)));
+    asm __volatile("ldr\tr4, [%0,%1]" ::"r"(cpu), "i"(__offsetof(cpu_t, d1)));
     uint32_t *base = &cpu->a0;
     asm __volatile("ldm\t%0!, {r6-r13}" ::"r"(base));
 }

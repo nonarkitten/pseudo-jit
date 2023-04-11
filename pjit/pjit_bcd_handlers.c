@@ -53,10 +53,10 @@ static inline uint32_t save_x(uint32_t value) {
     // Set C and Z flagz (do not care about V and N)
     asm volatile("lsls    %0, %1, #24" : "=r"(dump) : "r"(value) : "cc");
     // Convert our C flag into an X flag
-    asm volatile("ldrb    r0, [r5, %0]" :: "i"(1 + offsetof(cpu_t, sr)));
+    asm volatile("ldrb    r0, [r5, %0]" :: "i"(1 + __offsetof(cpu_t, sr)));
     asm volatile("orrcs   r0, r0, #0x10");
     asm volatile("biccc   r0, r0, #0x10");
-    asm volatile("strb    r0, [r5, %0]" :: "i"(1 + offsetof(cpu_t, sr)));
+    asm volatile("strb    r0, [r5, %0]" :: "i"(1 + __offsetof(cpu_t, sr)));
     return value;
 }
 
