@@ -71,6 +71,10 @@ const config_t default_config = {
 cpu_t cpu_state = {0};
 extern void lookup_opcode(void);
 
+uint32_t cache_find_entry(uint32_t m68k) {
+    return 0;
+}
+
 // __attribute__((naked)) static void cache_clear_block(uint32_t* block) {
 //     asm("movw     r1, #0x0002   \n\t" // 0xE2800002 = add r0, r0, #2    
 //         "movt     r1, #0xE280   \n\t"         

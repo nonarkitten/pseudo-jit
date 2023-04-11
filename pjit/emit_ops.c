@@ -2406,23 +2406,43 @@ void emit_opcode_table() {
             // We need to trust that the emitters place the more
             // variable instructions forward to optimize this
             cpu->opcode_table[opcode * 2 + 0] = buffer[0];
-            // Search previous stubs, each stub is prefixed with
-            // a pointer to the previous stub
-            uint32_t* ss = stubs;
+            // Search previous stubs, each stub is writen as such
+            // opcode table      stub table
+            //   op1              prior_stub <--.  (head == 0)
+            //   branch     --->  op2           |
+            //                    op3           |
+            //                    ...           |
+            //                    opn           |
+            //                    pointer ------'  <-- stubs
             uint32_t* from = &cpu->opcode_table[opcode * 2 + 1];
-            while ((ss = (uint32_t*)*ss)) {
-                if (0 == memcmp(&ss[1], &buffer[1], (len - 1) * 4)) break;
-            }
-            if (ss) {
-                // Found duplicate stub
-                cpu->opcode_table[opcode * 2 + 1] = b_imm(calc_offset(from, &ss[1]));
-            } else {
+            // uint32_t* last_stub = &stubs[-1];
+            // uint32_t* to = NULL;
+
+            // while(last_stub > cpu->opcode_stubs) {
+            //     uint32_t* prev_stub = (uint32_t*)*last_stub;
+                
+            //     if(!prev_stub) to = cpu->opcode_stubs;
+            //     else to = &prev_stub[1];
+                
+            //     if (0 == memcmp(to, &buffer[1], (len - 1) * 4)) break;
+            //     else to = NULL;
+
+            //     last_stub = prev_stub;
+            // }
+            // if (to) {
+            //     // Found duplicate stub
+            //     cpu->opcode_table[opcode * 2 + 1] = b_imm(calc_offset(from, &last_stub[1]));
+            // } else {
                 // Create new stub
-                *stubs                            = prior_stub;
-                prior_stub                        = stubs++;
                 cpu->opcode_table[opcode * 2 + 1] = b_imm(calc_offset(from, stubs));
-                memcpy(stubs, &buffer[1], (len - 1) * 4);
-            }
+                memcpy(stubs, &buffer[1], (len - 1) * 4);                
+                stubs += (len - 1);
+                *stubs = prior_stub;
+                prior_stub = stubs;
+                stubs++;
+            // }
         }
     }
+    uint32_t len = (uint32_t)stubs - (uint32_t)cpu->opcode_stubs;
+    printf("[PJIT] Stub table %08X (%d) bytes\n", len, len);
 }

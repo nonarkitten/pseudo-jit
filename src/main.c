@@ -538,8 +538,10 @@ int main(void) {
     InitGPMC((float)MHz); 
 
 	// 3. based on EEPROM settings, initialize PJIT cache and opcode jump tables
+    printf("[BOOT] Initializing cache\n");
 	pjit_cache_init(0xA0000000); // has to come after DDR init, before MMU init
-	// emit_opcode_table();
+    printf("[BOOT] Initializing opcode tables\n");
+	emit_opcode_table();
 
     printf("[BOOT] Image %p ~ %p (%d bytes)\n", &_image_start, &_image_end, (&_image_end - &_image_start));    
     printf("[BOOT] Stack %p ~ %p (%d bytes)\n", &_stack_end, &_stack_top, (&_stack_top - &_stack_end));    
