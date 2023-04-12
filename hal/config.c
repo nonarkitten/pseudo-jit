@@ -128,7 +128,7 @@ void LoadConfigEEPROM(void) {
         uint16_t calc_crc = crc16_ccitt(config, sizeof(config_t) - 8, 0xFFFF);
         if(calc_crc == i2c_config.crc16) {
             printf("[I2C0] Settings loaded, last boot was %s\n", i2c_config.last_boot_good ? "good" : "bad");
-            MakeGoodEEPROM();
+            // MakeGoodEEPROM();
             cpu_state.config = i2c_config;
             return;
         } else {
@@ -303,9 +303,8 @@ void ManageConfig(void) {
     while(option[0] != 'x' && option[0] != 'X') {
         printf("%s",
             "1. Reload config from EEPROM\n"
-            "2. Save 'good boot' config to EEPROM\n"
-            "3. Save 'bad boot' config to EEPROM\n"
-            "4. Display & Change config\n"
+            "2. Save config to EEPROM\n"
+            "3. Display & Change config\n"
             "X. Exit to main menu\n"
             "] "
         );
@@ -314,8 +313,7 @@ void ManageConfig(void) {
         default: break;
         case '1': LoadConfigEEPROM(); break;
         case '2': SaveConfigEEPROM(1); break;
-        case '3': SaveConfigEEPROM(0); break;
-        case '4':
+        case '3':
             while(1) {
                 printf("Config:\n");
                 printf("A.  CPU: %s\n", GetConfigCPU());
@@ -339,7 +337,11 @@ void ManageConfig(void) {
                 printf("    PJIT Cache:\n");
                 printf("N.    Block Size: %d bytes\n", 8 << cpu_state.config.cache_block_bits);
                 printf("O.    Block Count: %d\n", 1 << cpu_state.config.cache_index_bits);
-                printf("      Cache Size: %d bytes\n", 8 << (cpu_state.config.cache_index_bits + cpu_state.config.cache_block_bits));
+                uint32_t cs = 8 << (cpu_state.config.cache_index_bits + cpu_state.config.cache_block_bits);
+                char* suffix = "bytes";
+                if(cs > 1024 & ((cs & 1023)==0)) cs = cs / 1024, suffix = "kB";
+                if(cs > 1024 & ((cs & 1023)==0)) cs = cs / 1024, suffix = "MB";
+                printf("      Cache Size: %d %s\n", cs, suffix);
                 printf("X.  Return to previous menu\n");
                 printf("] ");
                 gets(option);
