@@ -302,3 +302,19 @@ void SPIDump(void) {
     printf("\n");
 }
 
+void ManageSPI(void) {
+    char option[4] = { 0 };
+    while(option[0] != 'x' && option[0] != 'X') {
+        printf("%s",
+            "1. Erase SPI flash\n"
+            "2. Program SPI flash\n"
+            "X. Exit to main menu\n"
+            "] "
+        );
+        gets(option);
+        switch(option[0]) {
+        case '1': if (confirm()) EraseSPI(0, ERASE_ALL); break;
+        case '2': if (confirm()) WriteImage(&_image_start, &_image_end); break;
+        }
+    }
+}

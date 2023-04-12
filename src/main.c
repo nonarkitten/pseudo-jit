@@ -125,9 +125,9 @@ const char* menu =
 "SETUP:\n"
 " J. Jump to PJIT\n"
 " C. Set E Clock Divider\n"
+" S. Manage SPI Flash\n"
+" E. Manage EEPROM Config\n"
 " G. Manage GreenPAK\n"
-" E. Erase SPI flash\n"
-" P. Program SPI flash\n"
 " H. Print help (this)\n"
 " X. Reboot\n";
 
@@ -583,8 +583,8 @@ int main(void) {
         // case 'R': case 'r': if (confirm()) run_mcl68k(0); break;
         case 'C': case 'c': SetEClock(); break;
         case 'G': case 'g': ManageGP(); break;
-        case 'E': case 'e': if (confirm()) EraseSPI(0, ERASE_ALL); break;
-        case 'P': case 'p': if (confirm()) WriteImage(&_image_start, &_image_end); break;
+        case 'E': case 'e': ManageConfig(); break;
+        case 'S': case 's': ManageSPI(); break;
         case 'X': case 'x': if (confirm()) Reset(); break;
 
         default: printf("Unimplemented\n"); // fallthru

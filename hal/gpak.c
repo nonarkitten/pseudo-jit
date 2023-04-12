@@ -148,21 +148,23 @@ static const char* const nvmString[16] = {
 static uint8_t nvmData[256] = { 0 };
 static uint8_t nvmMask[256] = { 0 };
 
-static uint8_t toHex2(char* n) {
+uint32_t toHex2(char* n, int len) {
     static const char TOHEX[32] = {
         0, 10, 11, 12, 13, 14, 15,
         0,  0,  0,  0,  0,  0,  0,  0,  0,
         0,  1,  2,  3,  4,  5,  6,  7,  8,  9,
         0,  0,  0,  0,  0,  0,
     };
-    return (TOHEX[n[0] & 0x1F] << 4) | TOHEX[n[1] & 0x1F];
+    uint32_t value = 0;
+    while(len--) value = (value << 4) | TOHEX[(*n++) & 0x1f];
+    return value; //(TOHEX[n[0] & 0x1F] << 4) | TOHEX[n[1] & 0x1F];
 }
 
 static void InitNvm(void) {
     for (int i = 0; i < 16; i++) {
         for (int b = 0; b < 16; b++) {
-            uint8_t D = toHex2(nvmString[i] + (b << 1));
-            uint8_t M = toHex2(nvmMasks[i] + (b << 1));
+            uint8_t D = toHex2(nvmString[i] + (b << 1), 2);
+            uint8_t M = toHex2(nvmMasks[i] + (b << 1), 2);
             nvmData[(i << 4) + b] = D;
             nvmMask[(i << 4) + b] = M;
         }

@@ -99,7 +99,7 @@ void SaveConfigEEPROM(int boot_good) {
 
     cpu_state.config.is_dirty = 0;
     cpu_state.config.last_boot_good = boot_good;
-    cpu_state.config.crc16 = crc16_ccitt(config, sizeof(config_t) - 6, 0xFFFF);    
+    cpu_state.config.crc16 = crc16_ccitt(config, sizeof(config_t) - 8, 0xFFFF);    
     printf("[I2C0] Saving and verifying settings (CRC=%04X)\n", cpu_state.config.crc16);
     I2C0SendCmd( 0x50, addr, 2, &cpu_state.config, sizeof(config_t));
     WaitMSDMTimer(10);
@@ -125,7 +125,7 @@ void LoadConfigEEPROM(void) {
 
     I2C0ReadCmd( 0x50, addr, 2, &i2c_config, sizeof(config_t));
     if(i2c_config.ident == 0x704A4954) {
-        uint16_t calc_crc = crc16_ccitt(config, sizeof(config_t) - 6, 0xFFFF);
+        uint16_t calc_crc = crc16_ccitt(config, sizeof(config_t) - 8, 0xFFFF);
         if(calc_crc == i2c_config.crc16) {
             printf("[I2C0] Settings loaded, last boot was %s\n", i2c_config.last_boot_good ? "good" : "bad");
             MakeGoodEEPROM();
@@ -151,5 +151,224 @@ int DetectEEPROM(void) {
         printf("[I2C0] Default settings loaded\n");
         cpu_state.config = default_config;
         return 0;
+    }
+}
+
+static const char* GetConfigCPU(void) {
+    if(cpu_state.config.cpu_enable_68000) return "68000";
+    if(cpu_state.config.cpu_enable_68020) {
+        if(cpu_state.config.cpu_enable_32bits) {
+            return (cpu_state.config.cpu_enable_fpu) ? "68020/68882" : "68020";
+        } else {
+            return (cpu_state.config.cpu_enable_fpu) ? "68EC020/68882" : "68EC020";
+        }
+    }
+    if(cpu_state.config.cpu_enable_68030) {
+        if(!cpu_state.config.cpu_enable_mmu) return "68EC030";
+        if(!cpu_state.config.cpu_enable_fpu) return "68030";
+        return "68030/68882";
+    }
+    if(cpu_state.config.cpu_enable_68040) {
+        if(!cpu_state.config.cpu_enable_mmu) return "68EC040";
+        if(!cpu_state.config.cpu_enable_fpu) return "68LC040";
+        return "68040";
+    }
+}
+
+static int streq(const char* l, const char* r) {
+    while(*l && *r) {
+        if(*l != *r) return 0;
+        l++; r++;
+    }
+    return 1;
+}
+
+static void SetConfigCPU(const char* CPU) {
+    if(streq(CPU, "68000")) {
+        cpu_state.config.cpu_enable_68000 = 1;
+        cpu_state.config.cpu_enable_68020 = 0;
+        cpu_state.config.cpu_enable_68030 = 0;
+        cpu_state.config.cpu_enable_68040 = 0;
+        cpu_state.config.cpu_enable_32bits = 0;
+        cpu_state.config.cpu_enable_icache = 0;
+        cpu_state.config.cpu_enable_dcache = 0;
+        cpu_state.config.cpu_enable_fpu = 0;
+        cpu_state.config.cpu_enable_mmu = 0;
+    }
+    if(streq(CPU, "68EC020")) {
+        cpu_state.config.cpu_enable_68000 = 0;
+        cpu_state.config.cpu_enable_68020 = 1;
+        cpu_state.config.cpu_enable_68030 = 0;
+        cpu_state.config.cpu_enable_68040 = 0;
+        cpu_state.config.cpu_enable_32bits = 0;
+        cpu_state.config.cpu_enable_icache = 1;
+        cpu_state.config.cpu_enable_dcache = 0;
+        cpu_state.config.cpu_enable_fpu = streq(&CPU[7], "/68882");
+        cpu_state.config.cpu_enable_mmu = 0;
+    }
+    if(streq(CPU, "68020")) {
+        cpu_state.config.cpu_enable_68000 = 0;
+        cpu_state.config.cpu_enable_68020 = 1;
+        cpu_state.config.cpu_enable_68030 = 0;
+        cpu_state.config.cpu_enable_68040 = 0;
+        cpu_state.config.cpu_enable_32bits = 1;
+        cpu_state.config.cpu_enable_icache = 1;
+        cpu_state.config.cpu_enable_dcache = 0;
+        cpu_state.config.cpu_enable_fpu = streq(&CPU[7], "/68882");
+        cpu_state.config.cpu_enable_mmu = 0;
+    }
+    if(streq(CPU, "68EC030")) {
+        cpu_state.config.cpu_enable_68000 = 0;
+        cpu_state.config.cpu_enable_68020 = 0;
+        cpu_state.config.cpu_enable_68030 = 1;
+        cpu_state.config.cpu_enable_68040 = 0;
+        cpu_state.config.cpu_enable_32bits = 1;
+        cpu_state.config.cpu_enable_icache = 1;
+        cpu_state.config.cpu_enable_dcache = 1;
+        cpu_state.config.cpu_enable_fpu = streq(&CPU[7], "/68882");
+        cpu_state.config.cpu_enable_mmu = 0;
+    }
+    if(streq(CPU, "68030")) {
+        cpu_state.config.cpu_enable_68000 = 0;
+        cpu_state.config.cpu_enable_68020 = 0;
+        cpu_state.config.cpu_enable_68030 = 1;
+        cpu_state.config.cpu_enable_68040 = 0;
+        cpu_state.config.cpu_enable_32bits = 1;
+        cpu_state.config.cpu_enable_icache = 1;
+        cpu_state.config.cpu_enable_dcache = 1;
+        cpu_state.config.cpu_enable_fpu = streq(&CPU[7], "/68882");
+        cpu_state.config.cpu_enable_mmu = 1;
+    }
+    if(streq(CPU, "68EC040")) {
+        cpu_state.config.cpu_enable_68000 = 0;
+        cpu_state.config.cpu_enable_68020 = 0;
+        cpu_state.config.cpu_enable_68030 = 0;
+        cpu_state.config.cpu_enable_68040 = 1;
+        cpu_state.config.cpu_enable_32bits = 1;
+        cpu_state.config.cpu_enable_icache = 1;
+        cpu_state.config.cpu_enable_dcache = 1;
+        cpu_state.config.cpu_enable_fpu = 0;
+        cpu_state.config.cpu_enable_mmu = 0;
+    }
+    if(streq(CPU, "68LC030")) {
+        cpu_state.config.cpu_enable_68000 = 0;
+        cpu_state.config.cpu_enable_68020 = 0;
+        cpu_state.config.cpu_enable_68030 = 0;
+        cpu_state.config.cpu_enable_68040 = 1;
+        cpu_state.config.cpu_enable_32bits = 1;
+        cpu_state.config.cpu_enable_icache = 1;
+        cpu_state.config.cpu_enable_dcache = 1;
+        cpu_state.config.cpu_enable_fpu = 0;
+        cpu_state.config.cpu_enable_mmu = 1;
+    }
+    if(streq(CPU, "68030")) {
+        cpu_state.config.cpu_enable_68000 = 0;
+        cpu_state.config.cpu_enable_68020 = 0;
+        cpu_state.config.cpu_enable_68030 = 0;
+        cpu_state.config.cpu_enable_68040 = 1;
+        cpu_state.config.cpu_enable_32bits = 1;
+        cpu_state.config.cpu_enable_icache = 1;
+        cpu_state.config.cpu_enable_dcache = 1;
+        cpu_state.config.cpu_enable_fpu = 1;
+        cpu_state.config.cpu_enable_mmu = 1;
+    }
+}
+
+int toupper(int c) { 
+    if(c < 'a' || c > 'z') return c;
+    else return c - 'a' + 'A';
+}
+double strtod(const char* in, char** out) {
+    int v = 0;
+    int d = 0;
+    int div = 1;
+    int c;
+
+    while(c = *in++) {
+        if(c == 0) break;
+        else if(c == '.') { d = 1; continue; }
+        else if(c >= '0' && c <= '9') {
+            v = (v * 10) + (c - '0');
+            if(d) div *= 10;
+        }
+        else break;
+    }
+
+    return (double)v / (double)div;
+}
+
+extern uint32_t toHex2(char* n, int len);
+void ManageConfig(void) {
+    char option[12] = { 0 };
+    while(option[0] != 'x' && option[0] != 'X') {
+        printf("%s",
+            "1. Reload config from EEPROM\n"
+            "2. Save 'good boot' config to EEPROM\n"
+            "3. Save 'bad boot' config to EEPROM\n"
+            "4. Display & Change config\n"
+            "X. Exit to main menu\n"
+            "] "
+        );
+        gets(option);
+        switch(option[0]) {
+        default: break;
+        case '1': LoadConfigEEPROM(); break;
+        case '2': SaveConfigEEPROM(1); break;
+        case '3': SaveConfigEEPROM(0); break;
+        case '4':
+            while(1) {
+                printf("Config:\n");
+                printf("A.  CPU: %s\n", GetConfigCPU());
+                printf("B.  Clock: %0.3f MHz\n", cpu_state.config.kHz * 0.001);
+                printf("C.  I$: %s\n", cpu_state.config.cpu_enable_icache ? "Enabled" : "Disabled");
+                printf("D.  I$ Mask: %04X\n", cpu_state.config.icache_mask_24b);
+                printf("E.  D$: %s\n", cpu_state.config.cpu_enable_dcache ? "Enabled" : "Disabled");
+                printf("F.  D$ Mask: %04X\n", cpu_state.config.dcache_mask_24b);
+                printf("G.  MAPROM %s\n", cpu_state.config.maprom_page != 0xFF ? "Enabled" : "Disabled");
+                if(cpu_state.config.maprom_page != 0xFF) {
+                    uint32_t page = (cpu_state.config.maprom_page & 0xF8) << 16;
+                    printf("    %06X~%06X\n", page, (page | 0x7FFFF));
+                }
+                printf("    POST:\n");
+                printf("H.    Long Mem Test %s\n", cpu_state.config.post_enable_long_mem ? "Enabled" : "Disabled");
+                printf("I.    GreenPAK Test %s\n", cpu_state.config.post_enable_gpack_ok ? "Enabled" : "Disabled");
+                printf("J.    Bus Clock Test %s\n", cpu_state.config.post_enable_checkclk ? "Enabled" : "Disabled");
+                printf("K.    Automap %s\n", cpu_state.config.post_enable_autommap ? "Enabled" : "Disabled");
+                printf("L.  MCU CLK: %d\n" , cpu_state.config.dpll_mul);
+                printf("M.  PMIC Voltage: %0.2f\n" , cpu_state.config.pmic_voltage * 0.01);
+                printf("    PJIT Cache:\n");
+                printf("N.    Block Size: %d bytes\n", 8 << cpu_state.config.cache_block_bits);
+                printf("O.    Block Count: %d\n", 1 << cpu_state.config.cache_index_bits);
+                printf("      Cache Size: %d bytes\n", 8 << (cpu_state.config.cache_index_bits + cpu_state.config.cache_block_bits));
+                printf("X.  Return to previous menu\n");
+                printf("] ");
+                gets(option);
+                uint8_t choice = toupper(option[0]);
+                if(choice == 'X') { option[0] = '?'; break; }
+
+                printf("New value? ");
+                gets(option);
+                option[0] = toupper(option[0]);
+
+                switch(choice) {
+                case 'A': SetConfigCPU(option); break;
+                case 'B': cpu_state.config.kHz = (int)(1000.0 * strtod(option, NULL)); break;
+                case 'C': cpu_state.config.cpu_enable_icache = option[0] == 'E'; break;
+                case 'D': cpu_state.config.icache_mask_24b = toHex2(option, 4); break;
+                case 'E': cpu_state.config.cpu_enable_dcache = option[0] == 'E'; break;
+                case 'F': cpu_state.config.dcache_mask_24b = toHex2(option, 4); break;
+                case 'G': cpu_state.config.maprom_page = toHex2(option, 2); break;
+                case 'H': cpu_state.config.post_enable_long_mem = option[0] == 'E'; break;
+                case 'I': cpu_state.config.post_enable_gpack_ok = option[0] == 'E'; break;
+                case 'J': cpu_state.config.post_enable_checkclk = option[0] == 'E'; break;
+                case 'K': cpu_state.config.post_enable_autommap = option[0] == 'E'; break;
+                case 'L': cpu_state.config.dpll_mul = (int)strtod(option, NULL); break;
+                case 'M': cpu_state.config.pmic_voltage = (int)(100.0 * strtod(option, NULL)); break;
+                case 'N': cpu_state.config.cache_block_bits = toHex2(option, 1); break;
+                case 'O': cpu_state.config.cache_index_bits = toHex2(option, 1); break;
+                }
+            } ;
+            break;
+        }
     }
 }

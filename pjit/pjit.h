@@ -186,8 +186,6 @@ typedef struct {
     uint16_t dcache_mask_24b;  // 1 to allow data caching of region
     uint16_t icache_mask_24b;  // 1 to allow instruction caching
 
-    uint8_t last_boot_good;
-
     // PJIT SECTION
 
     // Cache size = 8 << (cache_index_bits + cache_block_bits)
@@ -201,6 +199,7 @@ typedef struct {
     uint16_t kHz;
 
     //
+    uint8_t last_boot_good;
     uint8_t is_dirty;
 
 } config_t;
