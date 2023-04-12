@@ -100,7 +100,7 @@ void SaveConfigEEPROM(int boot_good) {
     cpu_state.config.is_dirty = 0;
     cpu_state.config.last_boot_good = boot_good;
     cpu_state.config.crc16 = crc16_ccitt(config, sizeof(config_t) - 6, 0xFFFF);    
-    printf("[I2C0] Saving and verifying settings\n");
+    printf("[I2C0] Saving and verifying settings (CRC=%04X)\n", cpu_state.config.crc16);
     I2C0SendCmd( 0x50, addr, 2, &cpu_state.config, sizeof(config_t));
     WaitMSDMTimer(10);
     I2C0ReadCmd( 0x50, addr, 2, &i2c_config, sizeof(config_t));
@@ -118,9 +118,9 @@ void MakeGoodEEPROM(void) {
 }
 
 void LoadConfigEEPROM(void) {
+    static config_t i2c_config;
+    const uint8_t* config = 6 + (uint8_t*)&i2c_config;
     uint8_t addr[2] = { 0 };
-    const uint8_t* config = 6 + (uint8_t*)&cpu_state.config;
-    config_t i2c_config;
 	int err = 0;
 
     I2C0ReadCmd( 0x50, addr, 2, &i2c_config, sizeof(config_t));
@@ -132,13 +132,14 @@ void LoadConfigEEPROM(void) {
             cpu_state.config = i2c_config;
             return;
         } else {
-            printf("[I2C0] CRC fail, default settings loaded\n");
+            printf("[I2C0] CRC fail, %04X != %04X\n", calc_crc, i2c_config.crc16);
         }
     } else {
-        printf("[I2C0] Ident wrong, default settings loaded\n");
+        printf("[I2C0] Ident wrong, 0x704A4954 != 0x%08X\n", i2c_config.ident);
     }
     cpu_state.config = default_config;
     cpu_state.config.is_dirty = 1;
+    printf("[I2C0] Default settings loaded\n");
 }
 
 int DetectEEPROM(void) {

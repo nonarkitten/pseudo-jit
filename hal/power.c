@@ -129,7 +129,7 @@ int InitPower(PowerRail_t rail, double voltage) {
 }
 
 int DetectPMIC(void) {
-    if(I2C0Probe(0x24)) {
+    if(I2C0Probe(0x24) && cpu_state.config.last_boot_good) {
         if(InitPower(RAIL_DCDC2, cpu_state.config.pmic_voltage * 0.01)) {
             InitMPUPLL(cpu_state.config.dpll_mul);
             return 1;
