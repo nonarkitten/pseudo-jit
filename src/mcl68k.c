@@ -144,6 +144,7 @@ uint32_t  original_mc68k_pc;
 uint32_t  memory_base;
 
 void Exception_Handler(uint16_t exception_type);
+extern uint16_t GetIPLx(void);
 
 #include "mem_be.h"
 
@@ -158,7 +159,7 @@ uint8_t (*ReadByte)(uint32_t address);
 uint32_t IORD_32DIRECT(uint32_t base_address , uint32_t reg_address) {
     if      (reg_address==BIU_REG_PFQ_EMPTY    )   { return 0x0; }      // PFQ always has data (not empty)
     else if (reg_address==BIU_REG_STATUS       )   { return 0x0; }
-    else if (reg_address==BIU_REG_INTERRUPTS   )   { return 0xFF; }
+    else if (reg_address==BIU_REG_INTERRUPTS   )   { return GetIPLx(); }
     else if (reg_address==BIU_REG_DONE         )   { return 0x1; }      // always return "Done"
     else if (reg_address==BIU_REG_FAIL_TYPE    )   { return 0x0; }
     else if (reg_address==BIU_REG_PFQ_TOP      )   { return ReadWord(memory_base + mc68k_pc); }
