@@ -168,6 +168,23 @@ static uint32_t printRegisterValue(int port, const char *text, uint32_t addr) {
     return a;
 }
 
+static void write_LE_word(uint32_t address, uint16_t data) {
+    if(address < 0x02000000) *(uint16_t*)address = data;
+    else write_BE_word(address, data);
+}
+static uint16_t read_LE_word(uint32_t address) {
+    if(address < 0x02000000) return *(uint16_t*)address;
+    else return read_BE_word(address);
+}
+static void write_LE_byte(uint32_t address, uint8_t data) {
+    if(address < 0x02000000) *(uint8_t*)(address ^ 1) = data;
+    else write_BE_byte(address, data);
+}
+static uint8_t read_LE_byte(uint32_t address) {
+    if(address < 0x02000000) return *(uint8_t*)(address ^ 1);
+    else return read_BE_byte(address);
+}
+
 static void DebugBoot(void) {
     uint32_t reg_val;
     uint32_t boot_sequence;
@@ -582,11 +599,30 @@ int main(void) {
             /* SETUP */
         case 'J': case 'j': if (confirm()) JumpPJIT(); break;
         case 'R': case 'r': {
+            extern void (*WriteWord)(uint32_t address, uint16_t data);
+            extern uint16_t (*ReadWord)(uint32_t address);
+            extern void (*WriteByte)(uint32_t address, uint8_t data);
+            extern uint8_t (*ReadByte)(uint32_t address);          
             extern uint8_t tiny_BASIC[];
+
             printf("Run a) tinyBASIC or b) baremetal? ");
             gets(option);
-            if(option[0] == 'a' || option[0] == 'A') run_mcl68k(tiny_BASIC);
-            else if(option[0] == 'b' || option[0] == 'B') run_mcl68k(0);
+            bool run_tb = (option[0] == 'a' || option[0] == 'A');
+            printf("Do you have the Katra (byte swapper) board [y/N]? ");
+            gets(option);
+            if (option[0] == 'y' || option[0] == 'Y') {
+                WriteWord = write_BE_word;
+                ReadWord = read_BE_word;
+                WriteByte = write_BE_byte;
+                ReadByte = read_BE_byte;
+            } else {
+                WriteWord = write_LE_word;
+                ReadWord =  read_LE_word ;
+                WriteByte = write_LE_byte;
+                ReadByte =  read_LE_byte ;
+            }
+            if (run_tb) run_mcl68k(tiny_BASIC);
+            else run_mcl68k(0);
             break;
         }
         case 'C': case 'c': SetEClock(); break;

@@ -147,6 +147,11 @@ void Exception_Handler(uint16_t exception_type);
 
 #include "mem_be.h"
 
+void (*WriteWord)(uint32_t address, uint16_t data);
+uint16_t (*ReadWord)(uint32_t address);
+void (*WriteByte)(uint32_t address, uint8_t data);
+uint8_t (*ReadByte)(uint32_t address);
+
 // Bus Interface Unit - BIU
 // ----------------------------------------------------------------------
 // ----------------------------------------------------------------------
@@ -156,7 +161,7 @@ uint32_t IORD_32DIRECT(uint32_t base_address , uint32_t reg_address) {
     else if (reg_address==BIU_REG_INTERRUPTS   )   { return 0xFF; }
     else if (reg_address==BIU_REG_DONE         )   { return 0x1; }      // always return "Done"
     else if (reg_address==BIU_REG_FAIL_TYPE    )   { return 0x0; }
-    else if (reg_address==BIU_REG_PFQ_TOP      )   { return read_BE_word(memory_base + mc68k_pc); }
+    else if (reg_address==BIU_REG_PFQ_TOP      )   { return ReadWord(memory_base + mc68k_pc); }
     else if (reg_address==BIU_REG_DATAIN       )   { return  biu_read_data; }
     else if (reg_address==BIU_REG_BUS_ERROR    )   { return  0x0; }
     return 0;
@@ -177,14 +182,14 @@ void IOWR_32DIRECT(uint32_t base_address , uint32_t reg_address , uint32_t write
     else if (write_data==0x2) {
       if      (biu_size==8 && biu_address==0x22) { biu_read_data = UART0Ready() ? 0xFF : 0x00; }  // UART Receive character
       else if (biu_size==8 && biu_address==0x23) { biu_read_data = UART0Read(); }                 // UART Receive character
-      else if (biu_size==8) { biu_read_data=read_BE_byte(memory_base + biu_address); }                                   // command: execute BIU Read Cycle - Byte
-      else if (biu_size==16) { biu_read_data=read_BE_word(memory_base + biu_address); }        // command: execute BIU Read Cycle - Word
+      else if (biu_size==8) { biu_read_data=ReadByte(memory_base + biu_address); }                                   // command: execute BIU Read Cycle - Byte
+      else if (biu_size==16) { biu_read_data=ReadWord(memory_base + biu_address); }        // command: execute BIU Read Cycle - Word
     }
     // Write Operations
     else if (write_data==0x1) {
       if      (biu_size==8 && biu_address==0x21) { UART0Write(biu_dataout); }                     // UART Transmit character
-      else if (biu_size==8) { write_BE_byte(memory_base + biu_address, biu_dataout); }                                     // command: BIU Write Data - Byte
-      else if (biu_size==16) { write_BE_word(memory_base + biu_address, biu_dataout); } // command: BIU Write Data - Word
+      else if (biu_size==8) { WriteByte(memory_base + biu_address, biu_dataout); }                                     // command: BIU Write Data - Byte
+      else if (biu_size==16) { WriteWord(memory_base + biu_address, biu_dataout); } // command: BIU Write Data - Word
     }
   }
 }
