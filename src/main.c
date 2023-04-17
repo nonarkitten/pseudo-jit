@@ -125,6 +125,7 @@ const char* menu =
 "SETUP:\n"
 " J. Jump to PJIT\n"
 " C. Set E Clock Divider\n"
+" R. Run MCL68K\n"
 " S. Manage SPI Flash\n"
 " E. Manage EEPROM Config\n"
 " G. Manage GreenPAK\n"
@@ -580,7 +581,14 @@ int main(void) {
 
             /* SETUP */
         case 'J': case 'j': if (confirm()) JumpPJIT(); break;
-        // case 'R': case 'r': if (confirm()) run_mcl68k(0); break;
+        case 'R': case 'r': {
+            extern uint8_t tiny_BASIC[];
+            printf("Run a) tinyBASIC or b) baremetal? ");
+            gets(option);
+            if(option[0] == 'a' || option[0] == 'A') run_mcl68k(tiny_BASIC);
+            else if(option[0] == 'b' || option[0] == 'B') run_mcl68k(0);
+            break;
+        }
         case 'C': case 'c': SetEClock(); break;
         case 'G': case 'g': ManageGP(); break;
         case 'E': case 'e': ManageConfig(); break;
