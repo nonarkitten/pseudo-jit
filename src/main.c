@@ -185,6 +185,39 @@ static uint8_t read_LE_byte(uint32_t address) {
     else return read_BE_byte(address);
 }
 
+static void startMCL68k(void) {        
+    extern void (*WriteWord)(uint32_t address, uint16_t data);
+    extern uint16_t (*ReadWord)(uint32_t address);
+    extern void (*WriteByte)(uint32_t address, uint8_t data);
+    extern uint8_t (*ReadByte)(uint32_t address);       
+    extern const int tiny_BASIC_size;   
+    extern uint8_t tiny_BASIC[];
+    char option[4] = { 0 };
+
+    printf("Run a) tinyBASIC or b) baremetal? ");
+    gets(option);
+    bool run_tb = (option[0] == 'a' || option[0] == 'A');
+    printf("Do you have the Katra (byte swapper) board [y/N]? ");
+    gets(option);
+    if (option[0] == 'y' || option[0] == 'Y') {
+        WriteWord = write_BE_word;
+        ReadWord = read_BE_word;
+        WriteByte = write_BE_byte;
+        ReadByte = read_BE_byte;
+    } else {
+        WriteWord = write_LE_word;
+        ReadWord =  read_LE_word ;
+        WriteByte = write_LE_byte;
+        ReadByte =  read_LE_byte ;
+    }
+    if (run_tb) {
+        memcpy((void*)0x80000000, tiny_BASIC, tiny_BASIC_size);
+        run_mcl68k(0x80000000);
+    } else {
+        run_mcl68k(0);
+    }
+}
+
 static void DebugBoot(void) {
     uint32_t reg_val;
     uint32_t boot_sequence;
@@ -598,33 +631,7 @@ int main(void) {
 
             /* SETUP */
         case 'J': case 'j': if (confirm()) JumpPJIT(); break;
-        case 'R': case 'r': {
-            extern void (*WriteWord)(uint32_t address, uint16_t data);
-            extern uint16_t (*ReadWord)(uint32_t address);
-            extern void (*WriteByte)(uint32_t address, uint8_t data);
-            extern uint8_t (*ReadByte)(uint32_t address);          
-            extern uint8_t tiny_BASIC[];
-
-            printf("Run a) tinyBASIC or b) baremetal? ");
-            gets(option);
-            bool run_tb = (option[0] == 'a' || option[0] == 'A');
-            printf("Do you have the Katra (byte swapper) board [y/N]? ");
-            gets(option);
-            if (option[0] == 'y' || option[0] == 'Y') {
-                WriteWord = write_BE_word;
-                ReadWord = read_BE_word;
-                WriteByte = write_BE_byte;
-                ReadByte = read_BE_byte;
-            } else {
-                WriteWord = write_LE_word;
-                ReadWord =  read_LE_word ;
-                WriteByte = write_LE_byte;
-                ReadByte =  read_LE_byte ;
-            }
-            if (run_tb) run_mcl68k(tiny_BASIC);
-            else run_mcl68k(0);
-            break;
-        }
+        case 'R': case 'r': startMCL68k(); break;
         case 'C': case 'c': SetEClock(); break;
         case 'G': case 'g': ManageGP(); break;
         case 'E': case 'e': ManageConfig(); break;
