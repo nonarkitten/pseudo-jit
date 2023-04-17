@@ -27,10 +27,10 @@ endif
 # Compiler optimizations
 ifeq ($(BUILD),release)
 # Optimize for release and raise the bar for errors
-CCFLAGS_OPT := -Os -ffast-math -Werror -s
+CCFLAGS_OPT := -O3 -ffast-math -Werror -s
 else
 # Optimize for debugging, but include basic optimizers for not-terrible-code
-CCFLAGS_OPT := -Og -g3 -ggdb -D_DEBUG
+CCFLAGS_OPT := -Og -g3 -ggdb -ftree-vectorize -D_DEBUG
 endif
 
 # Set noisey output

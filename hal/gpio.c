@@ -54,8 +54,8 @@ uint16_t GetIPLx(void) {
     GPIO2_OE->BIT.OUTPUTEN7 = 1;
     GPIO2_OE->BIT.OUTPUTEN8 = 1;
     asm volatile("nop");
-    if((GPIO2_DATAIN->BIT.DATAIN6)) sr |= 0x0400;
-    if((GPIO2_DATAIN->BIT.DATAIN7)) sr |= 0x0200;
-    if((GPIO2_DATAIN->BIT.DATAIN8)) sr |= 0x0100;
+    if(!(GPIO2_DATAIN->BIT.DATAIN6)) sr |= 0x0400;
+    if(!(GPIO2_DATAIN->BIT.DATAIN7)) sr |= 0x0200;
+    if(!(GPIO2_DATAIN->BIT.DATAIN8)) sr |= 0x0100;
     return sr;
 }
