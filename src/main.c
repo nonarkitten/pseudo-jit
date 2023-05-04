@@ -604,16 +604,24 @@ int main(void) {
     if(!cpu_state.config.cpu_enable_icache) {
         CP15ICacheFlush();
 		CP15ICacheDisable();
-	}
+        printf("[BOOT] ICache disabled\n");
+	} else {
+        printf("[BOOT] ICache enabled\n");
+    }
 	
     if(!cpu_state.config.cpu_enable_dcache) {
         CP15DCacheFlush();
         CP15DCacheDisable();
         if(!cpu_state.config.cpu_enable_icache) {
             CP15AuxControlFeatureDisable(0x02);
+            printf("[BOOT] DCache & L2 Cache disabled\n");
+        } else {
+            printf("[BOOT] DCache disabled\n");
         }
-	}    
-
+	} else {
+            printf("[BOOT] DCache & L2 Cache enabled\n");
+    }
+    
     ReleaseReset();
 
     printf("[BOOT] Completed in %0.5f seconds\n", ReadDMTimerSeconds());

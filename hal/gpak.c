@@ -85,68 +85,52 @@ static uint8_t gpak_read_reg(uint8_t addr, uint8_t reg) {
     return data[0];
 }
 
-// Mask determines all the settable (not reserved) bits
-//                      ↓↓ 0 1 2 3 4 5 6 7 8 9 a b c d e f
-static const char nvmMask0[] =  "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF";
-static const char nvmMask1[] =  "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF";
-static const char nvmMask2[] =  "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF";
-static const char nvmMask3[] =  "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF";
-static const char nvmMask4[] =  "FFFFFFFFFFFFFFFF0000000000000000";
-static const char nvmMask5[] =  "00000000000000000000000000000000";
-static const char nvmMask6[] =  "03FF7F00FFFF7F7F1E1EFEFE7F007F7F";
-static const char nvmMask7[] =  "7F7F7F7FFFFFFFFFFFFFFFFFFFFFFFFF";
-static const char nvmMask8[] =  "FFFFFF7E7F00000C130000FFFF380800";
-static const char nvmMask9[] =  "FFFFFFFFFFFFFFFFFFFFFF7FFF7F0000";
-static const char nvmMask10[] = "FFFFFFFFE7FFFFFFFFFFFFFFFFFF6FFF";
-static const char nvmMask11[] = "FEFFFFFFFFFFFF6BFFFEFFFFFFFFFFFF";
-static const char nvmMask12[] = "6BFFFFFFFF03FFFF06FFFFFF00000000";
-static const char nvmMask13[] = "00000000000000000000000000000000";
-static const char nvmMask14[] = "00000000000000000000000000000000";
-static const char nvmMask15[] = "00000000000000000000000000000000";
-//                      ↑↑ 0 1 2 3 4 5 6 7 8 9 a b c d e f
-
-static const char* const nvmMasks[16] = {
-    nvmMask0,  nvmMask1,  nvmMask2,  nvmMask3,
-    nvmMask4,  nvmMask5,  nvmMask6,  nvmMask7,
-    nvmMask8,  nvmMask9,  nvmMask10, nvmMask11,
-    nvmMask12, nvmMask13, nvmMask14, nvmMask15
-};
-
 // Slave Address for GreenPAK
 #define SLAVE_ADDRESS 1
 #define NVM_CONFIG 0x02
 #define NVM_BYTES  240
 
-// Store nvmData in to save on RAM
-static const char nvmString0[] = "1D702007C200CAC2240B030000000000";
-static const char nvmString1[] = "000000000000D0384600000D00000000";
-static const char nvmString2[] = "00000000000000000000000000000000";
-static const char nvmString3[] = "000000D23F3DD00F00D1090000000000";
-static const char nvmString4[] = "00000000000000000000000000000000";
-static const char nvmString5[] = "00000000000000000000000000000000";
-static const char nvmString6[] = "00010000808000010000808000000000";
-static const char nvmString7[] = "00000001000000000000000000000000";
-static const char nvmString8[] = "00010000001422300C00000000000000";
-static const char nvmString9[] = "DAE50000EAEAAAAA0000000000000000";
-static const char nvmString10[] = "00FFEF20000100020000010000020001";
-static const char nvmString11[] = "00000201000002000100000201000002";
-static const char nvmString12[] = "00010000020001000000020100000000";
-static const char nvmString13[] = "00000000000000000000000000000000";
-////                               ↓↓ 0 1 2 3 4 5 6 7 8 9 a b c d e f
-static const char nvmString14[] = "00000000000000000000000000000000";
-////                               ↑↑ 0 1 2 3 4 5 6 7 8 9 a b c d e f
-static const char nvmString15[] = "000000000000000000000000000000A5";
-
-static const char* const nvmString[16] = {
-    nvmString0,  nvmString1,  nvmString2,  nvmString3,
-    nvmString4,  nvmString5,  nvmString6,  nvmString7,
-    nvmString8,  nvmString9,  nvmString10, nvmString11,
-    nvmString12, nvmString13, nvmString14, nvmString15
+static uint8_t nvmData[256] = { 
+        0x14, 0x70, 0x20, 0x07, 0xC2, 0x00, 0xCA, 0xC2, 0x24, 0x0B, 0xD3, 0x00, 0x80, 0x05, 0x00, 0x0E, 
+        0x00, 0x60, 0x00, 0x50, 0x01, 0x00, 0xD0, 0xA4, 0x46, 0x90, 0x02, 0xC0, 0x05, 0x00, 0x00, 0x00, 
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+        0x00, 0x00, 0x00, 0xD2, 0x3F, 0x9D, 0xD0, 0x0F, 0x00, 0xD1, 0x09, 0x00, 0x00, 0x00, 0x00, 0x00, 
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+        0x00, 0x01, 0x00, 0x00, 0x80, 0x80, 0x00, 0x01, 0x00, 0x00, 0x80, 0x80, 0x00, 0x00, 0x00, 0x00, 
+        0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+        0x00, 0x01, 0x00, 0x00, 0x00, 0x14, 0x22, 0x30, 0x0C, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+        0xDA, 0xE5, 0x00, 0x00, 0xEA, 0xEA, 0xAA, 0xAA, 0xAA, 0xAA, 0x00, 0x00, 0xAA, 0x00, 0x00, 0x00, 
+        0x00, 0xFF, 0xEF, 0x20, 0x00, 0x01, 0x00, 0x00, 0xAA, 0x02, 0x01, 0x00, 0xAA, 0x02, 0x00, 0x01, 
+        0x00, 0x00, 0x02, 0x01, 0x00, 0x00, 0x02, 0x00, 0x01, 0x00, 0x00, 0x02, 0x01, 0x00, 0x00, 0x02, 
+        0x00, 0x01, 0x00, 0x00, 0x02, 0x00, 0x01, 0x00, 0x00, 0x00, 0x02, 0x01, 0x00, 0x00, 0x00, 0x00, 
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xA5, 
 };
 
+// Mask determines all the settable (not reserved) bits
+static const uint8_t nvmMask[256] = {
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, // 0x17 don't care
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 
 
-static uint8_t nvmData[256] = { 0 };
-static uint8_t nvmMask[256] = { 0 };
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+        0x03, 0xFF, 0x7F, 0x00, 0xFF, 0xFF, 0x7F, 0x7F, 0x1E, 0x1E, 0xFE, 0xFE, 0x7F, 0x00, 0x7F, 0x7F, 
+        0x7F, 0x7F, 0x7F, 0x7F, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 
+
+        0xFF, 0xFF, 0xFF, 0x7E, 0x7F, 0x00, 0x00, 0x0C, 0x13, 0x00, 0x00, 0xFF, 0xFF, 0x38, 0x08, 0x00, 
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x7F, 0xFF, 0x7F, 0x00, 0x00, // 0x9C don't care
+        0xFF, 0xFF, 0xFF, 0xFF, 0xE7, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x6F, 0xFF, 
+        0xFE, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x6B, 0xFF, 0xFE, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 
+
+        0x6B, 0xFF, 0xFF, 0xFF, 0xFF, 0x03, 0xFF, 0xFF, 0x06, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+};
 
 uint32_t toHex2(char* n, int len) {
     static const char TOHEX[32] = {
@@ -161,25 +145,9 @@ uint32_t toHex2(char* n, int len) {
 }
 
 static void InitNvm(void) {
-    for (int i = 0; i < 16; i++) {
-        for (int b = 0; b < 16; b++) {
-            uint8_t D = toHex2(nvmString[i] + (b << 1), 2);
-            uint8_t M = toHex2(nvmMasks[i] + (b << 1), 2);
-            nvmData[(i << 4) + b] = D;
-            nvmMask[(i << 4) + b] = M;
-        }
-    }
-
-    // nvmData[0xCA] = SLAVE_ADDRESS;
-    // gpak_init(0, SLAVE_ADDRESS);  
 }
 
-typedef enum {
-    GP_BLANK,
-    GP_GOOD,
-    GP_BAD,
-} GreenPAK_State_t;
-
+typedef enum { GP_BLANK, GP_GOOD, GP_BAD } GreenPAK_State_t;
 const char* GP_State[] = { "blank", "good", "bad" };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -220,8 +188,7 @@ static int GetAddr(const char* prompt) {
     else return -1;
 }
 
-static void EraseChip(int dump) {
-    int addr = GetAddr("");
+static void EraseChip(int dump, int addr) {
     if(addr == -1) return;
     printf("[I2C0] Erasing GreenPAK...\n");
     for (int page = 0; page < 16; page++) {
@@ -233,8 +200,7 @@ static void EraseChip(int dump) {
     printf("[I2C0] GreenPAK %s\n", GP_State[ReadChip(dump, 0)]);
 }
 
-static void ProgramChip(int dump) {
-    int addr = GetAddr("new ");
+static void ProgramChip(int dump, int addr) {
     if(addr == -1) return;
     nvmData[0xCA] = addr;
     printf("[I2C0] Programming GreenPAK...\n");
@@ -257,6 +223,67 @@ static void ProbeI2C(void) {
     printf("\n");
 }
 
+// 0x60 104ns
+// 0x5C 117ns
+// 0xA4 138ns
+// 0xA0 155ns
+uint8_t current_dtack_delay;
+
+static void GetGPTiming(int addr) {
+    extern int core_pll;
+    static volatile uint8_t t1;
+    volatile int ns1 = 0;
+    volatile float ratio;
+
+    if(addr < 0) {
+        t1 = nvmData[0x17];
+    } else {
+        if(!I2C0Probe(addr << 3)) return 0.0;
+        gpak_read(addr, 0x17, &t1, 1);
+    }
+
+    if(t1 == 0x60) ns1 = 104; else
+    if(t1 == 0x5C) ns1 = 117; else
+    if(t1 == 0xA4) ns1 = 138; else
+    if(t1 == 0xA0) ns1 = 155;
+
+    if(ns1) {
+        current_dtack_delay = ns1;
+
+        printf("[I2C0] GreenPAK Timing tuned to %0.3f~%0.3fMHz\n",
+            (float)core_pll / (ns1 + 15),
+            (float)core_pll / (ns1 - 15)
+            );
+    } else {
+        printf("[I2C0] GreenPAK has bad timing\n");
+    }
+}
+
+static void _SetGPTiming(float mhz) {
+    extern int core_pll;
+    float ns = (float)core_pll / mhz;
+    char t1;
+
+    if(ns > 146.5) t1 = 0xA0; else
+    if(ns > 127.5) t1 = 0xA4; else
+    if(ns > 110.5) t1 = 0x5C; else
+                   t1 = 0x60;
+
+    nvmData[0x17] = t1;
+
+    GetGPTiming(-1);
+}
+
+static void SetGPTiming(void) {
+    char mhz_buffer[8] = { 0 };
+
+    printf("[CLK7] Main bus clock measured at %0.3fMHz\n", cpu_state.config.kHz * 0.001);
+    printf("Enter new bus time (MHz): ");
+    gets(mhz_buffer);
+
+    _SetGPTiming(strtod(mhz_buffer, NULL));
+} 
+
 void ManageGP(void) {
     char option[4] = { 0 };
     while(option[0] != 'x' && option[0] != 'X') {
@@ -265,6 +292,8 @@ void ManageGP(void) {
             "2. Erase GreenPAK\n"
             "3. Program GreenPAK\n"
             "4. Scan I2C Bus\n"
+            "5. Get GreenPAK Bus Timing\n"
+            "6. Set GreenPAK Bus Timing\n"
             "X. Exit to main menu\n"
             "] "
         );
@@ -272,9 +301,11 @@ void ManageGP(void) {
         switch(option[0]) {
         // case '1': if(confirm()) SetGreenPAKAddr(); break;
         case '1': printf("[I2C0] GreenPAK %s\n", GP_State[ReadChip(1, GetAddr(""))]); break;
-        case '2': EraseChip(1); break;
-        case '3': ProgramChip(1); break;
+        case '2': EraseChip(1, GetAddr("")); break;
+        case '3': ProgramChip(1, GetAddr("new ")); break;
         case '4': ProbeI2C(); break;
+        case '5': GetGPTiming(GetAddr("")); break;
+        case '6': SetGPTiming(); break;
         }
     }
 }
@@ -291,7 +322,15 @@ int DetectGP(void) {
                 gpak_read_reg(i, 0xE1), // NVM Configuration Protection Bits
                 gpak_read_reg(i, 0xE4)  // Protection Lock Bit
                 );  
-                printf("[I2C0] GreenPAK %s\n", GP_State[ReadChip(0, i)]);
+                GreenPAK_State_t s = ReadChip(0, i);
+                printf("[I2C0] GreenPAK %s\n", GP_State[s]);
+                if(s == GP_GOOD) {
+                    GetGPTiming(i);                    
+                } else if(s == GP_BAD) {
+                    EraseChip(0, 1);
+                    _SetGPTiming(cpu_state.config.kHz * 0.001);
+                    ProgramChip(0, 1);
+                }
                 return;
             }
             break;
@@ -299,6 +338,8 @@ int DetectGP(void) {
     }
     if(I2C0Probe(0)) {
         printf("[I2C0] Blank GreenPAK Detected ($00~$03)\n");
+        _SetGPTiming(cpu_state.config.kHz * 0.001);
+        ProgramChip(0, 1);        
     } else {
         printf("[I2C0] GreenPAK Not Detected\n");
     }

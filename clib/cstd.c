@@ -215,3 +215,27 @@ int atoi(const char *c) {
     }
     if(s) return -u; else return u;
 }
+
+int toupper(int c) { 
+    if(c < 'a' || c > 'z') return c;
+    else return c - 'a' + 'A';
+}
+
+double strtod(const char* in, char** out) {
+    int v = 0;
+    int d = 0;
+    int div = 1;
+    int c;
+
+    while(c = *in++) {
+        if(c == 0) break;
+        else if(c == '.') { d = 1; continue; }
+        else if(c >= '0' && c <= '9') {
+            v = (v * 10) + (c - '0');
+            if(d) div *= 10;
+        }
+        else break;
+    }
+
+    return (double)v / (double)div;
+}

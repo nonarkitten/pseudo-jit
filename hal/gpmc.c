@@ -353,11 +353,12 @@ static void SetGPMCTiming(Timing_t *t) {
     // PrintTiming(&default_timing);
 }
 
+int core_pll;
 void InitGPMC(float bus_clock) {
     int cycle_time = 200.0f / bus_clock; // always round down here
 
-    int core_pll = 0.5f + (1000.0f * bus_clock) / (200.0f / (float)cycle_time);
-    if(core_pll < 1000) {
+    core_pll = 0.5f + (1000.0f * bus_clock) / (200.0f / (float)cycle_time);
+    if(core_pll > 1000) {
         InitCorePLL(core_pll);
         printf("[GPMC] Trimming Core PLL to: %d\n", core_pll);
     }
@@ -694,22 +695,22 @@ void TestGPMC(void) {
             #define TEST_LEN 200
 
             uint16_t buffer[TEST_LEN] = { 0 };
-            for(i=0; i<TEST_LEN ; i++) {
-                write_BE_word(131072 + i * 2, 0x0000);
-                write_BE_word(131072 + i * 2, 0xFFFF);
-            }
+            // for(i=0; i<TEST_LEN ; i++) {
+            //     write_BE_word(131072 + i * 2, 0x0000);
+            //     write_BE_word(131072 + i * 2, 0xFFFF);
+            // }
 
             errors = 0;
 
             for(i=0; i<TEST_LEN ; i++) {
-                write_BE_word(131072 + i * 2, 0x0101 * (i & 0xFF));
+                // write_BE_word(131072 + i * 2, 0x0101 * (i & 0xFF));
                 volatile uint16_t data[3] = { 0 };
                 buffer[i] = read_BE_word(131072 + i * 2);
             }
 
             for(i=0; i<TEST_LEN; i++) {
                 bool match = buffer[i] == (0x0101 * (i & 0xFF));
-                if((i & 7) == 0) printf("\n[GMPC] $%08lX:", 131072 + i);
+                if((i & 7) == 0) printf("\n[GMPC] $%08lX:", 131072 + i * 2);
                 printf(" %04hx%c", buffer[i], match ? ' ' : '*');
                 if(!match) errors++;
             }
