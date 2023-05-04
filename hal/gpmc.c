@@ -331,7 +331,7 @@ static void SetGPMCTiming(Timing_t *t) {
         /* CONFIG1 */
                     | WAITPINMONITORING_RW
                     | WAITPINSEL_WAIT0
-                    | WAITMONITORTIME_2CLKS 
+                    | WAITMONITORTIME_1CLKS 
                     | DEVICESIZE_16b 
                     | TIMEPARAGRANULARITY_x2
                     ,
@@ -360,39 +360,32 @@ int core_pll = 1000;
 void InitGPMC(float bus_clock) {
     int cycle_time = 200.0f / bus_clock; // always round down here
 
-    int _pll = 0.5f + (1000.0f * bus_clock) / (200.0f / (float)cycle_time);
-    if(_pll > 1000) _pll = 1000;
-    if(_pll != core_pll) {
-        InitCorePLL(core_pll);
-        printf("[GPMC] Trimming Core PLL to: %d\n", core_pll);
-        core_pll = _pll;
-    }
+    // int _pll = 0.5f + (1000.0f * bus_clock) / (200.0f / (float)cycle_time);
+    // if(_pll > 1000) _pll = 1000;
+    // if(_pll != core_pll) {
+    //     core_pll = _pll;
+    //     printf("[GPMC] Trimming Core PLL to: %d\n", core_pll);
+    //     InitCorePLL(core_pll);
+    // }
 
-    int state[8], extra[8];
-
-    for(int i=0; i<8; i++) {
-        int mid_point = (int)(cycle_time * (i + 0.5f) / 4.0f);
-        state[i] = mid_point / 2;
-        extra[i] = mid_point & 1;
-    }
 
     // Total Cycle Time
     default_timing.CYCLETIME  = cycle_time;
 
     // Point at which data should be valid
-    default_timing.ACCESSTIME   = state[6] - 1;
+    default_timing.ACCESSTIME   = (22 * cycle_time + 13) /27;
 
     // Address Strobe
-    default_timing.CSONTIME   = state[2] - 1;
-    default_timing.CSOFFTIME  = state[7];
+    default_timing.CSONTIME   = (8 * cycle_time + 13) /27;
+    default_timing.CSOFFTIME  = (23 * cycle_time + 13) /27;
 
     // Read Cycle
-    default_timing.OEONTIME     = state[2] - 2;
-    default_timing.OEOFFTIME    = state[7];
+    default_timing.OEONTIME     = (6 * cycle_time + 13) /27;
+    default_timing.OEOFFTIME    = (22 * cycle_time + 13) /27;
 
     // Write Cycle
-    default_timing.WEONTIME     = state[4] - 1;
-    default_timing.WEOFFTIME    = state[7];
+    default_timing.WEONTIME     = (6 * cycle_time + 13) /27;
+    default_timing.WEOFFTIME    = (22 * cycle_time + 13) /27;
 
     current_timing = default_timing;
 
