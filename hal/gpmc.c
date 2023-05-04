@@ -102,6 +102,8 @@ void GPMCInit(void) {
     GPMC_TIMEOUT_CONTROL->LONG = 0;
     /* wait polarity */
     GPMC_CONFIG->BIT.WAIT0PINPOLARITY = 1;
+    /* disable idle */
+    GPMC_SYSCONFIG->BIT.SIDLEMODE = 1;
 
     /*
      * Disable the GPMC0 config set by ROM code
@@ -329,7 +331,7 @@ static void SetGPMCTiming(Timing_t *t) {
         /* CONFIG1 */
                     | WAITPINMONITORING_RW
                     | WAITPINSEL_WAIT0
-                    | WAITMONITORTIME_0CLKS 
+                    | WAITMONITORTIME_2CLKS 
                     | DEVICESIZE_16b 
                     | TIMEPARAGRANULARITY_x2
                     ,
@@ -353,15 +355,19 @@ static void SetGPMCTiming(Timing_t *t) {
     // PrintTiming(&default_timing);
 }
 
-int core_pll;
+int core_pll = 1000;
+
 void InitGPMC(float bus_clock) {
     int cycle_time = 200.0f / bus_clock; // always round down here
 
-    core_pll = 0.5f + (1000.0f * bus_clock) / (200.0f / (float)cycle_time);
-    if(core_pll > 1000) {
+    int _pll = 0.5f + (1000.0f * bus_clock) / (200.0f / (float)cycle_time);
+    if(_pll > 1000) _pll = 1000;
+    if(_pll != core_pll) {
         InitCorePLL(core_pll);
         printf("[GPMC] Trimming Core PLL to: %d\n", core_pll);
+        core_pll = _pll;
     }
+
     int state[8], extra[8];
 
     for(int i=0; i<8; i++) {
@@ -374,19 +380,19 @@ void InitGPMC(float bus_clock) {
     default_timing.CYCLETIME  = cycle_time;
 
     // Point at which data should be valid
-    default_timing.ACCESSTIME   = 5 + (cycle_time * 6) / 8;
+    default_timing.ACCESSTIME   = state[6] - 1;
 
     // Address Strobe
-    default_timing.CSONTIME   = state[1] - 2;
+    default_timing.CSONTIME   = state[2] - 1;
     default_timing.CSOFFTIME  = state[7];
 
     // Read Cycle
-    default_timing.OEONTIME     = 0;
-    default_timing.OEOFFTIME    = state[7] + 1;
+    default_timing.OEONTIME     = state[2] - 2;
+    default_timing.OEOFFTIME    = state[7];
 
     // Write Cycle
-    default_timing.WEONTIME     = state[1];
-    default_timing.WEOFFTIME    = state[7] + 1;
+    default_timing.WEONTIME     = state[4] - 1;
+    default_timing.WEOFFTIME    = state[7];
 
     current_timing = default_timing;
 
@@ -417,7 +423,7 @@ static void ChangeGPMCTiming(void) {
     PrintTiming(&t);
 
     printf("[GPMC] Cycle Time: %d\n", t.CYCLETIME);
-    printf("[GPMC] Access Time: %d\n", default_timing.ACCESSTIME);
+    printf("[GPMC] Access Time: %d\n", t.ACCESSTIME);
     printf("[GPMC] nCS Timing (ON/OFF): %d/%d\n", t.CSONTIME, t.CSOFFTIME);
     printf("[GPMC] nRE Timing (ON/OFF): %d/%d\n", t.OEONTIME, t.OEOFFTIME);
     printf("[GPMC] nWE Timing (ON/OFF): %d/%d\n", t.WEONTIME, t.WEOFFTIME);
@@ -691,23 +697,17 @@ void TestGPMC(void) {
             }
 
             volatile int errors = 1;
-            printf("[GPMC] Performing RAM test");
-            #define TEST_LEN 200
 
+            #define TEST_LEN 64
             uint16_t buffer[TEST_LEN] = { 0 };
-            // for(i=0; i<TEST_LEN ; i++) {
-            //     write_BE_word(131072 + i * 2, 0x0000);
-            //     write_BE_word(131072 + i * 2, 0xFFFF);
-            // }
-
             errors = 0;
 
+            printf("[GPMC] Performing RAM test, pass 1");
             for(i=0; i<TEST_LEN ; i++) {
-                // write_BE_word(131072 + i * 2, 0x0101 * (i & 0xFF));
-                volatile uint16_t data[3] = { 0 };
+                write_BE_word(131072 + i * 2, 0x0101 * (i & 0xFF));
+                asm("nop");
                 buffer[i] = read_BE_word(131072 + i * 2);
             }
-
             for(i=0; i<TEST_LEN; i++) {
                 bool match = buffer[i] == (0x0101 * (i & 0xFF));
                 if((i & 7) == 0) printf("\n[GMPC] $%08lX:", 131072 + i * 2);
@@ -716,7 +716,48 @@ void TestGPMC(void) {
             }
 
             if((i & 7) == 0) printf("\n");
-            printf("[GPMC] Test %sed, %d errors, %0.1f%%\n",  (errors == 0) ? "pass" : "fail", errors, (100.0f * errors) / TEST_LEN);
+            printf("[GPMC] Performing RAM test, pass 2 (re-read pass 1)");
+            for(i=0; i<TEST_LEN ; i++) {
+                buffer[i] = read_BE_word(131072 + i * 2);
+            }
+            for(i=0; i<TEST_LEN; i++) {
+                bool match = buffer[i] == (0x0101 * (i & 0xFF));
+                if((i & 7) == 0) printf("\n[GMPC] $%08lX:", 131072 + i * 2);
+                printf(" %04hx%c", buffer[i], match ? ' ' : '*');
+                if(!match) errors++;
+            }
+
+            if((i & 7) == 0) printf("\n");
+            printf("[GPMC] Performing RAM test, pass 3 (clear, two-pass)");
+            for(i=0; i<TEST_LEN ; i++) {
+                write_BE_word(131072 + i * 2, 0x0000);
+            }
+            for(i=0; i<TEST_LEN ; i++) {
+                buffer[i] = read_BE_word(131072 + i * 2);
+            }
+            for(i=0; i<TEST_LEN; i++) {
+                bool match = buffer[i] == 0;
+                if((i & 7) == 0) printf("\n[GMPC] $%08lX:", 131072 + i * 2);
+                printf(" %04hx%c", buffer[i], match ? ' ' : '*');
+                if(!match) errors++;
+            }
+
+            if((i & 7) == 0) printf("\n");
+            printf("[GPMC] Performing RAM test, pass 4 (fill, one-pass)");
+            for(i=0; i<TEST_LEN ; i++) {
+                write_BE_word(131072 + i * 2, 0xFFFF);
+                asm("nop");
+                buffer[i] = read_BE_word(131072 + i * 2);
+            }
+            for(i=0; i<TEST_LEN; i++) {
+                bool match = buffer[i] == 0xFFFF;
+                if((i & 7) == 0) printf("\n[GMPC] $%08lX:", 131072 + i * 2);
+                printf(" %04hx%c", buffer[i], match ? ' ' : '*');
+                if(!match) errors++;
+            }
+
+            if((i & 7) == 0) printf("\n");
+            printf("[GPMC] Test %sed, %d errors, %0.1f%%\n",  (errors == 0) ? "pass" : "fail", errors, (33.333f * errors) / TEST_LEN);
             allpassed &= (errors == 0);
         }
 
