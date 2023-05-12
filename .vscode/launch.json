@@ -12,6 +12,7 @@
             "request": "launch",
             "type": "cortex-debug",
             "overrideLaunchCommands": [
+                "set logging enabled off",
                 "monitor reset halt",
                 "load",
                 "monitor reset halt",
