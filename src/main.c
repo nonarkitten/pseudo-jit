@@ -528,6 +528,18 @@ static void DebugBoot(void) {
     // if (reg_val & 1<<31 ) {printf("  * Bit 31 : Reserved\n");}
 }
 
+/*  JUST PUTTING THIS HERE FOR NOW
+
+    SHOULD MOVE TO GPIO
+
+    pr1_pru0_pru_r31_3   PRU0     C12       B1        BBB_BR				I*	MCASP0_AHCLKR    Device is requesting the bus when low
+    pr1_pru0_pru_r30_5   PRU0     C13       B3        BBB_BG				O	MCASP0_FSR       Assert BG when access is complete (how?)
+    pr1_pru0_pru_r31_1   PRU0     B13       A2        BBB_BGACK				I*	MCASP0_FSX       
+    pr1_pru0_pru_r30_12  PRU0     G17       B15       GPIO_SUPE           		MMC0_CLK         Indicates the CPU processor state (User/Supervisor)
+    pr1_pru0_pru_r30_13  PRU0     G18       B16       GPIO_IACK           		MMC0_CMD         Overrides the FCx pins during an IACK
+    pr1_pru0_pru_r31_2   PRU0     D12       B2        BBB_RESET				I*	MCASP0_AXR0      Reset is used primarily during boot
+*/
+
 int main(void) {
     char option[4] = "?";
     double t1, t2;

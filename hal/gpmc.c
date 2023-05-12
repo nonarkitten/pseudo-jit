@@ -78,7 +78,7 @@ static const pin_muxing_t m68k_pin_mux[] = {
 	//	{ PINMUX_CONF_GPMC_NCS5,     (PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_nCS5     */
 	//	{ PINMUX_CONF_GPMC_NCS6,     (PIN_CFG_IEN  | PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_nCS6     */
 	//	{ PINMUX_CONF_GPMC_NCS7,     (PIN_CFG_IEN  | PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_nCS7     */
-	//	{ PINMUX_CONF_GPMC_CLK,      (PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_CLK      */
+		{ PINMUX_CONF_GPMC_CLK,      (PIN_CFG_INEN | PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_CLK      */
 	//	{ PINMUX_CONF_GPMC_WAIT1,    (PIN_CFG_IEN  | PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_WAIT1    */
 	//	{ PINMUX_CONF_GPMC_WAIT2,    (PIN_CFG_IEN  | PIN_CFG_PDIS | M4) }, /* GPIO_64       */
 	//	{ PINMUX_CONF_GPMC_WAIT3,    (PIN_CFG_IEN  | PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_WAIT3    */
@@ -103,6 +103,7 @@ void GPMCInit(void) {
     /* wait polarity */
     GPMC_CONFIG->BIT.WAIT0PINPOLARITY = 1;
     /* disable idle */
+    
     GPMC_SYSCONFIG->BIT.SIDLEMODE = 1;
 
     /*
@@ -322,17 +323,17 @@ static void SetGPMCTiming(Timing_t *t) {
     uint32_t WEEXTRATIME = 0;
     uint32_t CSEXTRATIME = 0;
 
-    uint32_t ADVWROFFTIME = 0;
-    uint32_t ADVRDOFFTIME = 0;
+    uint32_t ADVWROFFTIME = t->CYCLETIME - 1;
+    uint32_t ADVRDOFFTIME = t->CYCLETIME - 1;
     uint32_t ADVEXTRATIME = 0;
-    uint32_t ADVONTIME = 0;
+    uint32_t ADVONTIME = 1;
 
     uint32_t gpmc_config[] = { 0
         /* CONFIG1 */
                     | WAITPINMONITORING_RW
                     | WAITPINSEL_WAIT0
                     | WAITMONITORTIME_1CLKS 
-                    | DEVICESIZE_16b 
+                    | DEVICESIZE_16b
                     | TIMEPARAGRANULARITY_x2
                     ,
         /* CONFIG2 */ (t->CSOFFTIME  << 16) | (t->CSOFFTIME  <<  8) | (CSEXTRATIME << 7)  | (t->CSONTIME  <<  0),
@@ -519,7 +520,7 @@ void TestGPMC(void) {
 
             printf("[GPMC] Read words (LE:BE)");
 
-            (void)*(volatile uint16_t*)0xD00000;
+            // (void)*(volatile uint16_t*)0xD00000;
 
             if(enableRAM) {
                 enableRAM = false;

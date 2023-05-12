@@ -12,6 +12,8 @@
 #include "pjit.h"
 #include "gpak.h"
 
+extern int core_pll;
+
 #define PAGE_LIMIT 0x0E
 #define PAGE_DELAY 100
 
@@ -91,19 +93,19 @@ static uint8_t gpak_read_reg(uint8_t addr, uint8_t reg) {
 #define NVM_BYTES  240
 
 static uint8_t nvmData[256] = { 
-        0x14, 0x70, 0x20, 0x07, 0x02, 0x00, 0x8A, 0xC8, 0x24, 0x22, 0xD3, 0x00, 0x80, 0x05, 0x00, 0x0E, 
-        0x00, 0x60, 0x00, 0x50, 0x01, 0x00, 0xD0, 0x60, 0x46, 0x90, 0x02, 0xC0, 0x05, 0x00, 0x00, 0xB0, 
-        0x00, 0xC0, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
-        0x00, 0x00, 0x00, 0xD2, 0x3F, 0x9D, 0xE3, 0x0F, 0x00, 0xD1, 0x09, 0x00, 0x00, 0x00, 0x00, 0x00, 
+        0x57, 0x80, 0x01, 0x93, 0xA1, 0x01, 0xCE, 0xF3, 0x3B, 0xD4, 0x3F, 0x55, 0x86, 0x33, 0xFE, 0xC0, 
+        0x81, 0x04, 0x00, 0x20, 0xFD, 0x0E, 0x00, 0x00, 0x00, 0x00, 0x4C, 0x0C, 0x00, 0x00, 0x53, 0xB4, 
+        0x4C, 0xCD, 0xB2, 0x42, 0xCA, 0x0A, 0x25, 0xC0, 0x81, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+        0x00, 0x00, 0x00, 0xEC, 0xDF, 0x5A, 0xEA, 0x0F, 0x00, 0x2E, 0x0A, 0x00, 0x00, 0x00, 0x00, 0x00, 
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
-        0x00, 0x01, 0x00, 0x00, 0x80, 0x80, 0x00, 0x01, 0x00, 0x00, 0x80, 0x80, 0x00, 0x00, 0x00, 0x00, 
-        0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+        0x00, 0x00, 0x00, 0x00, 0x80, 0x80, 0x00, 0x01, 0x00, 0x00, 0x80, 0x80, 0x00, 0x00, 0x00, 0x00, 
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
         0x00, 0x01, 0x00, 0x00, 0x00, 0x14, 0x22, 0x30, 0x0C, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
-        0xDA, 0xE0, 0x00, 0x00, 0xEA, 0xEA, 0xAA, 0xAA, 0xAA, 0xAA, 0x00, 0x00, 0xAA, 0x00, 0x00, 0x00, 
-        0x00, 0xFF, 0xEF, 0x20, 0x00, 0x01, 0x00, 0x00, 0xAA, 0x02, 0x01, 0x00, 0xAA, 0x02, 0x00, 0x01, 
-        0x02, 0x00, 0x10, 0x01, 0x10, 0x00, 0x20, 0x00, 0x01, 0x00, 0x00, 0x02, 0x01, 0x00, 0x00, 0x02, 
-        0x00, 0x01, 0x00, 0x00, 0x02, 0x00, 0x01, 0x00, 0x00, 0x00, 0x02, 0x01, 0x00, 0x00, 0x00, 0x00, 
+        0x06, 0x55, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xAA, 0x70, 0x01, 0x21, 0x02, 0x00, 0x00, 
+        0x00, 0x00, 0x00, 0x20, 0x00, 0x01, 0x00, 0x00, 0xFE, 0x02, 0x01, 0x00, 0x00, 0x02, 0x00, 0x01, 
+        0x08, 0x30, 0x02, 0x01, 0x60, 0xAC, 0xA2, 0x00, 0x01, 0x08, 0x30, 0x02, 0x01, 0x00, 0x30, 0x02, 
+        0x04, 0x01, 0x00, 0x00, 0x02, 0x00, 0x01, 0x00, 0x00, 0x00, 0x02, 0x01, 0x00, 0x00, 0x00, 0x00, 
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xA5, 
@@ -122,7 +124,7 @@ static const uint8_t nvmMask[256] = {
         0x7F, 0x7F, 0x7F, 0x7F, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 
 
         0xFF, 0xFF, 0xFF, 0x7E, 0x7F, 0x00, 0x00, 0x0C, 0x13, 0x00, 0x00, 0xFF, 0xFF, 0x38, 0x08, 0x00, 
-        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x7F, 0xFF, 0x7F, 0x00, 0x00, // 0x9C don't care
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x7F, 0x00, 0x7F, 0x00, 0x00, // 0x9C don't care
         0xFF, 0xFF, 0xFF, 0xFF, 0xE7, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x6F, 0xFF, 
         0xFE, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x6B, 0xFF, 0xFE, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 
 
@@ -223,66 +225,140 @@ static void ProbeI2C(void) {
     printf("\n");
 }
 
-// 0x60 104ns
-// 0x5C 117ns
-// 0xA4 138ns
-// 0xA0 155ns
+#if 0
 uint8_t current_dtack_delay;
+uint8_t current_rw_delay;
+uint8_t current_ds_delay;
 
-static void GetGPTiming(int addr) {
-    extern int core_pll;
-    static volatile uint8_t t1;
-    volatile int ns1 = 0;
+/* GreenPAK Timing
+** ____                 _________
+**     |_______________|           Original ASn from GPMC
+** _______             :   ______
+**        |____________:__|        Delayed ASn (internal)
+**        :            :           
+**        :            :           Should equal one full clock at bus speed
+**        :            :           For example, at 7.15MHz, thats ~140ns
+** _______:            :_________
+**        |____________|           DTACK or E WAIT "Window"
+**                                 
+**                                  Cycle  Register
+**                                   ~ns     0x17
+**                                 -------   ----
+**                                  67-79    0x94
+**                                  81-93    0x54
+**                                  96-108   0x58
+**                                 110-122   0x50
+**                                 127-139   0x5C
+**                                 143-155   0xA0
+**                                 162-174   0xA4
+**                                 181-193   0xA8
+**                                 
+** ____                 _________
+**     |_______________|           Original WEn from GPMC
+**      :               :
+**      :               :          About 15ns Skew
+** _____:               :      ___
+**      |_______________: --> |    RW from PD OUT0 in 20ns steps
+**      :               :          Register 0x9C lower nibble
+** _____:               :________
+**      : --> |_________|          DS from PD OUT1 in 20ns steps
+**                                 Register 0x9C upper nibble
+*/
+
+static void GetGPTiming(int addr, int quiet) {
+    static volatile uint8_t t1, t2;
+    volatile int ns1 = 0, ns2 = 0, ns3 = 0;
     volatile float ratio;
 
     if(addr < 0) {
         t1 = nvmData[0x17];
+        t2 = nvmData[0x9C];
     } else {
         if(!I2C0Probe(addr << 3)) return 0.0;
-        gpak_read(addr, 0x17, &t1, 1);
+        t1 = gpak_read_reg(addr, 0x17);
+        t2 = gpak_read_reg(addr, 0x9C);
     }
 
-    if(t1 == 0x60) ns1 = 104; else
-    if(t1 == 0x5C) ns1 = 117; else
-    if(t1 == 0xA4) ns1 = 138; else
-    if(t1 == 0xA0) ns1 = 155;
+    if(t1 == 0x94) ns1 = 73; else
+    if(t1 == 0x54) ns1 = 86; else
+    if(t1 == 0x58) ns1 = 102; else
+    if(t1 == 0x50) ns1 = 116; else
+    if(t1 == 0x5C) ns1 = 133; else
+    if(t1 == 0xA0) ns1 = 149; else
+    if(t1 == 0xA4) ns1 = 168; else
+    if(t1 == 0xA8) ns1 = 187; else {
+        printf("[I2C0] Unknown timing.\n");
+        return;
+    }
 
-    if(ns1) {
-        current_dtack_delay = ns1;
+    ns2 = (1 + (t2 & 0xF)) * 20 + 15;
+    ns3 = (1 + (t2 >> 4)) * 20 + 15;
 
-        printf("[I2C0] GreenPAK Timing tuned to %0.3f~%0.3fMHz\n",
-            (float)core_pll / (ns1 + 15),
-            (float)core_pll / (ns1 - 15)
+    current_dtack_delay = ns1;
+    current_rw_delay = ns2;
+    current_ds_delay = ns3;
+
+    if(!quiet) {
+        printf("[I2C0] GreenPAK DTACK Timing tuned to %0.3f~%0.3fMHz (%d ns)\n",
+            (float)core_pll / (ns1 + 10),
+            (float)core_pll / (ns1 - 10),
+            current_dtack_delay
             );
-    } else {
-        printf("[I2C0] GreenPAK has bad timing\n");
+        printf("[I2C0] GreenPAK RW Delay %d ns\n", current_rw_delay);
+        printf("[I2C0] GreenPAK DS Delay %d ns\n", current_ds_delay);
     }
 }
 
-static void _SetGPTiming(float mhz) {
-    extern int core_pll;
+static void SaveGPTiming(int addr, float mhz, float rw, float ds) {
     float ns = (float)core_pll / mhz;
-    char t1;
+    uint8_t t1, t2;
 
-    if(ns > 146.5) t1 = 0xA0; else
-    if(ns > 127.5) t1 = 0xA4; else
-    if(ns > 110.5) t1 = 0x5C; else
-                   t1 = 0x60;
+    if(ns <  80.0f) t1 = 0x94; else
+    if(ns <  94.5f) t1 = 0x54; else
+    if(ns < 109.0f) t1 = 0x58; else
+    if(ns < 124.5f) t1 = 0x50; else
+    if(ns < 141.0f) t1 = 0x5C; else
+    if(ns < 158.5f) t1 = 0xA0; else
+    if(ns < 177.5f) t1 = 0xA4; else
+                    t1 = 0xA8;
+
+    rw = (rw - 15.0f) / 20.0f - 0.5;
+    if(rw > 15) t2 = 0x0F; else t2 = (int)rw;
+
+    ds = (ds - 15.0f) / 20.0f - 0.5;
+    if(ds > 15) t2 |= 0xF0; else t2 |= ((int)ds) << 4;
 
     nvmData[0x17] = t1;
-
-    GetGPTiming(-1);
+    nvmData[0x9C] = t2;
+    if(addr >= 0) {
+        gpak_write_reg(addr, 0x17, t1);
+        gpak_write_reg(addr, 0x9C, t2);
+    }
 }
 
-static void SetGPTiming(void) {
-    char mhz_buffer[8] = { 0 };
+static void SetGPTiming(int addr) {
+    char buffer[8] = { 0 };
+    float mhz, rw, ds;
 
-    printf("[CLK7] Main bus clock measured at %0.3fMHz\n", cpu_state.config.kHz * 0.001);
-    printf("Enter new bus time (MHz): ");
-    gets(mhz_buffer);
+    GetGPTiming(addr, 1);
 
-    _SetGPTiming(strtod(mhz_buffer, NULL));
+    mhz = (float)core_pll / (float)current_dtack_delay;
+    printf("[CLK7] Measured bus time %0.3fMHz\n", cpu_state.config.kHz * 0.001);
+    printf("       Enter new bus time (%0.3fMHz): ", mhz);
+    gets(buffer);
+    if(buffer[0]) mhz = strtod(buffer, NULL);
+
+    printf("       Enter RW delay (%dns): ", current_rw_delay);
+    gets(buffer);
+    rw = buffer[0] ? strtod(buffer, NULL) : current_rw_delay;
+
+    printf("       Enter DS delay (%dns): ", current_ds_delay);
+    gets(buffer);
+    ds = buffer[0] ? strtod(buffer, NULL) : current_ds_delay;
+
+    SaveGPTiming(addr, mhz, rw, ds);
 } 
+#endif
 
 void ManageGP(void) {
     char option[4] = { 0 };
@@ -292,8 +368,8 @@ void ManageGP(void) {
             "2. Erase GreenPAK\n"
             "3. Program GreenPAK\n"
             "4. Scan I2C Bus\n"
-            "5. Get GreenPAK Bus Timing\n"
-            "6. Set GreenPAK Bus Timing\n"
+            // "5. Get GreenPAK Bus Timing\n"
+            // "6. Set GreenPAK Bus Timing\n"
             "X. Exit to main menu\n"
             "] "
         );
@@ -304,8 +380,8 @@ void ManageGP(void) {
         case '2': EraseChip(1, GetAddr("")); break;
         case '3': ProgramChip(1, GetAddr("new ")); break;
         case '4': ProbeI2C(); break;
-        case '5': GetGPTiming(GetAddr("")); break;
-        case '6': SetGPTiming(); break;
+        // case '5': GetGPTiming(GetAddr(""), 0); break;
+        // case '6': SetGPTiming(GetAddr("")); break;
         }
     }
 }
@@ -325,11 +401,13 @@ int DetectGP(void) {
                 GreenPAK_State_t s = ReadChip(0, i);
                 printf("[I2C0] GreenPAK %s\n", GP_State[s]);
                 if(s == GP_GOOD) {
-                    GetGPTiming(i);                    
+                    // GetGPTiming(i, 0);                    
                 } else if(s == GP_BAD) {
                     EraseChip(0, 1);
-                    _SetGPTiming(cpu_state.config.kHz * 0.001);
+                    // float ns = (float)core_pll / (cpu_state.config.kHz * 0.001f);
+                    // SaveGPTiming(-1, cpu_state.config.kHz * 0.001, ns * 0.5, ns);
                     ProgramChip(0, 1);
+                    // GetGPTiming(1, 0);
                 }
                 return;
             }
@@ -338,8 +416,10 @@ int DetectGP(void) {
     }
     if(I2C0Probe(0)) {
         printf("[I2C0] Blank GreenPAK Detected ($00~$03)\n");
-        _SetGPTiming(cpu_state.config.kHz * 0.001);
+        // float ns = (float)core_pll / (cpu_state.config.kHz * 0.001f);
+        // SaveGPTiming(-1, cpu_state.config.kHz * 0.001, ns * 0.5, ns);
         ProgramChip(0, 1);        
+        // GetGPTiming(1, 0);
     } else {
         printf("[I2C0] GreenPAK Not Detected\n");
     }
