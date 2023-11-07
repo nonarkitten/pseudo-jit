@@ -1,7 +1,8 @@
 # All critical output, source folders
 OUTDIR  := binaries
 BINARY  := pjit.elf
-SRCDIRS := . clib/ hal/ pjit/ src/
+TESTBIN := testpjit
+SRCDIRS := . clib/ hal/ pjit/ src/ test/
 CROSS   := arm-none-eabi-
 
 # CPU type and common options
@@ -16,7 +17,9 @@ CCFLAGS_WARN := \
 	-Wall -Wshadow -Wdouble-promotion -Wformat-overflow -Wformat-truncation \
 	-Wundef -Wno-unused-parameter -Wno-discarded-qualifiers
 
-ifeq ($(MAKECMDGOALS),clean)
+ifeq ($(MAKECMDGOALS),test)
+BUILD := test
+else ifeq ($(MAKECMDGOALS),clean)
 BUILD := *
 else ifdef RELEASE
 BUILD := release
@@ -54,7 +57,11 @@ RM := $(QUIET)rm -rf
 RD := $(QUIET)rmdir
 MD := $(QUIET)mkdir -p
 
+ifeq ($(BUILD),test)
+OUTPUT := $(OUTDIR)/$(BUILD)/$(TESTBIN)
+else
 OUTPUT := $(OUTDIR)/$(BUILD)/$(BINARY)
+endif
 OBJDIR := $(OUTDIR)/$(BUILD)/obj
 
 BINARY  := $(patsubst %.elf,%.bin,$(OUTPUT))
@@ -65,8 +72,15 @@ LDFLAGS := -static -ffreestanding -T linker.lds \
 	-Wl,--gc-sections \
 	-Wl,--Map=$(MAPFILE)
 
+LINUX_LDFLAGS := 
+
 INCLUDES := -I./inc $(addprefix -I./,$(SRCDIRS))
 SOURCES := $(foreach dir,$(SRCDIRS),$(wildcard $(dir)/*.c) $(wildcard $(dir)/*.s))
+ifeq ($(BUILD),test)
+SOURCE += testmain.c
+else
+SOURCE +=  pru/main.c bootmain.c
+endif
 OBJECTS := $(addprefix $(OBJDIR)/,$(addsuffix .o,$(basename $(foreach file,$(SOURCES),$(notdir $(file))))))
 
 VPATH := $(SRCDIRS)
@@ -93,9 +107,9 @@ premake:
 	$(MD) $(OBJDIR)
 	@make -C pru -f pru.mk
 
-$(OUTPUT): $(OBJECTS) pru/main.c
+$(OUTPUT): $(OBJECTS)
 	@echo Building PJIT Bootloader...
-	$(CC) $(CFLAGS) $(LDFLAGS) $(OBJECTS) -o $@
+	$(CC) $(CFLAGS) $(ARM_LDFLAGS) $(OBJECTS) -o $@
 	$(DI) $@ > $(DISFILE) &
 	$(OC) -O binary $@ $(BINARY)
 	$(SZ) $@
