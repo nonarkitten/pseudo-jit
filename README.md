@@ -41,6 +41,28 @@ I've included my .vscode/launch.json in the project which should "just work," as
 
 To build, open the shell and type "make." I'm not 100% this works on Windows anymore, but it should on Linux and Mac. This is now a one-step make that will build everything required and spit out the binary at the end.
 
+## Testing PJIT
+
+### Testing on Linux
+
+PJIT uses ARM assembly and as such may not be suitable for to test on every platform -- looking at you AMD64! While these will run on real 32-bit ARM systems okay, we'll have to allow running of ARM assemblies on AMD64. This is done as follows:
+
+`$ sudo apt-get install gcc-arm-linux-gnueabihf libc6-dev-armhf-cross qemu-user-static`
+
+The compile and run the test versions:
+
+`$ make tests`
+
+Note that the tests run as part of the make. The may take some time to complete, depending on the power of your system. Tests will include an exhaustive opcode verifier as well as a SysInfo run (which is only really useful if you're running on native hardware).
+
+### Testing on MacOS
+
+That there is presently no good solution for MacOS since it lacks this feature. I would recommend for development to install VMWare Fusion for MacOS and then use a common shared folder. You can even enable SSH on the Linux instance and run it headless if you don't want to be reminded that you're having to put up with Linux.
+
+### Testing on Windows
+
+Use WSL 2.0. Same gist as with MacOS -- use a shared folder and you're good to go. It's been a while, but Visual Studio Code natively supported this and would run from Windows but compile via Linux/GCC for you, but I can't be bothered with rememebering how to do this or document it here.
+
 ## Programming -- UART
 You'll need a good Terminal emulator package. On MacOS, I cannot recommend Serial highly enough -- this is a great bit of software. On Windows, Tera Term is absolutely the best. On Linux you're on your own, but I'm sure there's something you can apt-get. Along with this, you'll need an FTDI USB to Serial adapter along with a Tag Connect TC2030 (or compatible). People comfortable with hacking can solder bodge wires directly to their board and use any sort of USB to UART bridge (or even use another PC old enough to have serial on board). Here's the pinout:
 
