@@ -10,6 +10,8 @@
 #include <stdlib.h>
 #include <stdio.h>
 
+#include "init.h"
+
 static const char* l_base_chars = "0123456789abcdef";
 static const char* u_base_chars = "0123456789ABCDEF";
 
@@ -204,23 +206,35 @@ static int print(char **out, const char *format, va_list vl) {
     return pc;
 }
 
+volatile double printf_overhead = 0.0;
+
 int vprintf(const char *format, va_list vl) {
-    return print(0, format, vl);
+    double t1 = ReadDMTimerSeconds();
+    int r = print(0, format, vl);
+    double t2 = ReadDMTimerSeconds();
+    printf_overhead += (t2 - t1);
+    return r;
 }
 
 int printf(const char *format, ...) {
+    double t1 = ReadDMTimerSeconds();
     va_list vl;
     va_start (vl, format);
     int r = print(0, format, vl);
     va_end (vl);
+    double t2 = ReadDMTimerSeconds();
+    printf_overhead += (t2 - t1);
     return r;
 }
 
 int sprintf(char *out, const char *format, ...) {
+    double t1 = ReadDMTimerSeconds();
     va_list vl;
     va_start (vl, format);
     int r = print(&out, format, vl);
     va_end (vl);
+    double t2 = ReadDMTimerSeconds();
+    printf_overhead += (t2 - t1);
     return r;
 }
 

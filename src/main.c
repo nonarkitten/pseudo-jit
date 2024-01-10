@@ -540,11 +540,45 @@ static void DebugBoot(void) {
     pr1_pru0_pru_r31_2   PRU0     D12       B2        BBB_RESET				I*	MCASP0_AXR0      Reset is used primarily during boot
 */
 
+static const char* GetSystemName(uint16_t kHz) {
+    typedef struct {
+        uint16_t kHz;
+        const char* name;
+    } SystemID_t;
+
+    static const SystemID_t systems[] = {
+        { 16050, "Atari AdSPEED"    },
+        { 14320, "Amiga AdSPEED"    },
+        { 14190, "Amiga AdSPEED"    },
+        { 12000, "NEOGEO"           },
+        { 10000, "X68000"           },
+        {  8050, "Atari STe (NTSC)" },
+        {  8030, "Atari (PAL)"      },
+        {  8010, "Atari ST (NTSC)"  },
+        {  7830, "Apple Mac"        },
+        {  7670, "SEGA Genesis"     },
+        {  7600, "SEGA Mega Drive"  },
+        {  7160, "Amiga (NTSC)"     },
+        {  7090, "Amiga (PAL)"      },
+        {  5000, "Apple Lisa"       },
+        {     0, NULL               }
+    }; 
+
+    for(int i=0; i<13; i++) {
+        uint16_t mid_kHz = (systems[i].kHz + systems[i + 1].kHz) / 2;
+        if(kHz > mid_kHz) return systems[i].name;
+    }
+    return "Unknown";
+}
+
 int main(void) {
     char option[4] = "?";
     double t1, t2;
     int clk1, clk2;
     double MHz;
+    extern volatile double printf_overhead;
+
+    printf_overhead = 0.0;
 
     InitResetHalt();
     InitDMTimer();
@@ -581,23 +615,29 @@ int main(void) {
     if(cpu_state.config.post_enable_long_mem) DDRTest();
     
     if(cpu_state.config.post_enable_checkclk) {
-        WaitMSDMTimer(20);
+        WaitMSDMTimer(10);
         t2 = ReadDMTimerSeconds(); 
         clk2 = GetPRUClock();
         MHz = (clk2 - clk1) * 0.00001 / (t2 - t1);
-        printf("[CLK7] Main bus clock measured at %0.3f\n", MHz);
-        cpu_state.config.kHz = MHz * 1000.0 + 0.5;
-        cpu_state.config.is_dirty = 1;
+        if(MHz < 0.001) {
+            printf("[BCLK] Main bus unmeasurable (PRU not running?)\n");
+        } else {
+            printf("[BCLK] Main bus clock measured at %0.3f\n", MHz);
+            cpu_state.config.kHz = MHz * 1000.0 + 0.5;
+            cpu_state.config.is_dirty = 1;
+        }
     } else {
         MHz = cpu_state.config.kHz * 0.001;
-        printf("[CLK7] Main bus clock set to %0.3f\n", MHz);
+        printf("[BCLK] Main bus clock set to %0.3f\n", MHz);
     }
     if(MHz < 5.0 || MHz > 16.0) {
-        printf("[CLK7] Main bus CLK out of spec, using 8MHz\n");
+        printf("[BCLK] Main bus CLK out of spec, using 8MHz\n");
         MHz = 8.0;
         cpu_state.config.kHz = 8000;
         cpu_state.config.is_dirty = 1;
     }
+
+    printf("[BCLK] Hello %s!\n", GetSystemName(cpu_state.config.kHz));
 
     InitGPMC((float)MHz); 
     InitMMU();
@@ -636,7 +676,10 @@ int main(void) {
     
     ReleaseReset();
 
-    printf("[BOOT] Completed in %0.5f seconds\n", ReadDMTimerSeconds());
+    double boot_done = ReadDMTimerSeconds();
+
+    printf("[BOOT] Printf overhead %0.5f seconds\n", printf_overhead);
+    printf("[BOOT] Completed in %0.5f seconds (%s)\n", boot_done, ((boot_done - printf_overhead) < 0.15) ? "okay" : "slow");
 
     while (1) {
         switch (option[0]) {
