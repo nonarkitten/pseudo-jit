@@ -81,11 +81,14 @@ void PRUHalt(PRU_CORE_t PRUCore) {
 
 void InitPRU(void) {
     static const pin_muxing_t pru_pins[] = {
-        { PINMUX_CONF_MCASP0_ACLKR,     (PIN_CFG_INEN | PIN_CFG_PDIS | PIN_CFG_M6) }, /* CLK7  pr1_pru0_pru_r31_4  */
-        { PINMUX_CONF_MCASP0_AHCLKX,    (PIN_CFG_PDIS | PIN_CFG_M5) },                /* E-CLK pr1_pru0_pru_r30_7  */
-        { PINMUX_CONF_MCASP0_AXR1,      (PIN_CFG_PDIS | PIN_CFG_M5) },                /* EWAIT pr1_pru0_pru_r30_6  */
-        { PINMUX_CONF_XDMA_EVENT_INTR1, (PIN_CFG_INEN | PIN_CFG_PDIS | PIN_CFG_M5) }, /* VPA   pr1_pru0_pru_r31_16 */
-        { PINMUX_CONF_MCASP0_ACLKX,     (PIN_CFG_PDIS | PIN_CFG_M5) },                /* VMA   pr1_pru0_pru_r30_0  */
+        { PINMUX_CONF_MCASP0_ACLKR,     (PIN_CFG_INEN | PIN_CFG_PDIS | PIN_CFG_M6) }, /* CLK7_INP  pr1_pru0_pru_r31_4  */
+        { PINMUX_CONF_MCASP0_AXR1,      (PIN_CFG_PDIS | PIN_CFG_M5) },                /* CLK7_OUT  pr1_pru0_pru_r30_6  */
+        { PINMUX_CONF_MCASP0_AHCLKX,    (PIN_CFG_PDIS | PIN_CFG_M5) },                /* ECLK      pr1_pru0_pru_r30_7  */
+        { PINMUX_CONF_MCASP0_ACLKX,     (PIN_CFG_PDIS | PIN_CFG_M5) },                /* VMA       pr1_pru0_pru_r30_0  */
+        { PINMUX_CONF_XDMA_EVENT_INTR1, (PIN_CFG_INEN | PIN_CFG_PDIS | PIN_CFG_M5) }, /* VPA       pr1_pru0_pru_r31_16 */
+        
+		{ PINMUX_CONF_GPMC_OEN_REN,     (PIN_CFG_PDIS | PIN_CFG_M7) },                /* GPMC_OEN  gpio2_3   */
+
         { 0xFFFFFFFF, 0xFFFFFFFF },
     };    
     /* bring PRU_ICSS module out of reset */
