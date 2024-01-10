@@ -41,6 +41,7 @@ $(OUTPUT): $(C_SRCS:%.c=%.obj)
 	-@xxd -i -a pru_text.bin >../inc/pru_text.h
 	-@gsed '$$ s/\x00*$$//' data.bin >pru_data.bin
 	-@xxd -i -a pru_data.bin >../inc/pru_data.h
+	-@touch ../hal/pruss.c
 	-@echo ' '
 
 %.obj: %.c
