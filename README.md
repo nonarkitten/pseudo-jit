@@ -64,7 +64,7 @@ To send the image, select XMODEM and the .BIN file generated when compiling PJIT
 [I2C0] 000_10xx ($8~$A) GreenPAK Detected
 [I2C0] GreenPAK Protection Bits: $00 $00 $00
 [I2C0] 010_0100 ($24) PMIC Detected, Nitro mode enabled
-[CLK7] Main bus clock measured at 7.158
+[BCLK] Main bus clock measured at 7.158
 [GPMC] Trimming Core PLL to: 966
 [GPMC] SYNC VIOLATION: t->CSOFFTIME >= (t->ACCESSTIME+1)
 [GPMC] Cycle Time: 27
