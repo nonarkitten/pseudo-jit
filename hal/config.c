@@ -155,24 +155,33 @@ int DetectEEPROM(void) {
 }
 
 static const char* GetConfigCPU(void) {
-    if(cpu_state.config.cpu_enable_68000) return "68000";
-    if(cpu_state.config.cpu_enable_68020) {
+    static char buffer[32] = { 0 };
+    static const char *cpu;
+    static const char *end = "";
+
+    if(cpu_state.config.cpu_enable_68000) cpu = "68000";
+    else if(cpu_state.config.cpu_enable_68020) {
         if(cpu_state.config.cpu_enable_32bits) {
-            return (cpu_state.config.cpu_enable_fpu) ? "68020/68882" : "68020";
+            cpu = (cpu_state.config.cpu_enable_fpu) ? "68020/68882" : "68020";
         } else {
-            return (cpu_state.config.cpu_enable_fpu) ? "68EC020/68882" : "68EC020";
+            cpu = (cpu_state.config.cpu_enable_fpu) ? "68EC020/68882" : "68EC020";
         }
     }
-    if(cpu_state.config.cpu_enable_68030) {
-        if(!cpu_state.config.cpu_enable_mmu) return "68EC030";
-        if(!cpu_state.config.cpu_enable_fpu) return "68030";
-        return "68030/68882";
+    else if(cpu_state.config.cpu_enable_68030) {
+        if(!cpu_state.config.cpu_enable_mmu) cpu = "68EC030";
+        else if(!cpu_state.config.cpu_enable_fpu) cpu = "68030";
+        else cpu = "68030/68882";
     }
-    if(cpu_state.config.cpu_enable_68040) {
-        if(!cpu_state.config.cpu_enable_mmu) return "68EC040";
-        if(!cpu_state.config.cpu_enable_fpu) return "68LC040";
-        return "68040";
+    else if(cpu_state.config.cpu_enable_68040) {
+        if(!cpu_state.config.cpu_enable_mmu) cpu = "68EC040";
+        else if(!cpu_state.config.cpu_enable_fpu) cpu = "68LC040";
+        else cpu = "68040";
     }
+
+    if(cpu_state.config.cpu_little_endian) end = "-LE";
+
+    sprintf(buffer, "%s%s", cpu, end);
+    return buffer;
 }
 
 static int streq(const char* l, const char* r) {
@@ -194,6 +203,7 @@ static void SetConfigCPU(const char* CPU) {
         cpu_state.config.cpu_enable_dcache = 0;
         cpu_state.config.cpu_enable_fpu = 0;
         cpu_state.config.cpu_enable_mmu = 0;
+        cpu_state.config.cpu_little_endian = streq(&CPU[7 + 6 * cpu_state.config.cpu_enable_fpu], "-LE");
     }
     if(streq(CPU, "68EC020")) {
         cpu_state.config.cpu_enable_68000 = 0;
@@ -205,6 +215,7 @@ static void SetConfigCPU(const char* CPU) {
         cpu_state.config.cpu_enable_dcache = 0;
         cpu_state.config.cpu_enable_fpu = streq(&CPU[7], "/68882");
         cpu_state.config.cpu_enable_mmu = 0;
+        cpu_state.config.cpu_little_endian = streq(&CPU[7 + 6 * cpu_state.config.cpu_enable_fpu], "-LE");
     }
     if(streq(CPU, "68020")) {
         cpu_state.config.cpu_enable_68000 = 0;
@@ -216,6 +227,7 @@ static void SetConfigCPU(const char* CPU) {
         cpu_state.config.cpu_enable_dcache = 0;
         cpu_state.config.cpu_enable_fpu = streq(&CPU[7], "/68882");
         cpu_state.config.cpu_enable_mmu = 0;
+        cpu_state.config.cpu_little_endian = 0;
     }
     if(streq(CPU, "68EC030")) {
         cpu_state.config.cpu_enable_68000 = 0;
@@ -227,6 +239,7 @@ static void SetConfigCPU(const char* CPU) {
         cpu_state.config.cpu_enable_dcache = 1;
         cpu_state.config.cpu_enable_fpu = streq(&CPU[7], "/68882");
         cpu_state.config.cpu_enable_mmu = 0;
+        cpu_state.config.cpu_little_endian = 0;
     }
     if(streq(CPU, "68030")) {
         cpu_state.config.cpu_enable_68000 = 0;
@@ -238,6 +251,7 @@ static void SetConfigCPU(const char* CPU) {
         cpu_state.config.cpu_enable_dcache = 1;
         cpu_state.config.cpu_enable_fpu = streq(&CPU[7], "/68882");
         cpu_state.config.cpu_enable_mmu = 1;
+        cpu_state.config.cpu_little_endian = 0;
     }
     if(streq(CPU, "68EC040")) {
         cpu_state.config.cpu_enable_68000 = 0;
@@ -249,6 +263,7 @@ static void SetConfigCPU(const char* CPU) {
         cpu_state.config.cpu_enable_dcache = 1;
         cpu_state.config.cpu_enable_fpu = 0;
         cpu_state.config.cpu_enable_mmu = 0;
+        cpu_state.config.cpu_little_endian = 0;
     }
     if(streq(CPU, "68LC030")) {
         cpu_state.config.cpu_enable_68000 = 0;
@@ -260,6 +275,7 @@ static void SetConfigCPU(const char* CPU) {
         cpu_state.config.cpu_enable_dcache = 1;
         cpu_state.config.cpu_enable_fpu = 0;
         cpu_state.config.cpu_enable_mmu = 1;
+        cpu_state.config.cpu_little_endian = 0;
     }
     if(streq(CPU, "68030")) {
         cpu_state.config.cpu_enable_68000 = 0;
@@ -271,12 +287,14 @@ static void SetConfigCPU(const char* CPU) {
         cpu_state.config.cpu_enable_dcache = 1;
         cpu_state.config.cpu_enable_fpu = 1;
         cpu_state.config.cpu_enable_mmu = 1;
+        cpu_state.config.cpu_little_endian = 0;
     }
+
 }
 
 extern uint32_t toHex2(char* n, int len);
 void ManageConfig(void) {
-    char option[12] = { 0 };
+    char option[32] = { 0 };
     while(option[0] != 'x' && option[0] != 'X') {
         printf("%s",
             "1. Reload config from EEPROM\n"
