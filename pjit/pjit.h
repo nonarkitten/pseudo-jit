@@ -166,6 +166,7 @@ typedef struct {
         int cpu_enable_icache : 1; // Enable Instruction Cache Support
         int cpu_enable_dcache : 1; // Enable Data Cache Support
         int cpu_enable_mmu    : 1; // Enable 68K MMU
+        int cpu_little_endian : 1; // Enable Little-Endian Support for Bus
     };
 
     // see post_enable_t

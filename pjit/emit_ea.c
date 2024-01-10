@@ -96,6 +96,7 @@
 */
 
 #include "emitters.h"
+#include "pjit.h"
 
 typedef struct {
     unsigned enable_32b_addr : 1;
@@ -112,148 +113,128 @@ __attribute__((target("thumb")))
 uint8_t emit_EA_Load(uint32_t** emit, uint8_t sEA, uint8_t dReg, uint8_t iReg, int isRMW) {
     int width = 1 << (sEA >> 6);  // 00 = 1, 01 = 2, 10 = 4, 11 = invalid
 
-    switch (sEA & 0x38) {
-        // Data Register Dx
-        case 0x00: {
-            if ((sEA & 7) < 2) {  // D0 or D1
-                uint8_t reg = (sEA & 7) + 3;
-                switch (width) {
-                    case 1:
-                        *(*emit)++ = sxtb(dReg, reg, 0);
-                        return dReg;
-                    case 2:
-                        *(*emit)++ = sxth(dReg, reg, 0);
-                        return dReg;
-                    case 4:
-                        return reg;
+    // In little endian mode, the physical bus is byteswapped making words read
+    // "normally" from the bus, but bytes and long-words will not be correct
+    int swap = ((sEA & 0x30) && cpu_state.config.cpu_little_endian);
+
+    if ((sEA & 0x30) && cpu_state.config.cpu_enable_32bits) {
+        switch (sEA & 0x38) {
+            default:
+                return 0xFF;
+                
+            // Data Register Dx
+            case 0x00: {
+                if ((sEA & 7) < 2) {  // D0 or D1
+                    uint8_t reg = (sEA & 7) + 3;
+                    switch (width) {
+                        case 1: *(*emit)++ = sxtb(dReg, reg, 0); break;
+                        case 2: *(*emit)++ = sxth(dReg, reg, 0); break;
+                        case 4: dReg = reg; break;
+                    }
+                } else {  // D2 to D7
+                    uint16_t offset = (sEA & 0x7) * 4 + (4 - width);
+                    switch (width) {
+                        case 1: *(*emit)++ = ldrsb(dReg, 5, index_imm(1, 0, offset)); break;
+                        case 2: *(*emit)++ = ldrsh(dReg, 5, index_imm(1, 0, offset)); break;
+                        case 4: *(*emit)++ = ldr(dReg, 5, index_imm(1, 0, offset)); break;
+                    }
                 }
-            } else {  // D2 to D7
-                uint16_t offset = (sEA & 0x7) * 4 + (4 - width);
+                return dReg; // avoid swap
+            }
+
+            // Address Register Ax
+            case 0x08: {
+                uint8_t reg = (sEA & 7) + 6;
                 switch (width) {
-                    case 1:
-                        *(*emit)++ = ldrsb(dReg, 5, index_imm(1, 0, offset));
-                        return dReg;
-                    case 2:
-                        *(*emit)++ = ldrsh(dReg, 5, index_imm(1, 0, offset));
-                        return dReg;
-                    case 4:
-                        *(*emit)++ = ldr(dReg, 5, index_imm(1, 0, offset));
-                        return dReg;  
+                    case 1: return 0xFF;
+                    case 2: *(*emit)++ = sxth(dReg, reg, 0); break;
+                    case 4: dReg = reg; break;
                 }
+                return dReg; // avoid swap
             }
-            break;
-        }
 
-        // Address Register Ax
-        case 0x08: {
-            uint8_t reg = (sEA & 7) + 6;
-            switch (width) {
-                case 2:
-                    *(*emit)++ = sxth(dReg, reg, 0);
-                    return dReg;
-                case 4:
-                    return reg;
+            // Address Direct (Ax)
+            case 0x10: 
+            case_0x10: {
+                uint8_t reg = (sEA & 7) + 6;
+                switch (width) {
+                    case 1: if(!swap) *(*emit)++ = ldrsb(dReg, reg, 0); break;
+                    case 2: *(*emit)++ = ldrsh(dReg, reg, 0); break;
+                    case 4: *(*emit)++ = ldr(dReg, reg, 0); break;
+                }
+                break;
             }
-            break;
-        }
 
-        // Address Direct (Ax)
-        case 0x10: 
-        case_0x10: {
-            uint8_t reg = (sEA & 7) + 6;
-            switch (width) {
-                case 1:
-                    *(*emit)++ = ldrsb(dReg, reg, 0);
-                    return dReg;
-                case 2:
-                    *(*emit)++ = ldrsh(dReg, reg, 0);
-                    return dReg;
-                case 4:
-                    *(*emit)++ = ldr(dReg, reg, 0);
-                    return dReg;
+            // Address Post-Incemrent (Ax)+, convert to (Ax) for RMW
+            case 0x18: {
+                if (isRMW) goto case_0x10;
+                uint8_t reg = (sEA & 7) + 6;
+                switch (width) {
+                    case 1: if(!swap) *(*emit)++ = ldrsb(dReg, reg, index_imm(0, 1, 1)); break;
+                    case 2: *(*emit)++ = ldrsh(dReg, reg, index_imm(0, 1, 2)); break;
+                    case 4: *(*emit)++ = ldr(dReg, reg, index_imm(0, 1, 4)); break;
+                }
+                break;
             }
-            break;
-        }
 
-        // Address Post-Incemrent (Ax)+, convert to (Ax) for RMW
-        case 0x18: {
-            if (isRMW) goto case_0x10;
-            uint8_t reg = (sEA & 7) + 6;
-            switch (width) {
-                case 1:
-                    *(*emit)++ = ldrsb(dReg, reg, index_imm(0, 1, 1));
-                    return dReg;
-                case 2:
-                    *(*emit)++ = ldrsh(dReg, reg, index_imm(0, 1, 2));
-                    return dReg;
-                case 4:
-                    *(*emit)++ = ldr(dReg, reg, index_imm(0, 1, 4));
-                    return dReg;
+            // Address Pre-Decrement -(Ax)
+            case 0x20: {
+                uint8_t reg = (sEA & 7) + 6;
+                switch (width) {
+                    case 1: if(!swap) *(*emit)++ = ldrsb(dReg, reg, index_imm(1, 1, -1)); break;
+                    case 2: *(*emit)++ = ldrsh(dReg, reg, index_imm(0, 1, -2)); break;
+                    case 4: *(*emit)++ = ldr(dReg, reg, index_imm(0, 1, -4)); break;
+                }
+                break;
             }
-            break;
-        }
 
-        // Address Pre-Decrement -(Ax)
-        case 0x20: {
-            uint8_t reg = (sEA & 7) + 6;
-            switch (width) {
-                case 1:
-                    *(*emit)++ = ldrsb(dReg, reg, index_imm(1, 1, -1));
-                    return dReg;
-                case 2:
-                    *(*emit)++ = ldrsh(dReg, reg, index_imm(0, 1, -2));
-                    return dReg;
-                case 4:
-                    *(*emit)++ = ldr(dReg, reg, index_imm(0, 1, -4));
-                    return dReg;
+            // Address Indexed or Displacement (Ax, Ix)
+            case 0x28:
+            case 0x30: {
+                uint8_t reg = (sEA & 7) + 6;
+                switch (width) {
+                    case 1: if(!swap) *(*emit)++ = ldrsb(dReg, reg, index_add_reg(1, 0, iReg)); break;
+                    case 2: *(*emit)++ = ldrsh(dReg, reg, index_add_reg(1, 0, iReg)); break;
+                    case 4: *(*emit)++ = ldr(dReg, reg, index_add_reg(1, 0, iReg)); break;
+                }
+                break;
             }
-            break;
-        }
 
-        // Address Indexed or Displacement (Ax, Ix)
-        case 0x28:
-        case 0x30: {
-            uint8_t reg = (sEA & 7) + 6;
-            switch (width) {
-                case 1:
-                    *(*emit)++ = ldrsb(dReg, reg, index_add_reg(1, 0, iReg));
-                    return dReg;
-                case 2:
-                    *(*emit)++ = ldrsh(dReg, reg, index_add_reg(1, 0, iReg));
-                    return dReg;
-                case 4:
-                    *(*emit)++ = ldr(dReg, reg, index_add_reg(1, 0, iReg));
-                    return dReg;
+            // Address Absolute or PC Indexed or Displacement (Ix), or Immediate
+            case 0x38: {
+                if ((sEA & 7) == 4) dReg = iReg;  // Immediate
+                else if ((sEA & 7) > 4) return 0xFF;  // Invalid
+                else switch (width) {
+                    case 1: if(!swap) *(*emit)++ = ldrsb(dReg, iReg, 0); break;
+                    case 2: *(*emit)++ = ldrsh(dReg, iReg, 0); break;
+                    case 4: *(*emit)++ = ldr(dReg, iReg, 0); break;
+                }
+                break;
             }
-            break;
+        } // end switch
+
+        if(swap) switch (width) {
+            case 1: *(*emit)++ = asr_imm(dReg, dReg, 8);
+            case 2: break;
+            case 4: *(*emit)++ = ror_imm(dReg, dReg, 16);
         }
+        return dReg;
+    } else {
+        // In 24-bit mode, we need to mask out the high address; for loads that's a lot more
+        // work because we'll need to perform the normal address adjustment first and then
+        // change the addressing mode to the simple (Ax) form
 
-        // Address Absolute or PC Indexed or Displacement (Ix), or Immediate
-        case 0x38: {
-            if ((sEA & 7) == 4)
-                return iReg;  // Immediate
-            else if ((sEA & 7) > 4)
-                break;  // Invalid
+        switch (sEA & 0x38) {
 
-            switch (width) {
-                case 1:
-                    *(*emit)++ = ldrsb(dReg, iReg, 0);
-                    return dReg;
-                case 2:
-                    *(*emit)++ = ldrsh(dReg, iReg, 0);
-                    return dReg;
-                case 4:
-                    *(*emit)++ = ldr(dReg, iReg, 0);
-                    return dReg;
-            }
-            break;
         }
+        *(*emit)++ = bic(r0, dReg, imm(0xFF000000));
+        dReg = r0;
 
-    }             // end switch
-    return 0xFF;  // invalid otherwise
+
+    }
 }
 
-// @brief Performs an Effective-Address (EA) Load
+// @brief Performs an Effective-Address (EA) Store
 // @param uint32_t** emit  stream to output opcodes
 // @param uint8_t    dEA   destination size, effective addres and register
 // @param uint8_t    sReg  source register with the DATA
@@ -265,35 +246,50 @@ void emit_EA_Store(uint32_t** emit, uint8_t dEA, uint8_t sReg, uint8_t iReg, int
     int     width = 1 << (dEA >> 6);
     uint8_t dReg  = (dEA & 7);
 
+    // In little endian mode, the physical bus is byteswapped making words read
+    // "normally" from the bus, but bytes and long-words will not be correct
+    if ((dEA & 0x30) && cpu_state.config.cpu_little_endian) {
+        switch (width == 1) {
+            case 1: {
+                // xor the address LSB to perform "byte swap"
+                *(*emit)++ = eor(r0, dReg, imm(1));
+                dReg = r0;
+                break;
+            }
+            case 4: {
+                // swap the 16-bit parts
+                *(*emit)++ = ror_imm(r0, sReg, 16);
+                sReg = r0;
+                break;
+            }
+        } // end switch
+    }
+
+    // In 24-bit mode, we need to mask out the high address
+    if ((dEA & 0x30) && !cpu_state.config.cpu_enable_32bits) {
+        *(*emit)++ = bic(r0, dReg, imm(0xFF000000));
+        dReg = r0;
+    }
+
     switch (dEA & 0x38) {
+        default: return;
+
         // Data Register Dx
         case 0x00: {
             if (dReg < 2) {  // D0 or D1
                 if (sReg == dReg) return;
                 dReg += 3;
                 switch (width) {
-                    case 1:
-                        *(*emit)++ = bfi(dReg, sReg, 0, 8);
-                        return;
-                    case 2:
-                        *(*emit)++ = bfi(dReg, sReg, 0, 16);
-                        return;
-                    case 4:
-                        *(*emit)++ = mov(dReg, sReg);
-                        return;
+                    case 1: *(*emit)++ = bfi(dReg, sReg, 0, 8); return;
+                    case 2: *(*emit)++ = bfi(dReg, sReg, 0, 16); return;
+                    case 4: *(*emit)++ = mov(dReg, sReg); return;
                 }
             } else {  // D2 to D7
                 uint16_t offset = (dEA & 0x7) * 4 + (4 - width);
                 switch (width) {
-                    case 1:
-                        *(*emit)++ = strb(sReg, 5, index_imm(1, 0, offset));
-                        return;
-                    case 2:
-                        *(*emit)++ = strh(sReg, 5, index_imm(1, 0, offset));
-                        return;
-                    case 4:
-                        *(*emit)++ = str(sReg, 5, index_imm(1, 0, offset));
-                        return;
+                    case 1: *(*emit)++ = strb(sReg, 5, index_imm(1, 0, offset)); return;
+                    case 2: *(*emit)++ = strh(sReg, 5, index_imm(1, 0, offset)); return;
+                    case 4: *(*emit)++ = str(sReg, 5, index_imm(1, 0, offset)); return;
                 }
             }
             break;
@@ -304,12 +300,8 @@ void emit_EA_Store(uint32_t** emit, uint8_t dEA, uint8_t sReg, uint8_t iReg, int
             if ((width == 4) && (sReg == dReg)) return;
             dReg += 6;
             switch (width) {
-                case 2:
-                    *(*emit)++ = sxth(dReg, sReg, 0);
-                    return;  // sxth dReg, sReg
-                case 4:
-                    *(*emit)++ = mov(dReg, sReg);
-                    return;  // mov dReg, sReg
+                case 2: *(*emit)++ = sxth(dReg, sReg, 0); return;
+                case 4: *(*emit)++ = mov(dReg, sReg); return;
             }
             break;
         }
@@ -374,13 +366,13 @@ void emit_EA_Store(uint32_t** emit, uint8_t dEA, uint8_t sReg, uint8_t iReg, int
             switch (width) {
                 case 1:
                     *(*emit)++ = strb(sReg, dReg, index_add_reg(1, 0, iReg));
-                    return;  // strb sReg, [dReg, iReg]
+                    return;
                 case 2:
                     *(*emit)++ = strh(sReg, dReg, index_add_reg(1, 0, iReg));
-                    return;  // strh sReg, [dReg, iReg]
+                    return;
                 case 4:
                     *(*emit)++ = str(sReg, dReg, index_add_reg(1, 0, iReg));
-                    return;  // str  sReg, [dReg, iReg]
+                    return;
             }
             break;
         }
