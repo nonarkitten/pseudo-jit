@@ -30,10 +30,10 @@
 #define CTRL_STALL                                0x22010
           
           
-#define CTBIR_0                                   0x22020 // Address for the Constant table ??? Register 0(CTPPR_0)
-#define CTBIR_1                                   0x22024 // Address for the Constant table ??? Register 1(CTPPR_1)
-#define CTPPR_0                                   0x22028 // Address for the Constant table Programmable Pointer Register 0(CTPPR_0)
-#define CTPPR_1                                   0x2202C // Address for the Constant table Programmable Pointer Register 1(CTPPR_1)
+#define CTBIR_0                                   0x22020   // Address for the Constant table ??? Register 0(CTPPR_0)
+#define CTBIR_1                                   0x22024   // Address for the Constant table ??? Register 1(CTPPR_1)
+#define CTPPR_0                                   0x22028   // Address for the Constant table Programmable Pointer Register 0(CTPPR_0)
+#define CTPPR_1                                   0x2202C   // Address for the Constant table Programmable Pointer Register 1(CTPPR_1)
           
 #define GER_OFFSET                                0x10
 #define HIESR_OFFSET                              0x34
@@ -271,30 +271,31 @@
 #define GPIO2                                     0x481AC000
 #define GPIO3                                     0x481AE000
 
-#define GPIO_REVISION                             0x000
-#define GPIO_SYSCONFIG                            0x010
-#define GPIO_IRQSTATUS_RAW_0                      0x024
-#define GPIO_IRQSTATUS_RAW_1                      0x028
-#define GPIO_IRQSTATUS_0                          0x02C
-#define GPIO_IRQSTATUS_1                          0x030
-#define GPIO_IRQSTATUS_SET_0                      0x034
-#define GPIO_IRQSTATUS_SET_1                      0x038
-#define GPIO_IRQSTATUS_CLR_0                      0x03C
-#define GPIO_IRQSTATUS_CLR_1                      0x040
-#define GPIO_IRQWAKEN_0                           0x044
-#define GPIO_IRQWAKEN_1                           0x048
-#define GPIO_SYSSTATUS                            0x114
-#define GPIO_CTRL                                 0x130
-#define GPIO_OE                                   0x134
-#define GPIO_DATAIN                               0x138
-#define GPIO_DATAOUT                              0x13C
-#define GPIO_LEVELDETECT0                         0x140
-#define GPIO_LEVELDETECT1                         0x144
-#define GPIO_RISINGDETECT                         0x148
-#define GPIO_FALLINGDETECT                        0x14C
-#define GPIO_DEBOUNCENABLE                        0x150
-#define GPIO_DEBOUNCINGTIME                       0x154
-#define GPIO_CLEARDATAOUT                         0x190
-#define GPIO_SETDATAOUT                           0x194
+// /4 to convert from byte addressing to word indexes
+#define GPIO_REVISION                            (0x000 / 4)
+#define GPIO_SYSCONFIG                           (0x010 / 4)
+#define GPIO_IRQSTATUS_RAW_0                     (0x024 / 4)
+#define GPIO_IRQSTATUS_RAW_1                     (0x028 / 4)
+#define GPIO_IRQSTATUS_0                         (0x02C / 4)
+#define GPIO_IRQSTATUS_1                         (0x030 / 4)
+#define GPIO_IRQSTATUS_SET_0                     (0x034 / 4)
+#define GPIO_IRQSTATUS_SET_1                     (0x038 / 4)
+#define GPIO_IRQSTATUS_CLR_0                     (0x03C / 4)
+#define GPIO_IRQSTATUS_CLR_1                     (0x040 / 4)
+#define GPIO_IRQWAKEN_0                          (0x044 / 4)
+#define GPIO_IRQWAKEN_1                          (0x048 / 4)
+#define GPIO_SYSSTATUS                           (0x114 / 4)
+#define GPIO_CTRL                                (0x130 / 4)
+#define GPIO_OE                                  (0x134 / 4)
+#define GPIO_DATAIN                              (0x138 / 4)
+#define GPIO_DATAOUT                             (0x13C / 4)
+#define GPIO_LEVELDETECT0                        (0x140 / 4)
+#define GPIO_LEVELDETECT1                        (0x144 / 4)
+#define GPIO_RISINGDETECT                        (0x148 / 4)
+#define GPIO_FALLINGDETECT                       (0x14C / 4)
+#define GPIO_DEBOUNCENABLE                       (0x150 / 4)
+#define GPIO_DEBOUNCINGTIME                      (0x154 / 4)
+#define GPIO_CLEARDATAOUT                        (0x190 / 4)
+#define GPIO_SETDATAOUT                          (0x194 / 4)
 
 #endif // _pru_H_
