@@ -64,7 +64,7 @@ static const pin_muxing_t m68k_pin_mux[] = {
 		{ PINMUX_CONF_GPMC_CSN2,     (PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_nCS0     */
 //		{ PINMUX_CONF_GPMC_CSN3,     (PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_nCS0     */
 //		{ PINMUX_CONF_GPMC_ADVN_ALE, (PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_nADV_ALE */
-		{ PINMUX_CONF_GPMC_OEN_REN,  (PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_nOE      */
+		// { PINMUX_CONF_GPMC_OEN_REN,  (PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_nOE      */
 		{ PINMUX_CONF_GPMC_WEN,      (PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_nWE      */
 		{ PINMUX_CONF_GPMC_BEN0_CLE, (PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_nBE0_CLE */
 		{ PINMUX_CONF_GPMC_BEN1,     (PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_nBE1     */
@@ -78,7 +78,7 @@ static const pin_muxing_t m68k_pin_mux[] = {
 	//	{ PINMUX_CONF_GPMC_NCS5,     (PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_nCS5     */
 	//	{ PINMUX_CONF_GPMC_NCS6,     (PIN_CFG_IEN  | PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_nCS6     */
 	//	{ PINMUX_CONF_GPMC_NCS7,     (PIN_CFG_IEN  | PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_nCS7     */
-		{ PINMUX_CONF_GPMC_CLK,      (PIN_CFG_INEN | PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_CLK      */
+    //  { PINMUX_CONF_GPMC_CLK,      (PIN_CFG_INEN | PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_CLK      */
 	//	{ PINMUX_CONF_GPMC_WAIT1,    (PIN_CFG_IEN  | PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_WAIT1    */
 	//	{ PINMUX_CONF_GPMC_WAIT2,    (PIN_CFG_IEN  | PIN_CFG_PDIS | M4) }, /* GPIO_64       */
 	//	{ PINMUX_CONF_GPMC_WAIT3,    (PIN_CFG_IEN  | PIN_CFG_PDIS | PIN_CFG_M0) }, /* GPMC_WAIT3    */
@@ -150,6 +150,14 @@ void GPMCConfig(const uint32_t config[6], uint32_t cs, uint32_t base, uint32_t s
 }
 
 /**
+ *             S0   S1   S2   S3   S4   S5   S6   S7   S0
+ *            0000 0000 0011 1111 1111 2222 2222 2233
+ *            0123 4567 8901 2345 6789 0123 4567 8901 <- 32 cycles
+ * 
+ * 
+ **/
+
+/**
                      REAL   CYCLE  EFFECTIVE MAIN CLOCK  FINAL  
     SYSTEM           CLOCK  TIME*   CLOCK     ADJUSTMENT  CLOCK  PRECISION
     ---------------- -----  ------  --------- ----------  -----  ---------
@@ -171,66 +179,6 @@ void GPMCConfig(const uint32_t config[6], uint32_t cs, uint32_t base, uint32_t s
     * This is the basic "window" that we need to use for the whole 68000
       bus cycle and encompases four natural bus clocks and the eight
       internal states. Cycle times of less than 16 may be imprecise.
-
-    Each state centre (when we want to ideally transition a signal) is:
-
-    For S0 to S7 (Sn), time is CYCLE_TIME * (n + 0.5) / 8
-
-          |<--------------------->| Cycle Time
-  
-           S0 S1 S2 S3 S4 S5 S6 S7 S0 ...
-          +--+--+--+--+--+--+--+--+--+
-
-          |--------------------|          ACCESS TIME
-          |-----------------------|       CYCLE TIME
-              __    __    __    __    __
-    CLK   |__|  |__|  |__|  |__|  |__|  |
-           _______________________ ______
-    A     X_______________________X______
-
-    INPUT TO GREENPAK
-          _______                ________
-    nCS          \______________/         (ADDRESS STROBE)
-          _______                ________
-    nOE          \______________/         (READ INDICATION, HIGH DURING WRITE)
-          +--+--+--+--+--+--+--+--+
-           1  1  0  0  0  0  0  1
-          _____________          ________
-    nWE                \________/         (WRITE INDICATION, HIGH DURING READ)
-          +--+--+--+--+--+--+--+--+
-           1  1  1  1  0  0  0  1
-           _______________________ ______
-    nBEx  X_______________________X______ (BYTE ENABLES)
-
-    OUTPUT FROM GREENPAK
-          _______                ______
-    DSn          \______________/       (DURING READ, UDS = BE0, LDS = BE1) 
-          _____________          ______
-    DSn                \________/       (DURING WRITE, UDS = BE0, LDS = BE1) 
-          _____________________________
-    RnW                                 (DURING READ)
-          _______                ______
-    RnW          \______________/       (DURING WRITE)
-
-
-    RnW = !nOE    ______________
-          _______/              \______ 
-
-
-          READ CYCLE              WRITE CYCLE
-          _______________________________                _ 
-                  ______________         \______________/  DESIRED RnW
-          _______/              \________________________  OUR RnW
-                  *                       *                RnW SAMPLE TIMES
-
-    UDS = nBEx | (nOE & nWE)
-          READ CYCLE              WRITE CYCLE
-          ____________________________________          _
-                                              \________/   nWE
-          _______                ________________________
-                 \______________/                          nOE
-          _______                _____________          _
-                 \______________/             \________/   nWE & nOE
 
 */
 
@@ -358,6 +306,44 @@ static void SetGPMCTiming(Timing_t *t) {
 
 int core_pll = 1000;
 
+static void TuneCorePLL(int clk_mult, int clk_div) {
+    float clock = 48.0f * (float)clk_mult / (float)clk_div;
+    int m2;
+
+    /*CORE_DPLL in baypass*/
+    CM_CLKMODE_DPLL_CORE->BIT.DPLL_EN = 4;
+    /*Wait DPLL enter bypass mode*/
+    while((1 == CM_IDLEST_DPLL_CORE->BIT.ST_DPLL_CLK) ||
+          (0 == CM_IDLEST_DPLL_CORE->BIT.ST_MN_BYPASS));
+    /*disable Spread Spectrum Clocking*/
+    CM_CLKMODE_DPLL_CORE->BIT.DPLL_SSC_EN = 0;
+
+    /*Set DPLL multiplier factor */
+    CM_CLKSEL_DPLL_CORE->BIT.DPLL_MULT = clk_mult;
+
+    /*Set DPLL divider factor*/
+    CM_CLKSEL_DPLL_CORE->BIT.DPLL_DIV = clk_div;
+
+    /*Set DPLL post-divider factor M4, should be < 200MHz*/
+    m2 = 10; //(int)(clock / 200.0 + 0.99999999999999997);
+    CM_DIV_M4_DPLL_CORE->BIT.HSDIVIDER_CLKOUT1_DIV = m2;
+
+    /*Set DPLL post-divider factor M5, should be < 250MHz*/
+    m2 = 8; //(int)(clock / 250.0 + 0.99999999999999997);
+    CM_DIV_M5_DPLL_CORE->BIT.HSDIVIDER_CLKOUT2_DIV = m2;
+
+    /*Set DPLL post-divider factor M6, should be < 500MHz*/
+    m2 = 4; //(int)(clock / 500.0 + 0.99999999999999997);
+    CM_DIV_M6_DPLL_CORE->BIT.HSDIVIDER_CLKOUT3_DIV = m2;
+
+    /*CORE_DPLL in baypass*/
+    CM_CLKMODE_DPLL_CORE->BIT.DPLL_EN = 7;
+
+    /*Wait DPLL locks*/
+    while((0 == CM_IDLEST_DPLL_CORE->BIT.ST_DPLL_CLK) ||
+          (1 == CM_IDLEST_DPLL_CORE->BIT.ST_MN_BYPASS));
+}
+
 void InitGPMC(float bus_clock) {
     int cycle_time = 200.0f / bus_clock; // always round down here
 
@@ -401,7 +387,7 @@ void InitGPMC(float bus_clock) {
 
 }
 
-static int Prompt(const char* out, uint8_t* value) {
+static int Prompt(const char* out, int* value) {
     char option[4] = { 0 };
     int n = *value;
     printf(out, n);
@@ -413,6 +399,7 @@ static int Prompt(const char* out, uint8_t* value) {
 
 static void ChangeGPMCTiming(void) {
     Timing_t t = current_timing;
+    int value;
 
     PrintTiming(&t);
 
@@ -422,14 +409,14 @@ static void ChangeGPMCTiming(void) {
     printf("[GPMC] nRE Timing (ON/OFF): %d/%d\n", t.OEONTIME, t.OEOFFTIME);
     printf("[GPMC] nWE Timing (ON/OFF): %d/%d\n", t.WEONTIME, t.WEOFFTIME);
 
-    if(!Prompt("Set Cycle Time     (0-31) [%2d]: ", &t.CYCLETIME)) return;
-    if(!Prompt("Set Access Time    (0-31) [%2d]: ", &t.ACCESSTIME)) return;
-    if(!Prompt("Set AS On-Time     (0-15) [%2d]: ", &t.CSONTIME)) return;
-    if(!Prompt("Set AS Off-Time    (0-31) [%2d]: ", &t.CSOFFTIME)) return;
-    if(!Prompt("Set Read On-Time   (0-15) [%2d]: ", &t.OEONTIME)) return;
-    if(!Prompt("Set Read Off-Time  (0-31) [%2d]: ", &t.OEOFFTIME)) return;
-    if(!Prompt("Set Write On-Time  (0-15) [%2d]: ", &t.WEONTIME)) return;
-    if(!Prompt("Set Write Off-Time (0-31) [%2d]: ", &t.WEOFFTIME)) return;
+    value = t.CYCLETIME; if(!Prompt("Set Cycle Time     (0-31) [%2d]: ", &value)) return; else t.CYCLETIME = value;
+    value = t.ACCESSTIME; if(!Prompt("Set Access Time    (0-31) [%2d]: ", &value)) return; else t.ACCESSTIME = value;
+    value = t.CSONTIME; if(!Prompt("Set AS On-Time     (0-15) [%2d]: ", &value)) return; else t.CSONTIME = value;
+    value = t.CSOFFTIME; if(!Prompt("Set AS Off-Time    (0-31) [%2d]: ", &value)) return; else t.CSOFFTIME = value;
+    value = t.OEONTIME; if(!Prompt("Set Read On-Time   (0-15) [%2d]: ", &value)) return; else t.OEONTIME = value;
+    value = t.OEOFFTIME; if(!Prompt("Set Read Off-Time  (0-31) [%2d]: ", &value)) return; else t.OEOFFTIME = value;
+    value = t.WEONTIME; if(!Prompt("Set Write On-Time  (0-15) [%2d]: ", &value)) return; else t.WEONTIME = value;
+    value = t.WEOFFTIME; if(!Prompt("Set Write Off-Time (0-31) [%2d]: ", &value)) return; else t.WEOFFTIME = value;
 
     current_timing = t;
     SetGPMCTiming(&current_timing);
@@ -462,6 +449,7 @@ void TestGPMC(void) {
             "7. Chip RAM read/write\n"
             "A. Perform all tests and exit\n"
             "D. Set GPMC timing to default\n"
+            "P. Set Core PLL\n"
             "T. Set GPMC timing\n"
             "X. Exit to main menu\n"
             "] "
@@ -469,6 +457,21 @@ void TestGPMC(void) {
         gets(option);
         bool all = (option[0] == 'a' || option[0] == 'A');
         bool allpassed = true;
+
+        if(option[0] == 'p' || option[0] == 'P') {
+            char buffer[65] = { 0 };
+            int mult = 1000, div = 24;
+            printf("Warning, adjusting Core PLL may crash or halt Buffee\n");
+            if(!Prompt("Enter Core DPLL multiplier [%d]: ", &mult)) continue;
+            if(!Prompt("Enter Core DPLL divisor [%d]: ", &div)) continue;
+            if((mult < 2) || (mult > 2047)) { printf("Invalid multipler\n"); continue; }
+            if((div < 1) || (div > 128)) { printf("Invalid divisor\n"); continue; }
+            float clock = 24.0 * (float)mult / (float)div;
+            if(clock < 1.0 || clock > 1000.0) { printf("Invalid clock\n"); continue; }
+            printf("Changing Core PLL change to %0.1fMHz, ", clock);
+            if(confirm()) TuneCorePLL(mult, div);
+            continue;
+        }
 
         if(option[0] == 'd' || option[0] == 'D') {
             current_timing = default_timing;
