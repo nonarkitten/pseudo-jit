@@ -8,9 +8,12 @@
 */
 
 #include "main.h"
-#include "support.h"
-#include "hunkloader.h"
-#include "duffcopy.h"
+
+struct SegList {
+    uint32_t        h_Size;
+    uint32_t        h_Next;
+    uint8_t         h_Data[];
+};
 
 char * _my_malloc_pool = 0; //(char *)0x00effff8;
 void * _my_malloc(size_t size) {
@@ -32,7 +35,7 @@ void * LoadHunkFile(void *pool, void *buffer) {
     intptr_t base = 0;
  
     _my_malloc_pool = pool;
-    
+
     printf("[HUNK] Loading Hunk file from address %p\n", words);
 
 //#define printf(...)

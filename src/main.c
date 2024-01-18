@@ -46,6 +46,9 @@
  *     Copyright © 2019 Michal Schulz <michal.schulz@gmx.de>
  */
 
+#include <stdint.h>
+#include <unistd.h>
+
 #include "main.h"
 
 #define MB * 1024 * 1024
@@ -93,15 +96,17 @@ int main(int argc, char *argv[]) {
     void *cache=0, *opcodes=0;
     int testrom=0, tinbasic=0, dhrystone=0, loadhunk=0;
     const char *hunk=0;
+    int c;
 
     cpu_state.config = default_config;
 
     while ((c = getopt (argc, argv, "rbdh:")) != -1) {
         switch (c) {
-        case 'r': testrom = 1; break;
-        case 'b': tinbasic = 1; break;
-        case 'd': dhrystone = 1; break;
-        case 'h': loadhunk = 1; hunk = optarg; break;
+            case 'r': testrom = 1; break;
+            case 'b': tinbasic = 1; break;
+            case 'd': dhrystone = 1; break;
+            case 'h': loadhunk = 1; hunk = optarg; break;
+        }
     }
 
     if(!(testrom|tinbasic|dhrystone|loadhunk)
@@ -153,5 +158,4 @@ int main(int argc, char *argv[]) {
     emit_opcode_table(opcodes);
 
     pjit_start(pjit);
-
 }
