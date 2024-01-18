@@ -48,6 +48,17 @@
 
 #include "main.h"
 
+#define MB * 1024 * 1024
+
+extern const uint8_t tiny_BASIC[];
+extern const int tiny_BASIC_size;
+
+extern const uint8_t m68kcode[];
+extern const int m68kcode_size;
+
+extern const uint8_t _acdhrystone;
+extern const int _acdhrystone_size;
+
 const char* banner =
 "              ____ ______________\n"
 "  ______     |    |   \\__    ___/\n"
@@ -76,8 +87,6 @@ const config_t default_config = {
     0,                           // not dirty
 };
 
-#define MB * 1024 * 1024
-
 cpu_t cpu_state = {0};
 
 int main(int argc, char *argv[]) {
@@ -98,31 +107,24 @@ int main(int argc, char *argv[]) {
     if(!(testrom|tinbasic|dhrystone|loadhunk)
     || ((testrom+tinbasic+dhrystone+loadhunk) > 1)
     || (loadhunk && !hunk)) {
-        printf( "Usage:\n"
-                "  r        Run built-in test ROM image\n"
-                "  b        Run built-in Tiny BASIC\n"
-                "  d        Run built-in Dhrystone test\n"
-                "  h <file> Load and run specified hunk file\n");
+        fprintf(stderr, "Usage:\n"
+                        "  r        Run built-in test ROM image\n"
+                        "  b        Run built-in Tiny BASIC\n"
+                        "  d        Run built-in Dhrystone test\n"
+                        "  h <file> Load and run specified hunk file\n");
         return 1;
     }
     
-    cache = malloc(2 MB);
-    printf("[BOOT] Initializing cache\n");
-    pjit_cache_init(cache);
-
-    void* opcodes = malloc(2 MB);
-    printf("[BOOT] Initializing opcode tables\n");
-    emit_opcode_table(opcodes);
+    fprintf(stderr, "%s\n", banner);
 
     void* pjit = malloc(1 MB);
-    printf("[BOOT] Starting PJIT\n");
-    if(testrom) memcpy(pjit, m68kcode, sizeof(m68kcode)); 
-    else if(tinbasic) memcpy(pjit, tiny_BASIC, sizeof(tiny_BASIC));
-    else if(dhrystone) LoadHunkFile(pjit, dhrystone);
-    else {
+    fprintf(stderr, "Starting PJIT\n");
+    if(testrom) memcpy(pjit, m68kcode, m68kcode_size); 
+    else if(tinbasic) memcpy(pjit, tiny_BASIC, tiny_BASIC_size);
+    else if(dhrystone) LoadHunkFile(pjit, _acdhrystone);
+    else /* loadhunk */ {
 		char *read_to = (char*)pjit;;
 		FILE *ptr_hunk;
-		struct rec my_record;
 
 		if (!(ptr_hunk=fopen(hunk,"rb"))) {
 			fprintf(stderr, "Unable to open file %s!", hunk);
@@ -131,8 +133,8 @@ int main(int argc, char *argv[]) {
         fseek(ptr_hunk, 0, SEEK_END);
         size_t len = fetll(ptr_hunk);
         void *h = malloc(len);
-		size_t read = fread(read_to, 1, len, ptr_hunk);
-		fclose(ptr_myfptr_hunkile);
+		size_t read = fread(h, 1, len, ptr_hunk);
+		fclose(ptr_hunk);
 
         if(len == read) LoadHunkFile(pjit, h);
         free(h);
@@ -141,6 +143,15 @@ int main(int argc, char *argv[]) {
 			return 1;
 		}
     }
+
+    cache = malloc(2 MB);
+    fprintf(stderr, "Initializing cache\n");
+    pjit_cache_init(cache);
+
+    void* opcodes = malloc(2 MB);
+    fprintf(stderr, "Initializing opcode tables\n");
+    emit_opcode_table(opcodes);
+
     pjit_start(pjit);
 
 }

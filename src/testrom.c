@@ -1,6 +1,7 @@
+#include <stdint.h>
 
 __attribute__((aligned(8)))
-unsigned char m68kcode[] = {
+const uint8_t m68kcode[] = {
 /*
     0x7c, 0x20,
     0x7e, 0xff,
@@ -149,3 +150,5 @@ unsigned char m68kcode[] = {
 	0x4e,0x71, // nop
     0x4e,0x75,
 };
+
+const int m68kcode_size = sizeof(m68kcode);
