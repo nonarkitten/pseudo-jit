@@ -1,5 +1,5 @@
 
-
+__attribute__((aligned(8)))
 unsigned char m68kcode[] = {
 /*
     0x7c, 0x20,

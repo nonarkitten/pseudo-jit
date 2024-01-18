@@ -76,14 +76,71 @@ const config_t default_config = {
     0,                           // not dirty
 };
 
+#define MB * 1024 * 1024
+
 cpu_t cpu_state = {0};
 
-int main(void) {
-    cpu_state.config = default_config;
-    printf("[BOOT] Initializing cache\n");
-	pjit_cache_init(0xA0000000); // has to come after DDR init, before MMU init
-    printf("[BOOT] Initializing opcode tables\n");
-	emit_opcode_table();
+int main(int argc, char *argv[]) {
+    void *cache=0, *opcodes=0;
+    int testrom=0, tinbasic=0, dhrystone=0, loadhunk=0;
+    const char *hunk=0;
 
+    cpu_state.config = default_config;
+
+    while ((c = getopt (argc, argv, "rbdh:")) != -1) {
+        switch (c) {
+        case 'r': testrom = 1; break;
+        case 'b': tinbasic = 1; break;
+        case 'd': dhrystone = 1; break;
+        case 'h': loadhunk = 1; hunk = optarg; break;
+    }
+
+    if(!(testrom|tinbasic|dhrystone|loadhunk)
+    || ((testrom+tinbasic+dhrystone+loadhunk) > 1)
+    || (loadhunk && !hunk)) {
+        printf( "Usage:\n"
+                "  r        Run built-in test ROM image\n"
+                "  b        Run built-in Tiny BASIC\n"
+                "  d        Run built-in Dhrystone test\n"
+                "  h <file> Load and run specified hunk file\n");
+        return 1;
+    }
+    
+    cache = malloc(2 MB);
+    printf("[BOOT] Initializing cache\n");
+    pjit_cache_init(cache);
+
+    void* opcodes = malloc(2 MB);
+    printf("[BOOT] Initializing opcode tables\n");
+    emit_opcode_table(opcodes);
+
+    void* pjit = malloc(1 MB);
+    printf("[BOOT] Starting PJIT\n");
+    if(testrom) memcpy(pjit, m68kcode, sizeof(m68kcode)); 
+    else if(tinbasic) memcpy(pjit, tiny_BASIC, sizeof(tiny_BASIC));
+    else if(dhrystone) LoadHunkFile(pjit, dhrystone);
+    else {
+		char *read_to = (char*)pjit;;
+		FILE *ptr_hunk;
+		struct rec my_record;
+
+		if (!(ptr_hunk=fopen(hunk,"rb"))) {
+			fprintf(stderr, "Unable to open file %s!", hunk);
+			return 1;
+		}
+        fseek(ptr_hunk, 0, SEEK_END);
+        size_t len = fetll(ptr_hunk);
+        void *h = malloc(len);
+		size_t read = fread(read_to, 1, len, ptr_hunk);
+		fclose(ptr_myfptr_hunkile);
+
+        if(len == read) LoadHunkFile(pjit, h);
+        free(h);
+        if(len != read) {
+			fprintf(stderr, "Unable to open file %s!", hunk);
+			return 1;
+		}
+    }
+    pjit_start(pjit);
 
 }

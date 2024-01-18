@@ -12,16 +12,15 @@
 #include "hunkloader.h"
 #include "duffcopy.h"
 
-char * pool = (char *)0x00effff8;
-void * _my_malloc(size_t size)
-{
-    void *ptr = pool;
-    pool += (size + 31) & ~31;
+char * _my_malloc_pool = 0; //(char *)0x00effff8;
+void * _my_malloc(size_t size) {
+    void *ptr = _my_malloc_pool;
+    _my_malloc_pool += (size + 31) & ~31;
     return ptr;
 }
 #define malloc(s) _my_malloc(s)
 
-void * LoadHunkFile(void *buffer) {
+void * LoadHunkFile(void *pool, void *buffer) {
     uint32_t *words = buffer;
     struct SegList * hunks = NULL;
     void * prevhunk = NULL;
@@ -32,6 +31,8 @@ void * LoadHunkFile(void *buffer) {
     intptr_t ref_base = 0;
     intptr_t base = 0;
  
+    _my_malloc_pool = pool;
+    
     printf("[HUNK] Loading Hunk file from address %p\n", words);
 
 //#define printf(...)
