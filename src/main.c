@@ -62,6 +62,8 @@ extern const int m68kcode_size;
 extern const uint8_t _acdhrystone;
 extern const int _acdhrystone_size;
 
+extern const config_t default_config;
+
 const char* banner =
 "              ____ ______________\n"
 "  ______     |    |   \\__    ___/\n"
@@ -69,26 +71,6 @@ const char* banner =
 "  |  |_) )\\__|    |   | |    |\n"
 "  |   __/\\________|___| |____|\n"
 "  |__|\n\n";
-
-const config_t default_config = {
-    // Default Settings
-    0x704A4954,                  // must be 0x704A4954
-    0,                           // must check rest of config
-    // CPU Features
-    { 0, 0, 0, 0, 0, 0, 1, 1, 0 },
-    // POST Enable
-    { 1, 1, 1, 1 }, 
-    1000,                        // dpll_mul, CPU clock = 24 * dpll_mul / dpll_div
-    135,                         // pmic_voltage in decivolts, Recommend 1.35V (135) for 1GHz operation
-    0,                           // dcache_mask_24b, 1 to allow data caching of region
-    0,                           // icache_mask_24b, 1 to allow instruction caching
-    0,                           // last boot good
-    11,                          // cache_index_bits, Cache size = 8 << (cache_index_bits + cache_block_bits)
-    7,                           // cache_block_bits
-    0xFF,                        // MapROM page from 24-bit RAM (single 512KB), 0xFF to disable
-    8000,                        // Default kHz
-    0,                           // not dirty
-};
 
 cpu_t cpu_state = {0};
 
@@ -149,13 +131,21 @@ int main(int argc, char *argv[]) {
 		}
     }
 
-    cache = malloc(2 MB);
+    const size_t cache_size = 2 MB;
+    cache = malloc(cache_size);
     fprintf(stderr, "Initializing cache\n");
-    pjit_cache_init(cache);
+    pjit_cache_init(cache + cache_size); // uses top/end
+    if(!pjit_cache_test()) {
+        fprintf(stderr, "One or more cache tests failed\n");
+        return 1;
+    }
 
     void* opcodes = malloc(2 MB);
     fprintf(stderr, "Initializing opcode tables\n");
     emit_opcode_table(opcodes);
 
+    // Load our initial PC and SP
+    // cpu_state.a7 = *(uint32_t*)0;
+    // cpu_state.pc = *(uint32_t*)4;
     pjit_start(pjit);
 }

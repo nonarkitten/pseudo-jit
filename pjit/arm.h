@@ -50,7 +50,6 @@
 #define _ARM_H
 
 #include <stdint.h>
-#include "support.h"
 
 typedef enum {
     // Lower case are index
