@@ -140,12 +140,11 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    void* opcodes = malloc(2 MB);
     fprintf(stderr, "Initializing opcode tables\n");
-    emit_opcode_table(opcodes);
+    emit_opcode_table();
 
     // Load our initial PC and SP
     // cpu_state.a7 = *(uint32_t*)0;
     // cpu_state.pc = *(uint32_t*)4;
-    pjit_start(pjit);
+    cpu_start(pjit);
 }

@@ -623,33 +623,8 @@ const char* m68k_disasm(uint16_t op) {
 	static bool inited = false;
     extern const op_details_t optab_68000[];
 
-	// static opcode_t ops[OPCODE_COUNT] = { 0 };
 	static char buffer[64];
 	static char buffer2[64];
-	
-	// if(!inited) {
-	// 	int total_ops = 0;
-	// 	inited = true;
-	// 	for(uint32_t i=0; i<OPCODE_COUNT; i++) {
-	// 		uint16_t match = 0, equal = 0, count = 0;
-	// 		for(int b=0; b<16; b++) {
-	// 			uint16_t bit = 0x8000 >> b;
-	// 			char c = opcodes[i][b];
-	// 			if(c != 'x') {
-	// 				match |= bit;
-	// 				if(c == '1') equal |= bit;
-	// 			} else {
-	// 				count++;
-	// 			}
-	// 		}
-	// 		ops[i].match = match;
-	// 		ops[i].equal = equal;
-	// 	}
-	// 	printf("%d total opcodes loaded.\n", total_ops);
-	// }
-
-
-	//extern int debug;
 	
 	for(uint32_t i=0; i<OPCODE_COUNT; i++) {
 		if((op & optab_68000[i].match) == optab_68000[i].equal) {

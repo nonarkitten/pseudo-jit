@@ -52,6 +52,9 @@
 #ifndef __PJIT_H__
 #define __PJIT_H__
 
+#define CACHE_INDEX_BITS 10
+#define CACHE_OFFSET_BITS 10
+
 // PJIT Better Register Allocation
 // --ARM-- 68K USE
 // ------- --- ------
@@ -189,8 +192,8 @@ typedef struct {
     // PJIT SECTION
 
     // Cache size = 8 << (cache_index_bits + cache_block_bits)
-    uint8_t cache_index_bits;
-    uint8_t cache_block_bits;
+    // uint8_t cache_index_bits;
+    // uint8_t cache_block_bits;
 
     // MapROM page from 24-bit RAM (single 512KB), 0xFF to disable
     uint8_t maprom_page;
@@ -246,11 +249,17 @@ typedef struct {
 
     // Pointers to everything
     uint32_t* cache_data;
-    uint16_t* cache_tags;
+    uint32_t* cache_tags;
     uint32_t* maprom_data;
     uint32_t* opcode_table;
     uint32_t* opcode_stubs;
     void*     pjit_core;
+
+    // Cache helpers
+    // uint32_t cache_index_mask;
+    // uint32_t cache_offset_mask;
+    // uint8_t cache_index_shift;
+    // uint8_t cache_tag_shift;
 
     // ARM registers for backup
     uint32_t r0, r1, r2, r3;

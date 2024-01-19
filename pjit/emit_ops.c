@@ -2444,5 +2444,5 @@ void emit_opcode_table() {
         }
     }
     uint32_t len = (uint32_t)stubs - (uint32_t)cpu->opcode_stubs;
-    printf("[PJIT] Stub table %08X (%d) bytes\n", len, len);
+    fprintf(stderr, "Stub table %08X (%d) bytes\n", len, len);
 }
