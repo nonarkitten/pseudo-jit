@@ -129,28 +129,6 @@ uint32_t _cyc;
 
 volatile uint32_t* smem = (volatile uint32_t*)PRU_SHARED_MEM_ADDR;
 
-#if 0
-#define do_ewait() do { \
-    if(_wait) *(uint32_t*)(GPIO2 + GPIO_SETDATAOUT)   = EWAIT; \
-    else      *(uint32_t*)(GPIO2 + GPIO_CLEARDATAOUT) = EWAIT; \
-    } while(0)
-
-#define do_io() do { \
-    /* Set outputs */ \
-    __R30 = _e | _vma; \
-    /* Get inputs */ \
-    _vpa = __R31 & VPA; \
-    /* This block takes care of the VMA signal */ \
-    /* which is used to acknowledge to old 6800 */ \
-    /* style hardware that a bus transfer has  */ \
-    /* happened. Resets when the CPU AS is disasserted */ \
-    if (_vpa) __R30 |= _vma = VMA; \
-    /* This block delays our CPU */ \
-    if (_vma == 0 && _e) _wait = 0; \
-    else _wait = 1; \
-    } while(0)
-#endif
-
 static void update_estate(void) {
     /* Get inputs */
     _vpa = INP & VPA;
@@ -191,6 +169,8 @@ static void do_ewait_even(void) {
         _e = 0;
         _q = 9;
     }
+    OUTP = _e | _vma; /* Set outputs */
+    update_estate();
 }
 
 // On odd cycles we'll do some miscellaneous activities, such as
@@ -220,6 +200,8 @@ static void do_ewait_odds(void) {
         _q = 0;
 
     }
+    OUTP = _e | _vma; /* Set outputs */
+    update_estate();
 }
 
 void main(void) {
@@ -229,24 +211,18 @@ void main(void) {
 
     while (1) {
         do_ewait_even();
-        OUTP = _e | _vma; /* Set outputs */
-        update_estate();
         wait_rise();
         /* S0 -- SET FC0-FC2 and R/W */
         wait_fall();
         /* S1 -- SET ADDRESS PINS */
         
         do_ewait_odds();
-        OUTP = _e | _vma; /* Set outputs */
-        update_estate();
         wait_rise();
         /* S2 -- SET AS, UDS and LDS*/
         wait_fall();
         /* S3 -- CPU NOP */
 
         do_ewait_even();
-        OUTP = _e | _vma; /* Set outputs */
-        update_estate();
 wait_state:
         wait_rise();
         /* S4 -- CPU NOP */
@@ -258,13 +234,14 @@ wait_state:
             OUTP |= WAIT0;
             goto wait_state;
         }
+        // DTACK is low
 
         do_ewait_odds();
-        OUTP = _e | _vma; /* Set outputs */
-        update_estate();
         wait_rise();
         /* S6 -- EXPECT DATA */
-        wait_fall();
+        // wait_fall();
+        while( INP & DTACK); // wait low
+        while(!INP & DTACK); // wait high
         /* S7 -- LATCH DATA, RESET AS, UDS, and LDS */
 
     } // end while
