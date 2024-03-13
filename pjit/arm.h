@@ -368,7 +368,8 @@ static inline uint32_t rors_cc_reg(condition_t cc, uint8_t d, uint8_t s, uint8_t
 static inline uint32_t rors_reg(uint8_t d, uint8_t s, uint8_t r) { return alu_cc(ARM_OP_MOV, ARM_CC_AL, 1, d, 0, shiftreg(r, ARM_SHIFT_ROR, s)); }
 
 // Calculate the offset for all branches, loads and store that use an immediate value
-static inline int32_t calc_offset(uint32_t current, uint32_t target) { return target - current - 8; }
+static inline int32_t offset(uint32_t current, uint32_t target) { return target - current - 8; }
+static inline int32_t calc_offset(void* current, void* target) { return offset((uint32_t)current, (uint32_t)target); }
 
 // Branch immediate
 static inline uint32_t b_cc_imm(condition_t cc, int32_t offset) { return (0x0a000000 | (cc << 28) | ((offset >> 2) & 0x00ffffff)); }
