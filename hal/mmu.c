@@ -6,7 +6,39 @@
 int MMUEnabled = 0;
 
 __attribute__ ((used, aligned (MMU_PAGETABLE_ALIGN_SIZE)))
-static volatile uint32_t mmu_table[MMU_PAGETABLE_NUM_ENTRY] = { 0 };
+uint32_t mmu_table[MMU_PAGETABLE_NUM_ENTRY] = { 0 };
+
+/**
+ * MMU Encoding
+ * 
+ * 31~20        Section Base Address, Must be 1MB aligned
+ * 19       0   NS - Non-secure bit - SBZ
+ * 18       0
+ * 17       0   NG - Not-Global - SBZ
+ * 16       0   S - Shareable. 0 - non-shareable, 1 - shareable
+ *              Non-sharable by default unles TEX B/C override
+ * 
+ * 15       0   AP[2] - SBZ
+ * 14~12        TEX[2:0]
+ * 11~10        AP[1:0]
+ * 9            IMP
+ * 8~5          Domain
+ * 4        0   XN - Execute Never - SBZ
+ * 3            C - Cacheable. 0 - non-cacheable, 1 - cacheable
+ * 2            B - writeBack. 0 - no-writeback, 1-enable writeback
+ * 1        1   MBO
+ * 0        0   MBZ
+ * 
+ *          fedc ba98 7654 3210
+ * 0x0c06 = 0000 1100 0000 0110 AP=011, TEX=000, CB=01
+ *  AP      Full Access
+ *  TEX+CB  Shareable Device
+ * 
+ * 0x1c0e = 0001 1100 0000 1110 AP=011, TEX=001, CB=11
+ *  AP      Full Access
+ *  TEX+CB  Outer and Inner Write-Back, Write-Allocate
+ * 
+ */
 
 void InitMMU(void) {
     // 0x000 to 0x7FF, GPMC/PIO strongly ordered, no caching

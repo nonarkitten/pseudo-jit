@@ -782,16 +782,19 @@ void emit_ASd(uint32_t** emit, uint16_t opcode) {
 __attribute__((target("thumb")))
 void emit_Bcc(uint32_t** emit, uint16_t opcode) {
     int8_t offset = (int8_t)(opcode & 0xFF);
-    if((offset == 0) || (offset == -1)) { 
-        *(*emit)++ = nop();
-    // } else if(offset & 1) {
-    //     *(*emit)++ = movw(r1, 0x0008); // instruction
-    //     *(*emit)++ = svc(ADDRESSERR);
+    if ((offset == 0) || (offset == -1)) { 
+        // 16 or 32-bit offset should be in r1
+        *(*emit)++ = add(r0, r0, reg(r1)); // r0 = r0 + r1
+    } else if(offset < 0) {
+        // subtract 7-bit value
+        *(*emit)++ = sub(r0, r0, imm((-offset) << 1)); // r0 = r0 + #imm8
     } else {
-        *(*emit)++ = mov_signed(r1, offset);
+        // add 7-bit value
+        *(*emit)++ = add(r0, r0, imm(offset << 1)); // r0 = r0 + #imm8
     }
 
     uint8_t cc = arm_cc(opcode);
+    if(cc == ARM_CC_NV) cc = ARM_CC_AL; // fixup for BSR
     if(cc == ARM_CC_HI) {
         /* ARM C=1 & Z=0, 68K C=0 | Z = 0
          * C Z ARM 68K
@@ -800,9 +803,9 @@ void emit_Bcc(uint32_t** emit, uint16_t opcode) {
          * 1 0  1   1
          * 1 1  0   0
          */
-        **emit = b_cc_imm(ARM_CC_CC, calc_offset((uint32_t)*emit, (uint32_t)branch_normal));
+        **emit = b_cc_imm(ARM_CC_CC, calc_offset((uint32_t)*emit, (uint32_t)pjit_lookup));
         *emit += 1;
-        **emit = b_cc_imm(ARM_CC_NE, calc_offset((uint32_t)*emit, (uint32_t)branch_normal));
+        **emit = b_cc_imm(ARM_CC_NE, calc_offset((uint32_t)*emit, (uint32_t)pjit_lookup));
         *emit += 1;
 
     } else if(cc == ARM_CC_LS) {
@@ -818,11 +821,11 @@ void emit_Bcc(uint32_t** emit, uint16_t opcode) {
         *emit += 1;
         **emit = b_cc_imm(ARM_CC_NE, calc_offset((uint32_t)*emit, skip));
         *emit += 1;
-        **emit = b_imm(calc_offset((uint32_t)*emit, (uint32_t)branch_normal));
+        **emit = b_imm(calc_offset((uint32_t)*emit, (uint32_t)pjit_lookup));
         *emit += 1;
 
     } else {
-        **emit = b_cc_imm(cc, calc_offset((uint32_t)*emit, (uint32_t)branch_normal));
+        **emit = b_cc_imm(cc, calc_offset((uint32_t)*emit, (uint32_t)pjit_lookup));
         *emit += 1;
     }
     *(*emit)++ = bx(lr);
@@ -845,8 +848,8 @@ void emit_BSET(uint32_t** emit, uint16_t opcode) {
 }
 __attribute__((target("thumb")))
 void emit_BSR(uint32_t** emit, uint16_t opcode) {
-    *(*emit)++ = nop();
-    **emit = b_imm(calc_offset((uint32_t)*emit, (uint32_t)branch_subroutine));
+    *(*emit)++ = push(R7);
+    emit_Bcc(emit, opcode);
     *emit += 1;
 }
 __attribute__((target("thumb")))
@@ -1078,15 +1081,15 @@ void emit_JMP(uint32_t** emit, uint16_t opcode) {
     uint8_t sEA = 0xC0 | (opcode & 0x3F);
     uint8_t sReg = emit_EA_Load(emit, sEA, 1, 1, 0);
     *(*emit)++ = nop();
-    **emit = b_imm(calc_offset((uint32_t)*emit, jump_normal));
+    **emit = b_imm(calc_offset((uint32_t)*emit, pjit_lookup));
     *emit += 1;
 }
 __attribute__((target("thumb")))
 void emit_JSR(uint32_t** emit, uint16_t opcode) {
     uint8_t sEA = 0xC0 | (opcode & 0x3F);
     uint8_t sReg = emit_EA_Load(emit, sEA, 1, 1, 0);
-    *(*emit)++ = nop();
-    **emit = b_imm(calc_offset((uint32_t)*emit, jump_subroutine));
+    *(*emit)++ = push(R7);
+    **emit = b_imm(calc_offset((uint32_t)*emit, pjit_lookup));
     *emit += 1;
 }
 __attribute__((target("thumb")))

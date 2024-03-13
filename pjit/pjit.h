@@ -286,14 +286,8 @@ register union { uint32_t L; uint16_t W; } A5 asm("r11");
 register union { uint32_t L; uint16_t W; } A6 asm("r12");
 register union { uint32_t L; uint16_t W; } A7 asm("r13");
 
-extern void cpu_start(void* base);
-
 extern uint32_t cache_find_entry(uint32_t);
 extern void pjit_cache_init(uint32_t);
-
-extern void jump_normal(uint32_t m68k_pc);
-extern void jump_subroutine(uint32_t m68k_pc);
-extern void branch_normal(uint32_t _, int32_t offset);
-extern void branch_subroutine(uint32_t _, int32_t  offset);
+extern void pjit_lookup(uint16_t *m68k_pc);
 
 #endif
