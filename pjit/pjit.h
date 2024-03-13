@@ -286,8 +286,8 @@ register union { uint32_t L; uint16_t W; } A5 asm("r11");
 register union { uint32_t L; uint16_t W; } A6 asm("r12");
 register union { uint32_t L; uint16_t W; } A7 asm("r13");
 
-extern uint32_t cache_find_entry(uint32_t);
-extern void pjit_cache_init(uint32_t);
+extern uint32_t cache_find_entry(uint32_t address);
+extern void pjit_start(uint32_t top);
 extern void pjit_lookup(uint16_t *m68k_pc);
 
 #endif

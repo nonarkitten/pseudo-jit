@@ -69,76 +69,44 @@ const config_t default_config = {
 };
 
 cpu_t cpu_state = {0};
-extern void lookup_opcode(void);
+
+static uint32_t * cache_clear_block(uint32_t* block) {
+    uint32_t *end = block + 1 << (cpu->config.cache_block_bits + 2);
+    while(block < end) {
+        *block++ = ldr(r0, r5, offsetof(cpu_t, pc));
+        *block++ = blx(r5);
+    }
+    return end;
+}
+
+static void cache_clear(void) {
+    uint32_t *start = cpu->cache_data;
+    uint32_t *end = start + 1 << (cpu->config.cache_block_bits + cpu->config.cache_index_bits + 2);
+    while(start < end) start = cache_clear_block(start);
+}
 
 uint32_t cache_find_entry(uint32_t m68k) {
-    return 0;
+    // m68k address is composed of the following:
+
+    // assuming 11 index bits and 7 block bits
+    // tttt tttt tttt xiii iiii iiii bbbb bbb0
+
+    // which corresponds to an offset into the pjit cache of
+    // 0000 0000 0000 iiii iiii iiib bbbb bb00
+    
+	uint16_t tag = m68k >> (1 + cpu->config.cache_block_bits + cpu->config.cache_index_bits);
+	uint16_t index = (m68k >> (1 + cpu->config.cache_block_bits)) & ((1 << cpu->config.cache_index_bits) - 1);
+	uint16_t block = (m68k >> 1) & ((1 << cpu->config.cache_block_bits) - 1);
+		
+	if(cpu->cache_tags[index] != tag) {
+		cpu->cache_tags[index] = tag;
+		cache_clear_block(index << (2 + cpu->config.cache_block_bits));
+	}
+
+	return cpu->cache_data | (m68k & ((1 << (1 + cpu->config.cache_block_bits + cpu->config.cache_index_bits)) - 1))
 }
 
-// __attribute__((naked)) static void cache_clear_block(uint32_t* block) {
-//     asm("movw     r1, #0x0002   \n\t" // 0xE2800002 = add r0, r0, #2    
-//         "movt     r1, #0xE280   \n\t"         
-//         "vmov     s16, r1       \n\t"
-//         "movw     r1, #0xFF35   \n\t" // 0xE12FFF35 = blx r5        
-//         "movt     r1, #0xE12F   \n\t"         
-//         "vmov     s17, r1       \n\t"     
-//         "add      r1, r0, r0    \n\t"        
-//         "vmov.f64 d9, d8        \n\t"    
-//         "vmov.f64 d10, d8       \n\t"     
-//         "vmov.f64 d11, d8       \n\t"     
-//         "vmov.f64 d12, d8       \n\t"     
-//         "vmov.f64 d13, d8       \n\t"     
-//         "vmov.f64 d14, d8       \n\t"     
-//         "vmov.f64 d15, d8       \n"     
-//     "L0: vstm     r0!, {d8-d15} \n\t"           
-//         "cmp      r1, r0        \n\t"    
-//         "bhi      L0            \n\t"
-//         "bx       lr            \n\t");
-// }
-
-__attribute__((naked)) static void cache_clear(void) {
-    asm("ldr      r0, [r5, %0]       \n\t" // r0 = start
-        "ldrb     r1, [r5, %1]       \n\t"
-        "ldrb     r2, [r5, %2]       \n\t"
-        "add      r2, r2, r1         \n\t"
-        "mov      r1, #8             \n\t"
-        "add      r2, r0, r1, lsl r2 \n"   // r2 = end
-        "movw     r1, #0x0002        \n\t" // 0xE2800002 = add r0, r0, #2    
-        "movt     r1, #0xE280        \n\t"         
-        "vmov     s16, r1            \n\t"
-        "movw     r1, #0xFF35        \n\t" // 0xE12FFF35 = blx r5        
-        "movt     r1, #0xE12F        \n\t"         
-        "vmov     s17, r1            \n\t"     
-        "vmov.f64 d9, d8             \n\t"    
-        "vmov.f64 d10, d8            \n\t"     
-        "vmov.f64 d11, d8            \n\t"     
-        "vmov.f64 d12, d8            \n\t"     
-        "vmov.f64 d13, d8            \n\t"     
-        "vmov.f64 d14, d8            \n\t"     
-        "vmov.f64 d15, d8            \n"
-    "L1: vstm     r0!, {d8-d15}      \n\t"           
-        "cmp      r0, r2             \n\t"
-        "bcc      L1                 \n\t"
-        "bx       lr                 \n\t"
-        ::  "i"(__offsetof(cpu_t,cache_data)),
-            "i"(__offsetof(cpu_t,config.cache_index_bits)),
-            "i"(__offsetof(cpu_t,config.cache_block_bits)));
-}
-
-
-/*  Given a point within the PJIT cache, determine the 68K PC
-    WARNING: this assumes that the cache_tag is valid and makes
-    no attempt to verify that it is not */
-uint32_t cache_reverse(uint32_t arm_addr) {
-//     // arm_addr -= (uint32_t)pjit_cache;
-//     uint16_t index = (arm_addr >> 2) & ((1 << PAGE_SIZE) - 1);
-//     uint16_t page  = (arm_addr >> (2 + PAGE_SIZE)) & ((1 << PAGE_COUNT) - 1);
-//     uint32_t set =
-//         (arm_addr >> (2 + PAGE_SIZE + PAGE_COUNT)) & ((1 << SET_BITS) - 1);
-//     return pjit_tag_cache[set][page] | (index << 1);
-}
-
-pjit_cache_init(uint32_t top) {
+pjit_start(uint32_t top) {
     // TOP OF RAM
     uint8_t* memory = (uint8_t*)top;
 
@@ -189,13 +157,13 @@ pjit_cache_init(uint32_t top) {
     memset(memory, 0, (uint8_t*)0xA0000000 - memory);
 
     // Clear CPU state
-    cpu_state.b_lookup = b_imm(calc_offset(cpu, &lookup_opcode));
+    cpu_state.b_lookup = b_imm(calc_offset(cpu, &pjit_lookup));
 
     // Clear caches
     cpu = &cpu_state;
     cache_clear();
 
     // Load our initial PC and SP
-    // cpu_state.a7 = *(uint32_t*)0;
-    // cpu_state.pc = *(uint32_t*)4;
+    cpu_state.a7 = *(uint32_t*)0;
+    pjit_lookup(cpu_state.pc = *(uint32_t*)4);
 }
