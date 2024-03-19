@@ -71,7 +71,7 @@ const config_t default_config = {
 cpu_t cpu_state = {0};
 
 static uint32_t * cache_clear_block(uint32_t* block) {
-    uint32_t *end = block + 1 << (cpu->config.cache_block_bits + 2);
+    uint32_t *end = block + 1 << (BLOCK_BITS + 2);
     while(block < end) {
         *block++ = ldr(r0, r5, offsetof(cpu_t, pc));
         *block++ = blx(r5);
@@ -81,7 +81,7 @@ static uint32_t * cache_clear_block(uint32_t* block) {
 
 static void cache_clear(void) {
     uint32_t *start = cpu->cache_data;
-    uint32_t *end = start + 1 << (cpu->config.cache_block_bits + cpu->config.cache_index_bits + 2);
+    uint32_t *end = start + 1 << (BLOCK_BITS + INDEX_BITS + 2);
     while(start < end) start = cache_clear_block(start);
 }
 
@@ -89,21 +89,21 @@ uint32_t cache_find_entry(uint32_t m68k) {
     // m68k address is composed of the following:
 
     // assuming 11 index bits and 7 block bits
-    // tttt tttt tttt xiii iiii iiii bbbb bbb0
+    // tttt tttt tttt tiii iiii iiii bbbb bbb0
 
     // which corresponds to an offset into the pjit cache of
     // 0000 0000 0000 iiii iiii iiib bbbb bb00
     
-	uint16_t tag = m68k >> (1 + cpu->config.cache_block_bits + cpu->config.cache_index_bits);
-	uint16_t index = (m68k >> (1 + cpu->config.cache_block_bits)) & ((1 << cpu->config.cache_index_bits) - 1);
-	uint16_t block = (m68k >> 1) & ((1 << cpu->config.cache_block_bits) - 1);
+	uint16_t tag = m68k >> (1 + BLOCK_BITS + INDEX_BITS);
+	uint16_t index = (m68k >> (1 + BLOCK_BITS)) & ((1 << INDEX_BITS) - 1);
+	uint16_t block = (m68k >> 1) & ((1 << BLOCK_BITS) - 1);
 		
 	if(cpu->cache_tags[index] != tag) {
 		cpu->cache_tags[index] = tag;
-		cache_clear_block(index << (2 + cpu->config.cache_block_bits));
+		cache_clear_block(index << (2 + BLOCK_BITS));
 	}
 
-	return cpu->cache_data | (m68k & ((1 << (1 + cpu->config.cache_block_bits + cpu->config.cache_index_bits)) - 1))
+	return cpu->cache_data | (m68k & ((1 << (1 + BLOCK_BITS + INDEX_BITS)) - 1))
 }
 
 pjit_start(uint32_t top) {

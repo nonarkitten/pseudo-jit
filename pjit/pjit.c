@@ -240,9 +240,32 @@ static uint8_t get_ext(uint16_t opcode) {
     return d;
 }
 
-/*  Look up code and if it's small enough, replace the caller with the
-    function body, otherwise, replace with the branch to it and then execute it
- */
+__attribute__((naked,used,target("arm")))
+void pjit_m68k_pc(void) {
+    register uint32_t r1 asm("r1");
+    r1 = 0;
+    asm volatile("" :: "r"(r1)); 
+}
+
+__attribute__((naked,used,target("arm")))
+void pjit_m68k_pc_relative(uint32_t unused, int32_t offset) {
+    pjit_cache_reverse(offset);
+    asm("b       pjit_lookup");
+}
+
+__attribute__((naked,used,target("arm")))
+void pjit_m68k_pc_subroutine(void) {
+    register uint32_t r1 asm("r1");
+    r1 = 0;
+    asm volatile("" :: "r"(r1)); 
+}
+
+__attribute__((naked,used,target("arm")))
+void pjit_m68k_pc_relative_subroutine(uint32_t unused, int32_t offset) {
+    pjit_cache_reverse(offset);
+    asm("str     r0, [sp, #-1]");
+}
+
 __attribute__((naked,used)) void pjit_lookup(uint16_t *m68k_pc) {
 	static uint32_t exec_buffer[8];
 	register uint32_t *out asm("lr");
