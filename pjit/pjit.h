@@ -190,11 +190,9 @@ typedef struct {
     uint16_t icache_mask_24b;  // 1 to allow instruction caching
 
     // PJIT SECTION
-#if (WAY_FAST != 1)
     // Cache size = 8 << (cache_index_bits + cache_block_bits)
     uint8_t cache_index_bits;
     uint8_t cache_block_bits;
-#endif
 
     // MapROM page from 24-bit RAM (single 512KB), 0xFF to disable
     uint8_t maprom_page;
@@ -291,29 +289,34 @@ register union { uint32_t L; uint16_t W; } A7 asm("r13");
 
 extern uint32_t cache_find_entry(uint32_t address);
 extern void pjit_start(uint32_t top);
-extern void pjit_lookup(uint16_t *m68k_pc);
+extern void pjit_jmp(uint16_t *m68k_pc);
+extern void pjit_lookup(void);
+
+// This is the size of each "element" in PJIT cache in bits
+// A single ARM opcode is 32-bits, so that's "2" while two
+// ARM opcopdes would be "3" and four arm opcodes would "4"
+#define CACHE_OP_BITS   2
 
 #if (WAY_FAST==1)
-#define BLOCK_BITS  7
-#define INDEX_BITS  11
+#define BLOCK_BITS      7
+#define INDEX_BITS      11
 
 #else /* SLOW_AF  */
 #warning Do not do this! For the love of god!!!
 #define BLOCK_BITS  (cpu->config.cache_block_bits)
 #define INDEX_BITS  (cpu->config.cache_index_bits)
-#define cache_reverse()
 #endif
 
 // always_inline because GCC ignores inline and target("arm") to stop adding+s to lsl
 __attribute__((always_inline,target("arm")))
-static inline uint32_t pjit_cache_reverse(uint32_t unused, int32_t offset) {
-    (void)unused;
+static inline uint32_t pjit_cache_reverse(void) {
     register uint32_t lr asm("lr");
     register uint32_t r0 asm("r0");
-	uint16_t index = (lr >> (2 + BLOCK_BITS)) & ((1 << INDEX_BITS) - 1);
-	uint16_t block = (lr >> 2) & ((1 << BLOCK_BITS) - 1);
+
+	uint16_t index = (lr >> (CACHE_OP_BITS + BLOCK_BITS)) & ((1 << INDEX_BITS) - 1);
+	uint16_t block = (lr >> CACHE_OP_BITS) & ((1 << BLOCK_BITS) - 1);
     r0 = ((cpu->cache_tags[index] << (1 + BLOCK_BITS + INDEX_BITS))
-            | (index << (1 + BLOCK_BITS)) | (block << 1)) + offset;
+       | (index << (1 + BLOCK_BITS)) | (block << 1));
 
     asm volatile("" :: "r"(r0)); // force GCC to not optimze this out!
     return r0;

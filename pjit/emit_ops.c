@@ -57,7 +57,7 @@
 // Return Value
 //  returns the actual register containing the expected data
 //
-extern uint8_t emit_EA_Load(uint32_t* emit, uint8_t sEA, uint8_t dReg, uint8_t iReg, int isRMW);
+extern uint8_t emit_EA_Load(uint32_t** emit, uint8_t sEA, uint8_t dReg, uint8_t iReg, int isRMW);
 
 // Performs an Effective-Address (EA) Load
 // Parameters
@@ -71,17 +71,25 @@ extern uint8_t emit_EA_Load(uint32_t* emit, uint8_t sEA, uint8_t dReg, uint8_t i
 //  if the Store was able to set condition code this returns the OPCODE
 //  otherwise this will return 0
 //
-extern uint32_t emit_EA_Store(uint32_t* emit, uint8_t dEA, uint8_t sReg, uint8_t iReg, int isRMW);
+extern uint32_t emit_EA_Store(uint32_t** emit, uint8_t dEA, uint8_t sReg, uint8_t iReg, int isRMW);
 
 #define IMPLICIT  (0b00111111)
 #define IMMEDIATE (0b00111100)
 
 #define NO_FLAGS  (0x20)
 
-#define THUMB __attribute__((target("thumb"))) static
-
 #pragma GCC diagnostic push
 #pragma GCC diagnostic error "-Wswitch"
+
+
+extern void pjit_lookup(void);
+extern void pjit_bsr4p(void);
+extern void pjit_bsr2p(void);
+extern void pjit_bsr(void);
+extern void pjit_bra(void);
+extern void pjit_jsr4p(void);
+extern void pjit_jsr2p(void);
+extern void pjit_jsr(void);
 
 extern void r2m_word(void);
 extern void r2m_long(void);
@@ -164,8 +172,6 @@ typedef enum {
 
 } ALU_OP_t;
 
-uint32_t* stubs;
-
 /***
  *      _   _      _                   _____                 _   _
  *     | | | | ___| |_ __   ___ _ __  |  ___|   _ _ __   ___| |_(_) ___  _ __  ___
@@ -175,87 +181,99 @@ uint32_t* stubs;
  *                  |_|
  */
 // @brief emit supervisor exception
-THUMB void emit_SVC(uint32_t* emit, int exception) {
-    *emit++ = svc(exception);
-    *emit++ = nop();
+__attribute__((target("thumb")))
+static void emit_SVC(uint32_t** emit, int exception) {
+    *(*emit)++ = nop();
+    *(*emit)++ = svc(exception);
 }
 // @brief check if we're in supervisor mode, exception if not
-THUMB void emit_is_SVC(uint32_t* emit) {
+__attribute__((target("thumb")))
+static void emit_is_SVC(uint32_t** emit) {
     // r2 should hold SR
-    *emit++ = tst(r2, imm(0x2000));
-    *emit++ = svc_cc(ARM_CC_NE, PRIV);
+    *(*emit)++ = tst(r2, imm(0x2000));
+    *(*emit)++ = svc_cc(ARM_CC_NE, PRIV);
 }
 // @brief load our X flag into the C flag, destroys r0
-THUMB void emit_load_X(uint32_t* emit) {
+__attribute__((target("thumb")))
+static void emit_load_X(uint32_t** emit) {
     // restore X -> C
-    *emit++ = ldrb(r0, r5, index_imm(1, 0, (1 + __offsetof(cpu_t, sr))));
-    *emit++ = rsbs(r0, r0, imm(0xf));
+    *(*emit)++ = ldrb(r0, r5, index_imm(1, 0, (1 + __offsetof(cpu_t, sr))));
+    *(*emit)++ = rsbs(r0, r0, imm(0xf));
 }
 // @brief save out C flag back into the X, destroys r0
-THUMB void emit_save_X(uint32_t* emit) {
+__attribute__((target("thumb")))
+static void emit_save_X(uint32_t** emit) {
     // put C back into X, leave everything else
-    *emit++ = ldrb(r0, r5, index_imm(1, 0, (1 + __offsetof(cpu_t, sr))));
-    *emit++ = orr_cc(ARM_CC_CS, r0, r0, imm(0x10));
-    *emit++ = bic_cc(ARM_CC_CC, r0, r0, imm(0x10));
-    *emit++ = strb(r0, r5, index_imm(1, 0, (1 + __offsetof(cpu_t, sr))));
+    *(*emit)++ = ldrb(r0, r5, index_imm(1, 0, (1 + __offsetof(cpu_t, sr))));
+    *(*emit)++ = orr_cc(ARM_CC_CS, r0, r0, imm(0x10));
+    *(*emit)++ = bic_cc(ARM_CC_CC, r0, r0, imm(0x10));
+    *(*emit)++ = strb(r0, r5, index_imm(1, 0, (1 + __offsetof(cpu_t, sr))));
 }
 // @brief convert a value in r1 (e.g., 3) into a mask (e.g., 1<<3)
-THUMB void emit_src_bit_to_mask(uint32_t* emit) {
+__attribute__((target("thumb")))
+static void emit_src_bit_to_mask(uint32_t** emit) {
     // convert source 'r1' to 'bit position' and pre-test
-    *emit++ = mov(r0, imm(1));
-    *emit++ = lsl_reg(r1, r1, r0);
-    *emit++ = tst(r1, r2);
+    *(*emit)++ = mov(r0, imm(1));
+    *(*emit)++ = lsl_reg(r1, r1, r0);
+    *(*emit)++ = tst(r1, r2);
 }
 // @brief given a 68K SR value in reg, set ARM CPSR flags
-THUMB void emit_68k_to_arm_cc(uint32_t* emit, uint8_t reg) {
+__attribute__((target("thumb")))
+static void emit_68k_to_arm_cc(uint32_t** emit, uint8_t reg) {
     // recompose flags -> MCR, reg has ...xnzvc
-    *emit++ = rbit(reg, reg);       // cvznx...0000
-    *emit++ = bfi(reg, reg, 2, 2);  // cvznx...00nz
-    *emit++ = ror_imm(reg, reg, 2); // nzcvznx...00
-    *emit++ = msr(CPSR_f, reg);     // msr  CPSR_f, r0
+    *(*emit)++ = rbit(reg, reg);       // cvznx...0000
+    *(*emit)++ = bfi(reg, reg, 2, 2);  // cvznx...00nz
+    *(*emit)++ = ror_imm(reg, reg, 2); // nzcvznx...00
+    *(*emit)++ = msr(CPSR_f, reg);     // msr  CPSR_f, r0
 }
 // @brief get the ARM CPSR flags into the low 4-bit of reg
-THUMB void emit_arm_to_68k_cc(uint32_t* emit, uint8_t reg) {
+__attribute__((target("thumb")))
+static void emit_arm_to_68k_cc(uint32_t** emit, uint8_t reg) {
     // get CURRENT condition flags (do NOT affect X)
-    *emit++ = bic(reg, r0, imm(0xF));
-    *emit++ = orr_cc(ARM_CC_CS, reg, reg, imm(0x01));
-    *emit++ = orr_cc(ARM_CC_VS, reg, reg, imm(0x02));
-    *emit++ = orr_cc(ARM_CC_EQ, reg, reg, imm(0x04));
-    *emit++ = orr_cc(ARM_CC_MI, reg, reg, imm(0x07));
+    *(*emit)++ = bic(reg, r0, imm(0xF));
+    *(*emit)++ = orr_cc(ARM_CC_CS, reg, reg, imm(0x01));
+    *(*emit)++ = orr_cc(ARM_CC_VS, reg, reg, imm(0x02));
+    *(*emit)++ = orr_cc(ARM_CC_EQ, reg, reg, imm(0x04));
+    *(*emit)++ = orr_cc(ARM_CC_MI, reg, reg, imm(0x07));
 }
 // @brief load the 68K SR into reg
-THUMB void emit_load_SR(uint32_t* emit, uint8_t reg) {
-    *emit++ = ldrh(reg, r5, index_imm(1, 0, __offsetof(cpu_t, sr)));
+__attribute__((target("thumb")))
+static void emit_load_SR(uint32_t** emit, uint8_t reg) {
+    *(*emit)++ = ldrh(reg, r5, index_imm(1, 0, __offsetof(cpu_t, sr)));
     // save our stack pointer depending on current mode
-    *emit++ = tst(reg, imm(0x2000));
-    *emit++ = str_cc(ARM_CC_EQ, reg, sp, index_imm(1, 0, __offsetof(cpu_t, ssp)));
-    *emit++ = str_cc(ARM_CC_NE, reg, sp, index_imm(1, 0, __offsetof(cpu_t, usp)));
+    *(*emit)++ = tst(reg, imm(0x2000));
+    *(*emit)++ = str_cc(ARM_CC_EQ, reg, sp, index_imm(1, 0, __offsetof(cpu_t, ssp)));
+    *(*emit)++ = str_cc(ARM_CC_NE, reg, sp, index_imm(1, 0, __offsetof(cpu_t, usp)));
     emit_arm_to_68k_cc(emit, reg);
 }
 // @brief save the 68K SR in reg to cpu_t state
-THUMB void emit_save_SR(uint32_t* emit, uint8_t reg) {
+__attribute__((target("thumb")))
+static void emit_save_SR(uint32_t** emit, uint8_t reg) {
     // put reg -> sr
-    *emit++ = strh(reg, r5, index_imm(1, 0, __offsetof(cpu_t, sr)));
+    *(*emit)++ = strh(reg, r5, index_imm(1, 0, __offsetof(cpu_t, sr)));
     // load our stack pointer depending on our new mode
-    *emit++ = tst(reg, imm(0x2000));
-    *emit++ = ldr_cc(ARM_CC_EQ, sp, r5, index_imm(1, 0, __offsetof(cpu_t, ssp)));
-    *emit++ = ldr_cc(ARM_CC_NE, sp, r5, index_imm(1, 0, __offsetof(cpu_t, usp)));
+    *(*emit)++ = tst(reg, imm(0x2000));
+    *(*emit)++ = ldr_cc(ARM_CC_EQ, sp, r5, index_imm(1, 0, __offsetof(cpu_t, ssp)));
+    *(*emit)++ = ldr_cc(ARM_CC_NE, sp, r5, index_imm(1, 0, __offsetof(cpu_t, usp)));
     emit_68k_to_arm_cc(emit, reg);
 }
 // @brief load the 68K CCR into reg
-THUMB void emit_load_CR(uint32_t* emit, uint8_t reg) {
-    *emit++ = ldrb(reg, r5, index_imm(1, 0, 1 + __offsetof(cpu_t, sr)));
+__attribute__((target("thumb")))
+static void emit_load_CR(uint32_t** emit, uint8_t reg) {
+    *(*emit)++ = ldrb(reg, r5, index_imm(1, 0, 1 + __offsetof(cpu_t, sr)));
     emit_arm_to_68k_cc(emit, reg);
 }
 // @brief save the 68K CCR in reg to cpu_t state
-THUMB void emit_save_CR(uint32_t* emit, uint8_t reg) {
+__attribute__((target("thumb")))
+static void emit_save_CR(uint32_t** emit, uint8_t reg) {
     // put reg -> sr
-    *emit++ = strb(reg, r5, index_imm(1, 0, 1 + __offsetof(cpu_t, sr)));
+    *(*emit)++ = strb(reg, r5, index_imm(1, 0, 1 + __offsetof(cpu_t, sr)));
     emit_68k_to_arm_cc(emit, reg);
 }
 // @brief return the ARM condition code based on the 68K cc field
 // @note HI and LS should not be used directly in any _cc opcode!
-THUMB int arm_cc(uint16_t opcode) {
+__attribute__((target("thumb")))
+static int arm_cc(uint16_t opcode) {
     switch(opcode & 0x0F00) {
     case 0x0000: return ARM_CC_AL; break; // 0000 T  True           1110
     case 0x0100: return ARM_CC_NV; break; // 0001 F  False          1111
@@ -282,7 +300,8 @@ THUMB int arm_cc(uint16_t opcode) {
 // @param regS source (unmodifed) register
 // @param regD destination (modified) register, or with NO_FLAGS to suppress setting flags
 // @return Nothing
-THUMB void emit_ALU(uint32_t* emit, ALU_OP_t op, uint8_t regS, uint8_t regD) {
+__attribute__((target("thumb")))
+void emit_ALU(uint32_t** emit, ALU_OP_t op, uint8_t regS, uint8_t regD) {
     uint32_t opcode = 0;
     uint32_t cond   = 0;
 
@@ -369,7 +388,7 @@ THUMB void emit_ALU(uint32_t* emit, ALU_OP_t op, uint8_t regS, uint8_t regD) {
             break;
         case ALU_OP_ROL:
             cond       = 1;
-            *emit++ = rsb(regS, regS, 31);
+            *(*emit)++ = rsb(regS, regS, 31);
         case ALU_OP_ROR:
             cond   = 1;
             opcode = ror_reg(regD, regD, regS);
@@ -393,14 +412,14 @@ THUMB void emit_ALU(uint32_t* emit, ALU_OP_t op, uint8_t regS, uint8_t regD) {
             break; }
 
         case ALU_OP_MULSW:
-            *emit++ = sxth(regD, regD, 0);
-            *emit++ = sxth(regS, regS, 0);
-            *emit++ = mul(regD, regD, regS);
+            *(*emit)++ = sxth(regD, regD, 0);
+            *(*emit)++ = sxth(regS, regS, 0);
+            *(*emit)++ = mul(regD, regD, regS);
             break;
         case ALU_OP_MULUW:
-            *emit++ = uxth(regD, regD, 0);
-            *emit++ = uxth(regS, regS, 0);
-            *emit++ = mul(regD, regD, regS);
+            *(*emit)++ = uxth(regD, regD, 0);
+            *(*emit)++ = uxth(regS, regS, 0);
+            *(*emit)++ = mul(regD, regD, regS);
             break;
 
         // Bitwise
@@ -438,29 +457,32 @@ THUMB void emit_ALU(uint32_t* emit, ALU_OP_t op, uint8_t regS, uint8_t regD) {
 
     // add the 's' flag
     if (cond && (regD < 5)) opcode |= (1 << 20);
-    *emit++ = opcode;
+    *(*emit)++ = opcode;
 
     // sign-extend do not set flags
     if ((op != ALU_OP_EXTBW) && (op != ALU_OP_EXTWL))
-        *emit++ = cmp(regD, 0);
+        *(*emit)++ = cmp(regD, 0);
 
     // fix up our reverse-subtraction
     if ((op == ALU_OP_SUB) || (op == ALU_OP_SUBX))
-        *emit++ = rsb(regD, regS, 0);
+        *(*emit)++ = rsb(regD, regS, 0);
 
     return opcode;
 }
 #pragma GCC diagnostic pop
 
 // @brief wrapper for ADDI, ANDI, CMPI, EORI, ORI, SUBI; adds BX LR
-THUMB void emit_IMD_ALU(uint32_t* emit, uint16_t opcode, ALU_OP_t op) {
+__attribute__((target("thumb")))
+void emit_IMD_ALU(uint32_t** emit, uint16_t opcode, ALU_OP_t op) {
     uint8_t dEA  = (opcode & 0xFF);
     uint8_t regD = emit_EA_Load(emit, dEA, 0, 2, 1);
     emit_ALU(emit, op, 1, regD);
     if (op != ALU_OP_CMP) emit_EA_Store(emit, dEA, regD, 2, 1);
+    *(*emit)++ = bx(lr);
 }
 // @brief wrapper for ADD, AND, CMP, EOR, OR, SUB; adds BX LR
-THUMB void emit_EA_ALU(uint32_t* emit, uint16_t opcode, ALU_OP_t op) {
+__attribute__((target("thumb")))
+void emit_EA_ALU(uint32_t** emit, uint16_t opcode, ALU_OP_t op) {
     uint8_t sEA = (opcode & 0xC0), dEA = (opcode & 0xC0);
     if ((op == ALU_OP_CMP) || !(op == ALU_OP_EOR) || !(opcode & 0x0100)) {
         // m->r
@@ -475,9 +497,11 @@ THUMB void emit_EA_ALU(uint32_t* emit, uint16_t opcode, ALU_OP_t op) {
     uint8_t regD = emit_EA_Load(emit, dEA, 0, 2, 1);
     emit_ALU(emit, op, regS, regD);
     if (op != ALU_OP_CMP) emit_EA_Store(emit, dEA, regD, 2, 1);
+    *(*emit)++ = bx(lr);
 }
 // @brief wrapper for ABCD, ADDX, SBCD, SUBX; adds BX LR
-THUMB void emit_BCD_XOP_ALU(uint32_t* emit, uint16_t opcode, ALU_OP_t op) {
+__attribute__((target("thumb")))
+void emit_BCD_XOP_ALU(uint32_t** emit, uint16_t opcode, ALU_OP_t op) {
     uint8_t sEA = opcode & 0xC7;
     uint8_t dEA = ((opcode >> 9) & 7) | (opcode & 0xC0);
     if (opcode & 0x0004) {
@@ -489,57 +513,69 @@ THUMB void emit_BCD_XOP_ALU(uint32_t* emit, uint16_t opcode, ALU_OP_t op) {
     emit_ALU(emit, op, regS, regD);
     emit_EA_Store(emit, dEA, regD, 2, 1);
     emit_save_X(emit);
+    *(*emit)++ = bx(lr);
 }
 // @brief wrapper for CMP, NEG, NOT; adds BX LR
-THUMB void emit_UNARY_EA_ALU(uint32_t* emit, uint16_t opcode, ALU_OP_t op) {
+__attribute__((target("thumb")))
+void emit_UNARY_EA_ALU(uint32_t** emit, uint16_t opcode, ALU_OP_t op) {
     uint8_t dEA  = opcode & 0xFF;
     uint8_t regD = emit_EA_Load(emit, dEA, 0, 2, 1);
     emit_ALU(emit, op, 0, regD);
     emit_EA_Store(emit, dEA, regD, 2, 1);
+    *(*emit)++ = bx(lr);
 }
 // @brief wrapper for NEGX, NBCD; adds BX LR
-THUMB void emit_BCD_XOP_EA_ALU(uint32_t* emit, uint16_t opcode, ALU_OP_t op) {
+__attribute__((target("thumb")))
+void emit_BCD_XOP_EA_ALU(uint32_t** emit, uint16_t opcode, ALU_OP_t op) {
     uint8_t dEA = opcode & 0xFF;
     emit_load_X(emit);
     uint8_t regD = emit_EA_Load(emit, dEA, 0, 2, 1);
     emit_ALU(emit, op, 0, regD);
     emit_EA_Store(emit, dEA, regD, 2, 1);
     emit_save_X(emit);
+    *(*emit)++ = bx(lr);
 }
 // @brief perform an immediate or register (form 2) shift
-THUMB void emit_Mem_Shift(uint32_t* emit, uint16_t opcode, ALU_OP_t op) {
+__attribute__((target("thumb")))
+static void emit_Mem_Shift(uint32_t** emit, uint16_t opcode, ALU_OP_t op) {
     uint8_t dEA   = opcode & 0x3F;
     uint8_t regD  = emit_EA_Load(emit, dEA, 0, 2, 1);
     uint8_t value = (opcode & 0x0E00) >> 9;
-    *emit++    = 0xE3A01000 | (value);  // mov r1, #1
+    *(*emit)++    = 0xE3A01000 | (value);  // mov r1, #1
     emit_ALU(emit, op, 1, regD);           // D = D <<>> S
     emit_EA_Store(emit, dEA, regD, 2, 1);
+    *(*emit)++ = bx(lr);
 }
 // @brief perform a memory (form 1) shift by one
-THUMB void emit_ImmReg_Shift(uint32_t* emit, uint16_t opcode, ALU_OP_t op) {
+__attribute__((target("thumb")))
+static void emit_ImmReg_Shift(uint32_t** emit, uint16_t opcode, ALU_OP_t op) {
     uint8_t regS, value = (opcode & 0x0E00) >> 9;
     if (opcode & 0x0020) {  // Register shit
         regS = emit_EA_Load(emit, value, 1, 1, 0);
     } else {  // Immediate Shift
         if (!value) value = 8;
-        *emit++ = 0xE3A01000 | (value);  // mov r1, value
+        *(*emit)++ = 0xE3A01000 | (value);  // mov r1, value
         regS       = 1;
     }
     uint8_t regD = emit_EA_Load(emit, (opcode & 0xC7), 0, 2, 1);
     emit_ALU(emit, op, regS, regD);  // D = D <<>> S
     emit_EA_Store(emit, (opcode & 0xC7), regD, 2, 1);
+    *(*emit)++ = bx(lr);
 }
 // @brief common routine for handling bitwise operators
-THUMB void emit_Bit_Op(uint32_t* emit, uint16_t opcode, ALU_OP_t op) {
+__attribute__((target("thumb")))
+static void emit_Bit_Op(uint32_t** emit, uint16_t opcode, ALU_OP_t op) {
     uint8_t regS = emit_EA_Load(emit, (opcode & 0x0100) ? ((opcode >> 9) & 7) : 0x3C, 1, 1, 0);
-    *emit++   = mov(r0, imm(1));
-    *emit++   = lsl_reg(regS, regS, r0);
+    *(*emit)++   = mov(r0, imm(1));
+    *(*emit)++   = lsl_reg(regS, regS, r0);
     uint8_t regD = emit_EA_Load(emit, opcode & 0x3F, 0, 2, 1);
     emit_ALU(emit, op, regS, regD);
     emit_EA_Store(emit, opcode & 0x3F, regD, 2, 1);
+    *(*emit)++ = bx(lr);
 }
 
-THUMB void emit_DIV(uint32_t* emit, uint16_t opcode, ALU_OP_t op) {
+__attribute__((target("thumb")))
+static void emit_DIV(uint32_t** emit, uint16_t opcode, ALU_OP_t op) {
     uint8_t sEA = (opcode & 0xC0), dEA = (opcode & 0xC0);
     // m->r
     dEA |= (opcode & 0x0E00) >> 9;
@@ -547,72 +583,73 @@ THUMB void emit_DIV(uint32_t* emit, uint16_t opcode, ALU_OP_t op) {
 
     uint8_t regS = emit_EA_Load(emit, sEA, 1, 1, 0);
     uint8_t regD = emit_EA_Load(emit, dEA, 0, 2, 1);
-    *emit++ = push(LR);
-    if(regD != 0) *emit++ = mov(r0, reg(regD));
-    if(regS != 1) *emit++ = mov(r1, reg(regD));
-    *emit++ = sxth(r1, r1, 0);
-    *emit++ = cmp(r1, imm(0));
-    *emit++ = svc_cc(ARM_CC_EQ, DIVZ);
+    *(*emit)++ = push(LR);
+    if(regD != 0) *(*emit)++ = mov(r0, reg(regD));
+    if(regS != 1) *(*emit)++ = mov(r1, reg(regD));
+    *(*emit)++ = sxth(r1, r1, 0);
+    *(*emit)++ = cmp(r1, imm(0));
+    *(*emit)++ = svc_cc(ARM_CC_EQ, DIVZ);
     if(op == ALU_OP_DIVSW) {
-        *emit = bl_imm(calc_offset(emit, handle_DIVS)); emit += 1;
+        **emit = bl_imm(calc_offset(emit, handle_DIVS)); *emit += 1;
     } else {
-        *emit = bl_imm(calc_offset(emit, handle_DIVU)); emit += 1;
+        **emit = bl_imm(calc_offset(emit, handle_DIVU)); *emit += 1;
     }
     emit_EA_Store(emit, dEA, regD, 2, 1);
-    *emit++ = pop(PC);
+    *(*emit)++ = pop(PC);
 }    
 
-THUMB void emit_ROXd_opcode(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+static void emit_ROXd_opcode(uint32_t** emit, uint16_t opcode) {
     uint8_t shift = (opcode >> 9) & 7;
     if(opcode & 0x0020) {
         // Register
-        if(shift < 2) *emit++ = mov(r1, reg(r3 + shift));
-        else *emit++ = ldrb(r1, r5, index_imm(1, 0, __offsetof(cpu_t, d0) + 3 + shift * 4));
+        if(shift < 2) *(*emit)++ = mov(r1, reg(r3 + shift));
+        else *(*emit)++ = ldrb(r1, r5, index_imm(1, 0, __offsetof(cpu_t, d0) + 3 + shift * 4));
     } else {
         // Immediate
         if(shift == 0) shift = 8;
-        *emit++ = movw(r1, shift);
+        *(*emit)++ = movw(r1, shift);
     }
 
     uint8_t regD = (opcode & 7);
-    if(regD < 2) *emit++ = mov(r0, reg(r3 + regD));
-    else *emit++ = ldr(r1, r5, index_imm(1, 0, __offsetof(cpu_t, d0) + regD * 4));
+    if(regD < 2) *(*emit)++ = mov(r0, reg(r3 + regD));
+    else *(*emit)++ = ldr(r1, r5, index_imm(1, 0, __offsetof(cpu_t, d0) + regD * 4));
 
     switch(opcode & 0x01C0) {
     // Right
-    case 0x0000: *emit = b_imm(calc_offset(emit, roxr_b)); break;
-    case 0x0040: *emit = b_imm(calc_offset(emit, roxr_w)); break;
-    case 0x0080: *emit = b_imm(calc_offset(emit, roxr_l)); break;
+    case 0x0000: **emit = b_imm(calc_offset(emit, roxr_b)); break;
+    case 0x0040: **emit = b_imm(calc_offset(emit, roxr_w)); break;
+    case 0x0080: **emit = b_imm(calc_offset(emit, roxr_l)); break;
     // Left
-    case 0x0100: *emit = b_imm(calc_offset(emit, roxl_b)); break;
-    case 0x0140: *emit = b_imm(calc_offset(emit, roxl_w)); break;
-    case 0x0180: *emit = b_imm(calc_offset(emit, roxl_l)); break;
+    case 0x0100: **emit = b_imm(calc_offset(emit, roxl_b)); break;
+    case 0x0140: **emit = b_imm(calc_offset(emit, roxl_w)); break;
+    case 0x0180: **emit = b_imm(calc_offset(emit, roxl_l)); break;
     }
 
     if(regD < 2) {
         switch(opcode & 0x00C0) {
-        case 0x0000: *emit++ = bfi(r3 + regD, r0, 0, 8); break; 
-        case 0x0040: *emit++ = bfi(r3 + regD, r0, 0, 16); break;
-        case 0x0080: *emit++ = mov(r3 + regD, reg(r0)); break;
+        case 0x0000: *(*emit)++ = bfi(r3 + regD, r0, 0, 8); break; 
+        case 0x0040: *(*emit)++ = bfi(r3 + regD, r0, 0, 16); break;
+        case 0x0080: *(*emit)++ = mov(r3 + regD, reg(r0)); break;
         }
     } else {
         uint32_t idx;
         switch(opcode & 0x00C0) {
         case 0x0000: 
             idx = index_imm(1, 0, __offsetof(cpu_t, d0) + regD * 4 + 2);
-            *emit++ = strb(r1, r5, idx);
+            *(*emit)++ = strb(r1, r5, idx);
             break;
         case 0x0040:
             idx = index_imm(1, 0, __offsetof(cpu_t, d0) + regD * 4 + 2);
-            *emit++ = strh(r1, r5, idx);
+            *(*emit)++ = strh(r1, r5, idx);
             break;
         case 0x0080:
             idx = index_imm(1, 0, __offsetof(cpu_t, d0) + regD * 4);
-            *emit++ = str(r1, r5, idx);
+            *(*emit)++ = str(r1, r5, idx);
             break;
         }
     }
-    *emit++ = pop(PC);
+    *(*emit)++ = pop(PC);
 }
 
 /***
@@ -624,7 +661,8 @@ THUMB void emit_ROXd_opcode(uint32_t* emit, uint16_t opcode) {
  *           |_|
  */
 
-THUMB void emit_ABCD(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_ABCD(uint32_t** emit, uint16_t opcode) {
     uint8_t sReg = (opcode & 0x7);
     uint8_t dReg = (opcode >> 9) & 0x7;
 
@@ -632,232 +670,142 @@ THUMB void emit_ABCD(uint32_t* emit, uint16_t opcode) {
 
     if(opcode & 0x0008) {
         // -(Ax), -(An)
-        *emit++ = ldrb(r0, r6 + sReg, index_imm(0, 1, -1));
-        *emit++ = sub(r1, r6 + dReg, imm(1));
-        *emit++ = mov(r6 + dReg, reg(r1));
-        *emit = b_imm(calc_offset((uint32_t)emit, (uint32_t)abcd_an));
+        *(*emit)++ = ldrb(r0, r6 + sReg, index_imm(0, 1, -1));
+        *(*emit)++ = sub(r1, r6 + dReg, imm(1));
+        *(*emit)++ = mov(r6 + dReg, reg(r1));
+        **emit = b_imm(calc_offset((uint32_t)emit, (uint32_t)abcd_an));
 
     } else {
         // Dx, Dy
-        if(sReg < 2) *emit++ = uxtb(r0, r3 + sReg, 0);
-        else *emit++ = ldrb(r0, r5, index_imm(1, 0, sReg * 4 + 3 + __offsetof(cpu_t, d0)));
-        if(dReg == 0) *emit = b_imm(calc_offset((uint32_t)emit, (uint32_t)abcd_d0));
-        else if(dReg == 1) *emit = b_imm(calc_offset((uint32_t)emit, (uint32_t)abcd_d1));
+        if(sReg < 2) *(*emit)++ = uxtb(r0, r3 + sReg, 0);
+        else *(*emit)++ = ldrb(r0, r5, index_imm(1, 0, sReg * 4 + 3 + __offsetof(cpu_t, d0)));
+        if(dReg == 0) **emit = b_imm(calc_offset((uint32_t)emit, (uint32_t)abcd_d0));
+        else if(dReg == 1) **emit = b_imm(calc_offset((uint32_t)emit, (uint32_t)abcd_d1));
         else {
-            *emit++ = add(r1, r5, imm(__offsetof(cpu_t, d0) + dReg * 4 + 3));
-            *emit = b_imm(calc_offset((uint32_t)emit, (uint32_t)abcd_an));
+            *(*emit)++ = add(r1, r5, imm(__offsetof(cpu_t, d0) + dReg * 4 + 3));
+            **emit = b_imm(calc_offset((uint32_t)emit, (uint32_t)abcd_an));
         }
     }
-|
-THUMB void emit_ADDBW(uint32_t* emit, uint16_t opcode) {
+    *emit += 1;
+}
+__attribute__((target("thumb")))
+void emit_ADDBW(uint32_t** emit, uint16_t opcode) {
     emit_EA_ALU(emit, opcode, ALU_OP_ADD);
 }
-THUMB void emit_ADDL(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_ADDL(uint32_t** emit, uint16_t opcode) {
     emit_EA_ALU(emit, opcode, ALU_OP_ADD);
 }
-THUMB void emit_ADDAL(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_ADDAL(uint32_t** emit, uint16_t opcode) {
     emit_EA_ALU(emit, opcode, ALU_OP_ADD);
 }
-THUMB void emit_ADDAW(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_ADDAW(uint32_t** emit, uint16_t opcode) {
     emit_EA_ALU(emit, opcode, ALU_OP_ADD);
 }
-THUMB void emit_ADDIBW(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_ADDIBW(uint32_t** emit, uint16_t opcode) {
     emit_IMD_ALU(emit, opcode, ALU_OP_ADD);
 }
-THUMB void emit_ADDIL(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_ADDIL(uint32_t** emit, uint16_t opcode) {
     emit_IMD_ALU(emit, opcode, ALU_OP_ADD);
 }
-THUMB void emit_ADDQBW(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_ADDQBW(uint32_t** emit, uint16_t opcode) {
     uint8_t value = (opcode & 0x0E00) >> 9;
     if (!value) value = 8;
-    *emit++ = 0xE3A01000 | (value);  // mov r1, value
+    *(*emit)++ = 0xE3A01000 | (value);  // mov r1, value
     emit_IMD_ALU(emit, opcode, ALU_OP_ADD);
 }
-THUMB void emit_ADDQL(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_ADDQL(uint32_t** emit, uint16_t opcode) {
     uint8_t value = (opcode & 0x0E00) >> 9;
     if (!value) value = 8;
-    *emit++ = 0xE3A01000 | (value);  // mov r1, value
+    *(*emit)++ = 0xE3A01000 | (value);  // mov r1, value
     emit_IMD_ALU(emit, opcode, ALU_OP_ADD);
 }
-THUMB void emit_ADDW(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_ADDW(uint32_t** emit, uint16_t opcode) {
     emit_EA_ALU(emit, opcode, ALU_OP_ADD);
 }
-THUMB void emit_ADDXBW(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_ADDXBW(uint32_t** emit, uint16_t opcode) {
     emit_BCD_XOP_ALU(emit, opcode, ALU_OP_ADDX);
 }
-THUMB void emit_ADDXL(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_ADDXL(uint32_t** emit, uint16_t opcode) {
     emit_BCD_XOP_ALU(emit, opcode, ALU_OP_ADDX);
 }
-THUMB void emit_ALINE(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_ALINE(uint32_t** emit, uint16_t opcode) {
     return emit_SVC(emit, LINE_A);
 }
-THUMB void emit_ANDBW(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_ANDBW(uint32_t** emit, uint16_t opcode) {
     emit_EA_ALU(emit, opcode, ALU_OP_AND);
 }
-THUMB void emit_ANDL(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_ANDL(uint32_t** emit, uint16_t opcode) {
     emit_EA_ALU(emit, opcode, ALU_OP_AND);
 }
-THUMB void emit_ANDIBW(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_ANDIBW(uint32_t** emit, uint16_t opcode) {
     emit_IMD_ALU(emit, opcode, ALU_OP_AND);
 }
-THUMB void emit_ANDIL(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_ANDIL(uint32_t** emit, uint16_t opcode) {
     emit_IMD_ALU(emit, opcode, ALU_OP_AND);
 }
-THUMB void emit_ANDI_TO_CCR(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_ANDI_TO_CCR(uint32_t** emit, uint16_t opcode) {
     emit_load_CR(emit, 2);  // r2=sr, r1=imm
     emit_ALU(emit, ALU_OP_AND, 1, 2);
     emit_save_CR(emit, 2);  // put r2-> cpu_t and CPSR
+    *(*emit)++ = bx(lr);
 }
-THUMB void emit_ANDI_TO_SR(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_ANDI_TO_SR(uint32_t** emit, uint16_t opcode) {
     emit_load_SR(emit, 2);  // r2=sr, r1=imm
     emit_is_SVC(emit);
     emit_ALU(emit, ALU_OP_AND, 1, 2);
     emit_save_SR(emit, 2);  // put r2-> cpu_t and CPSR
+    *(*emit)++ = bx(lr);
 }
-THUMB void emit_ANDW(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_ANDW(uint32_t** emit, uint16_t opcode) {
     emit_EA_ALU(emit, opcode, ALU_OP_AND);
 }
-THUMB void emit_ASdBW(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_ASdBW(uint32_t** emit, uint16_t opcode) {
     emit_ImmReg_Shift(emit, opcode, (opcode & 0x0100) ? ALU_OP_ASL : ALU_OP_ASR);
 }
-THUMB void emit_ASdL(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_ASdL(uint32_t** emit, uint16_t opcode) {
     emit_ImmReg_Shift(emit, opcode, (opcode & 0x0100) ? ALU_OP_ASL : ALU_OP_ASR);
 }
-THUMB void emit_ASd(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_ASd(uint32_t** emit, uint16_t opcode) {
     emit_Mem_Shift(emit, opcode, (opcode & 0x0100) ? ALU_OP_ASL : ALU_OP_ASR);
 }
-THUMB void emit_Bcc(uint32_t* emit, uint16_t opcode) {
-    static uint32_t *cc_hi_stub = NULL;
-    static uint32_t *cc_lo_stub = NULL;
-    if (cc_hi_stub == NULL) {
-        cc_hi_stub = stubs;
-        /* ARM C=1 & Z=0, 68K C=0 | Z = 0
-         * C Z ARM 68K
-         * 0 0  0   1
-         * 0 1  0   1
-         * 1 0  1   1
-         * 1 1  0   0
-         */
-        *stubs = b_cc_imm(ARM_CC_CC, calc_offset((uint32_t)stubs, (uint32_t)pjit_lookup));
-        stubs += 1;
-        *stubs = b_cc_imm(ARM_CC_NE, calc_offset((uint32_t)stubs, (uint32_t)pjit_lookup));
-        stubs += 1;
-        *stubs++ = bx(lr);
-
-        cc_lo_stub = stubs;
-        /* ARM C=0 & Z=1, 68K C=1 & Z=1
-         * C Z ARM 68K
-         * 0 0  0   0
-         * 0 1  1   0
-         * 1 0  0   0
-         * 1 1  0   1
-         */
-        *stubs++ = bx_cc(ARM_CC_CC, lr);
-        *stubs++ = bx_cc(ARM_CC_NE, lr);
-        *stubs = b_imm(calc_offset((uint32_t)stubs, (uint32_t)pjit_lookup));
-        stubs += 1;
-    }
-
+__attribute__((target("thumb")))
+void emit_Bcc(uint32_t** emit, uint16_t opcode) {
     int8_t offset = (int8_t)(opcode & 0xFF);
-    if ((offset == 0) || (offset == -1)) {
+    if ((offset == 0) || (offset == -1)) { 
         // 16 or 32-bit offset should be in r1
-        *emit++ = add(r0, r0, reg(r1));
+        *(*emit)++ = add(r0, r0, reg(r1)); // r0 = r0 + r1
     } else if(offset < 0) {
         // subtract 7-bit value
-        *emit++ = sub(r0, r0, imm((-offset) << 1)); // r0 = r0 + #imm8
+        *(*emit)++ = sub(r0, r0, imm((-offset) << 1)); // r0 = r0 + #imm8
     } else {
         // add 7-bit value
-        *emit++ = add(r0, r0, imm(offset << 1)); // r0 = r0 + #imm8
+        *(*emit)++ = add(r0, r0, imm(offset << 1)); // r0 = r0 + #imm8
     }
 
     uint8_t cc = arm_cc(opcode);
     if(cc == ARM_CC_NV) cc = ARM_CC_AL; // fixup for BSR
     if(cc == ARM_CC_HI) {
-        *emit = b_imm(calc_offset((uint32_t)emit, (uint32_t)cc_hi_stub));
-    } else if(cc == ARM_CC_LS) {
-        *emit = b_imm(calc_offset((uint32_t)emit, (uint32_t)cc_lo_stub));
-    } else {
-        *emit = b_cc_imm(cc, calc_offset((uint32_t)emit, (uint32_t)pjit_lookup));
-    }
-}
-THUMB void emit_BCHG(uint32_t* emit, uint16_t opcode) {
-    emit_Bit_Op(emit, opcode, ALU_OP_BCHG);
-}
-THUMB void emit_BCLR(uint32_t* emit, uint16_t opcode) {
-    emit_Bit_Op(emit, opcode, ALU_OP_BCLR);
-}
-THUMB void emit_BRA(uint32_t* emit, uint16_t opcode) {
-    emit_Bcc(emit, opcode);
-}
-THUMB void emit_BSET(uint32_t* emit, uint16_t opcode) {
-    emit_Bit_Op(emit, opcode, ALU_OP_BSET);
-}
-THUMB void emit_BSR(uint32_t* emit, uint16_t opcode) {
-    *emit++ = push(R7);
-    // emit_Bcc(emit, opcode);
-|
-THUMB void emit_BTST(uint32_t* emit, uint16_t opcode) {
-    emit_Bit_Op(emit, opcode, ALU_OP_BTST);
-}
-THUMB void emit_CHK(uint32_t* emit, uint16_t opcode) {
-    uint8_t sEA  = (opcode & 0xFF);
-    uint8_t dEA  = (opcode & 0xC0) | ((opcode >> 9) & 7);
-    uint8_t regD = emit_EA_Load(emit, dEA, 0, 2, 0);
-    *emit++ = svc_cc(ARM_CC_MI, TRAPCHK);
-    uint8_t regS = emit_EA_Load(emit, sEA, 1, 1, 0);
-    *emit++ = cmp(regD, reg(regS));
-    *emit++ = svc_cc(ARM_CC_GT, TRAPCHK);
-}
-THUMB void emit_CLRBW(uint32_t* emit, uint16_t opcode) {
-    emit_UNARY_EA_ALU(emit, opcode, ALU_OP_CLR);
-}
-THUMB void emit_CLRL(uint32_t* emit, uint16_t opcode) {
-    emit_UNARY_EA_ALU(emit, opcode, ALU_OP_CLR);
-}
-THUMB void emit_CMPBW(uint32_t* emit, uint16_t opcode) {
-    emit_EA_ALU(emit, opcode, ALU_OP_CMP);
-}
-THUMB void emit_CMPL(uint32_t* emit, uint16_t opcode) {
-    emit_EA_ALU(emit, opcode, ALU_OP_CMP);
-}
-THUMB void emit_CMPAL(uint32_t* emit, uint16_t opcode) {
-    emit_EA_ALU(emit, opcode, ALU_OP_CMP);
-}
-THUMB void emit_CMPAW(uint32_t* emit, uint16_t opcode) {
-    emit_EA_ALU(emit, opcode, ALU_OP_CMP);
-}
-THUMB void emit_CMPB(uint32_t* emit, uint16_t opcode) {
-    emit_EA_ALU(emit, opcode, ALU_OP_CMP);
-}
-THUMB void emit_CMPIBW(uint32_t* emit, uint16_t opcode) {
-    emit_IMD_ALU(emit, opcode, ALU_OP_CMP);
-}
-THUMB void emit_CMPIL(uint32_t* emit, uint16_t opcode) {
-    emit_IMD_ALU(emit, opcode, ALU_OP_CMP);
-}
-THUMB void emit_CMPML(uint32_t* emit, uint16_t opcode) {
-    uint8_t dEA = 0x18 | (opcode & 0xC0) | ((opcode >> 9) & 0x7);
-    uint8_t sEA = 0x18 | (opcode & 0xC7);
-    uint8_t regS = emit_EA_Load(emit, sEA, 1, 1, 0);
-    uint8_t regD = emit_EA_Load(emit, dEA, 0, 2, 1);
-    emit_ALU(emit, ALU_OP_CMP, regS, regD);
-    *emit++ = bx(lr);    
-}
-THUMB void emit_CMPMB(uint32_t* emit, uint16_t opcode) {
-    emit_CMPML(emit, opcode);
-}
-THUMB void emit_CMPMW(uint32_t* emit, uint16_t opcode) {
-    emit_CMPML(emit, opcode);
-}
-THUMB void emit_CMPW(uint32_t* emit, uint16_t opcode) {
-    emit_EA_ALU(emit, opcode, ALU_OP_CMP);
-}
-THUMB void emit_DBcc(uint32_t* emit, uint16_t opcode) {
-
-    // If Condition True Then Exit
-    uint8_t cc = arm_cc(opcode);
-    *emit++ = nop();
-    if(cc == ARM_CC_HI) {
         /* ARM C=1 & Z=0, 68K C=0 | Z = 0
          * C Z ARM 68K
          * 0 0  0   1
@@ -865,8 +813,10 @@ THUMB void emit_DBcc(uint32_t* emit, uint16_t opcode) {
          * 1 0  1   1
          * 1 1  0   0
          */
-        *emit++ = bx_cc(ARM_CC_CC, lr);
-        *emit++ = bx_cc(ARM_CC_NE, lr);
+        **emit = b_cc_imm(ARM_CC_CC, calc_offset((uint32_t)*emit, (uint32_t)pjit_bra));
+        *emit += 1;
+        **emit = b_cc_imm(ARM_CC_NE, calc_offset((uint32_t)*emit, (uint32_t)pjit_bra));
+        *emit += 1;
 
     } else if(cc == ARM_CC_LS) {
         /* ARM C=0 & Z=1, 68K C=1 & Z=1
@@ -877,57 +827,217 @@ THUMB void emit_DBcc(uint32_t* emit, uint16_t opcode) {
          * 1 1  0   1
          */
         uint32_t skip = (uint32_t)(*emit + 3);
-        *emit = b_cc_imm(ARM_CC_CC, calc_offset(emit, skip));
-        emit += 1;
-        *emit = b_cc_imm(ARM_CC_NE, calc_offset(emit, skip));
-        emit += 1;
-        *emit++ = bx(lr);
+        **emit = b_cc_imm(ARM_CC_CC, calc_offset((uint32_t)*emit, skip));
+        *emit += 1;
+        **emit = b_cc_imm(ARM_CC_NE, calc_offset((uint32_t)*emit, skip));
+        *emit += 1;
+        **emit = b_imm(calc_offset((uint32_t)*emit, (uint32_t)pjit_bra));
+        *emit += 1;
 
     } else {
-        *emit++ = bx_cc(cc, lr);
+        **emit = b_cc_imm(cc, calc_offset((uint32_t)*emit, (uint32_t)pjit_bra));
+        *emit += 1;
+    }
+    *(*emit)++ = bx(lr);
+}
+__attribute__((target("thumb")))
+void emit_BCHG(uint32_t** emit, uint16_t opcode) {
+    emit_Bit_Op(emit, opcode, ALU_OP_BCHG);
+}
+__attribute__((target("thumb")))
+void emit_BCLR(uint32_t** emit, uint16_t opcode) {
+    emit_Bit_Op(emit, opcode, ALU_OP_BCLR);
+}
+__attribute__((target("thumb")))
+void emit_BRA(uint32_t** emit, uint16_t opcode) {
+    emit_Bcc(emit, opcode);
+}
+__attribute__((target("thumb")))
+void emit_BSET(uint32_t** emit, uint16_t opcode) {
+    emit_Bit_Op(emit, opcode, ALU_OP_BSET);
+}
+__attribute__((target("thumb")))
+void emit_BSR(uint32_t** emit, uint16_t opcode) {
+    int8_t offset = (int8_t)(opcode & 0xFF);
+    if ((offset == 0) || (offset == -1)) { 
+        // 16 or 32-bit offset should be in r1
+        *(*emit)++ = add(r0, r0, reg(r1)); // r0 = r0 + r1
+        if (offset == 0) {
+            **emit = b_imm(calc_offset((uint32_t)*emit, (uint32_t)pjit_bsr2p));
+        } else {
+            **emit = b_imm(calc_offset((uint32_t)*emit, (uint32_t)pjit_bsr4p));
+        }
+    } else if(offset < 0) {
+        // subtract 7-bit value
+        *(*emit)++ = sub(r0, r0, imm((-offset) << 1)); // r0 = r0 + #imm8
+        **emit = b_imm(calc_offset((uint32_t)*emit, (uint32_t)pjit_bsr));
+    } else {
+        // add 7-bit value
+        *(*emit)++ = add(r0, r0, imm(offset << 1)); // r0 = r0 + #imm8
+        **emit = b_imm(calc_offset((uint32_t)*emit, (uint32_t)pjit_bsr));
+    }
+    *emit += 1;
+}
+__attribute__((target("thumb")))
+void emit_BTST(uint32_t** emit, uint16_t opcode) {
+    emit_Bit_Op(emit, opcode, ALU_OP_BTST);
+}
+__attribute__((target("thumb")))
+void emit_CHK(uint32_t** emit, uint16_t opcode) {
+    uint8_t sEA  = (opcode & 0xFF);
+    uint8_t dEA  = (opcode & 0xC0) | ((opcode >> 9) & 7);
+    uint8_t regD = emit_EA_Load(emit, dEA, 0, 2, 0);
+    *(*emit)++ = svc_cc(ARM_CC_MI, TRAPCHK);
+    uint8_t regS = emit_EA_Load(emit, sEA, 1, 1, 0);
+    *(*emit)++ = cmp(regD, reg(regS));
+    *(*emit)++ = svc_cc(ARM_CC_GT, TRAPCHK);
+    *(*emit)++ = bx(lr);
+}
+__attribute__((target("thumb")))
+void emit_CLRBW(uint32_t** emit, uint16_t opcode) {
+    emit_UNARY_EA_ALU(emit, opcode, ALU_OP_CLR);
+}
+__attribute__((target("thumb")))
+void emit_CLRL(uint32_t** emit, uint16_t opcode) {
+    emit_UNARY_EA_ALU(emit, opcode, ALU_OP_CLR);
+}
+__attribute__((target("thumb")))
+void emit_CMPBW(uint32_t** emit, uint16_t opcode) {
+    emit_EA_ALU(emit, opcode, ALU_OP_CMP);
+}
+__attribute__((target("thumb")))
+void emit_CMPL(uint32_t** emit, uint16_t opcode) {
+    emit_EA_ALU(emit, opcode, ALU_OP_CMP);
+}
+__attribute__((target("thumb")))
+void emit_CMPAL(uint32_t** emit, uint16_t opcode) {
+    emit_EA_ALU(emit, opcode, ALU_OP_CMP);
+}
+__attribute__((target("thumb")))
+void emit_CMPAW(uint32_t** emit, uint16_t opcode) {
+    emit_EA_ALU(emit, opcode, ALU_OP_CMP);
+}
+__attribute__((target("thumb")))
+void emit_CMPB(uint32_t** emit, uint16_t opcode) {
+    emit_EA_ALU(emit, opcode, ALU_OP_CMP);
+}
+__attribute__((target("thumb")))
+void emit_CMPIBW(uint32_t** emit, uint16_t opcode) {
+    emit_IMD_ALU(emit, opcode, ALU_OP_CMP);
+}
+__attribute__((target("thumb")))
+void emit_CMPIL(uint32_t** emit, uint16_t opcode) {
+    emit_IMD_ALU(emit, opcode, ALU_OP_CMP);
+}
+__attribute__((target("thumb")))
+void emit_CMPML(uint32_t** emit, uint16_t opcode) {
+    uint8_t dEA = 0x18 | (opcode & 0xC0) | ((opcode >> 9) & 0x7);
+    uint8_t sEA = 0x18 | (opcode & 0xC7);
+    uint8_t regS = emit_EA_Load(emit, sEA, 1, 1, 0);
+    uint8_t regD = emit_EA_Load(emit, dEA, 0, 2, 1);
+    emit_ALU(emit, ALU_OP_CMP, regS, regD);
+    *(*emit)++ = bx(lr);    
+}
+__attribute__((target("thumb")))
+void emit_CMPMB(uint32_t** emit, uint16_t opcode) {
+    emit_CMPML(emit, opcode);
+}
+__attribute__((target("thumb")))
+void emit_CMPMW(uint32_t** emit, uint16_t opcode) {
+    emit_CMPML(emit, opcode);
+}
+__attribute__((target("thumb")))
+void emit_CMPW(uint32_t** emit, uint16_t opcode) {
+    emit_EA_ALU(emit, opcode, ALU_OP_CMP);
+}
+__attribute__((target("thumb")))
+void emit_DBcc(uint32_t** emit, uint16_t opcode) {
+    // If Condition True Then Exit
+    uint8_t cc = arm_cc(opcode);
+    *(*emit)++ = nop();
+    if(cc == ARM_CC_HI) {
+        /* ARM C=1 & Z=0, 68K C=0 | Z = 0
+         * C Z ARM 68K
+         * 0 0  0   1
+         * 0 1  0   1
+         * 1 0  1   1
+         * 1 1  0   0
+         */
+        *(*emit)++ = bx_cc(ARM_CC_CC, lr);
+        *(*emit)++ = bx_cc(ARM_CC_NE, lr);
+
+    } else if(cc == ARM_CC_LS) {
+        /* ARM C=0 & Z=1, 68K C=1 & Z=1
+         * C Z ARM 68K
+         * 0 0  0   0
+         * 0 1  1   0
+         * 1 0  0   0
+         * 1 1  0   1
+         */
+        uint32_t skip = (uint32_t)(*emit + 3);
+        **emit = b_cc_imm(ARM_CC_CC, calc_offset((uint32_t)*emit, skip));
+        *emit += 1;
+        **emit = b_cc_imm(ARM_CC_NE, calc_offset((uint32_t)*emit, skip));
+        *emit += 1;
+        *(*emit)++ = bx(lr);
+
+    } else {
+        *(*emit)++ = bx_cc(cc, lr);
     }
     // Else (Dn – 1 → Dn; If Dn ≠ – 1 Then PC + dn → PC)
     uint8_t sEA = 0xC0 | (opcode & 0x7);
     uint8_t sReg = emit_EA_Load(emit, sEA, 0, 0, 1);
-    *emit++ = sub(sReg, sReg, 1);
+    *(*emit)++ = sub(sReg, sReg, 1);
     emit_EA_Store(emit, sEA, sReg, 0, 1);
-    *emit++ = cmn(sReg, imm(1));
-    *emit++ = bx_cc(ARM_CC_EQ, lr);
-    *emit++ = b_imm(calc_offset(emit, branch_normal));
+    *(*emit)++ = cmn(sReg, imm(1));
+    *(*emit)++ = bx_cc(ARM_CC_EQ, lr);
+    *(*emit)++ = b_imm(calc_offset((uint32_t)*emit, (uint32_t)pjit_bra));
 }
-THUMB void emit_DBRA(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_DBRA(uint32_t** emit, uint16_t opcode) {
     emit_DBcc(emit, opcode);
 }
-THUMB void emit_DIVS(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_DIVS(uint32_t** emit, uint16_t opcode) {
     emit_DIV(emit, (opcode & 0xFEFF), ALU_OP_DIVSW);
 }
-THUMB void emit_DIVU(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_DIVU(uint32_t** emit, uint16_t opcode) {
     emit_DIV(emit, (opcode & 0xFEFF), ALU_OP_DIVUW);
 }
-THUMB void emit_EORBW(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_EORBW(uint32_t** emit, uint16_t opcode) {
     emit_EA_ALU(emit, opcode, ALU_OP_EOR);
 }
-THUMB void emit_EORL(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_EORL(uint32_t** emit, uint16_t opcode) {
     emit_EA_ALU(emit, opcode, ALU_OP_EOR);
 }
-THUMB void emit_EORIBW(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_EORIBW(uint32_t** emit, uint16_t opcode) {
     emit_IMD_ALU(emit, opcode, ALU_OP_EOR);
 }
-THUMB void emit_EORIL(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_EORIL(uint32_t** emit, uint16_t opcode) {
     emit_IMD_ALU(emit, opcode, ALU_OP_EOR);
 }
-THUMB void emit_EORI_TO_CCR(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_EORI_TO_CCR(uint32_t** emit, uint16_t opcode) {
     emit_load_CR(emit, 2);  // r2=sr, r1=imm
     emit_ALU(emit, ALU_OP_EOR, 1, 2);
     emit_save_CR(emit, 2);  // put r2-> cpu_t and CPSR
+    *(*emit)++ = bx(lr);
 }
-THUMB void emit_EORI_TO_SR(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_EORI_TO_SR(uint32_t** emit, uint16_t opcode) {
     emit_load_SR(emit, 2);  // r2=sr, r1=imm
     emit_is_SVC(emit);
     emit_ALU(emit, ALU_OP_EOR, 1, 2);
     emit_save_SR(emit, 2);  // put r2-> cpu_t and CPSR
+    *(*emit)++ = bx(lr);
 }
-THUMB void emit_EXG(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_EXG(uint32_t** emit, uint16_t opcode) {
     // If the exchange is between data and address registers,
     // this field always specifies the data register.
     uint8_t Rx = (opcode >> 9) & 7;
@@ -949,155 +1059,189 @@ THUMB void emit_EXG(uint32_t* emit, uint16_t opcode) {
     // if we're swapping between D2-D* and any of D0/D1, A0-A7, use SWP
     if ((Rx > 1 && Rx < 8) || (Ry > 1 && Ry < 8)) {
         if (Rx > 1 && Rx < 8) {
-            *emit++ = ldr(r0, r5, index_imm(1, 0, Rx * 4));
+            *(*emit)++ = ldr(r0, r5, index_imm(1, 0, Rx * 4));
             if (Ry > 1 && Ry < 8) {
-                *emit++ = ldr(r1, r5, index_imm(1, 0, Ry * 4));
-                *emit++ = str(r1, r5, index_imm(1, 0, Rx * 4));
-                *emit++ = str(r0, r5, index_imm(1, 0, Ry * 4));
+                *(*emit)++ = ldr(r1, r5, index_imm(1, 0, Ry * 4));
+                *(*emit)++ = str(r1, r5, index_imm(1, 0, Rx * 4));
+                *(*emit)++ = str(r0, r5, index_imm(1, 0, Ry * 4));
             } else {
                 Ry         = (Ry < 2) ? (Ry + 3) : (Ry - 2);
-                *emit++ = str(Ry, r5, index_imm(1, 0, Rx * 4));
-                *emit++ = mov(Ry, r0);
+                *(*emit)++ = str(Ry, r5, index_imm(1, 0, Rx * 4));
+                *(*emit)++ = mov(Ry, r0);
             }
         } else {
             Rx         = (Rx < 2) ? (Rx + 3) : (Rx - 2);
-            *emit++ = mov(r0, Rx);
-            *emit++ = ldr(Rx, r5, index_imm(1, 0, Ry * 4));
-            *emit++ = ldr(r0, r5, index_imm(1, 0, Ry * 4));
+            *(*emit)++ = mov(r0, Rx);
+            *(*emit)++ = ldr(Rx, r5, index_imm(1, 0, Ry * 4));
+            *(*emit)++ = ldr(r0, r5, index_imm(1, 0, Ry * 4));
         }
     }
     // if we're swapping among D0/D1, A0-A7 then we need three moves
     else {
         Rx         = (Rx < 2) ? (Rx + 3) : (Rx - 2);
         Ry         = (Ry < 2) ? (Ry + 3) : (Ry - 2);
-        *emit++ = mov(r0, Rx);
-        *emit++ = mov(Rx, Ry);
-        *emit++ = mov(Ry, r0);
+        *(*emit)++ = mov(r0, Rx);
+        *(*emit)++ = mov(Rx, Ry);
+        *(*emit)++ = mov(Ry, r0);
     }
+    *(*emit)++ = bx(lr);
 }
-THUMB void emit_EXTL(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_EXTL(uint32_t** emit, uint16_t opcode) {
     emit_IMD_ALU(emit, opcode, ALU_OP_EXTWL);
 }
-THUMB void emit_EXTW(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_EXTW(uint32_t** emit, uint16_t opcode) {
     emit_IMD_ALU(emit, opcode, ALU_OP_EXTBW);
 }
-THUMB void emit_FLINE(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_FLINE(uint32_t** emit, uint16_t opcode) {
     emit_SVC(emit, LINE_F);
 }
-THUMB void emit_ILLEGAL(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_ILLEGAL(uint32_t** emit, uint16_t opcode) {
     emit_SVC(emit, ILLINSTR);
 }
-THUMB void emit_JMP(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_JMP(uint32_t** emit, uint16_t opcode) {
     uint8_t sEA = 0xC0 | (opcode & 0x3F);
     uint8_t sReg = emit_EA_Load(emit, sEA, 1, 1, 0);
-    *emit++ = nop();
-    *emit = b_imm(calc_offset(emit, pjit_lookup));
-|
-THUMB void emit_JSR(uint32_t* emit, uint16_t opcode) {
+    *(*emit)++ = nop();
+    **emit = b_imm(calc_offset((uint32_t)*emit, pjit_jmp));
+    *emit += 1;
+}
+__attribute__((target("thumb")))
+void emit_JSR(uint32_t** emit, uint16_t opcode) {
     uint8_t sEA = 0xC0 | (opcode & 0x3F);
     uint8_t sReg = emit_EA_Load(emit, sEA, 1, 1, 0);
-    *emit++ = push(R7);
-    *emit = b_imm(calc_offset(emit, pjit_lookup));
-|
-THUMB void emit_LEA(uint32_t* emit, uint16_t opcode) {
+    *(*emit)++ = push(R7);
+    // TODO: fix me for 2 and 4 byte extension words!!
+    **emit = b_imm(calc_offset((uint32_t)*emit, pjit_jsr));
+    *emit += 1;
+}
+__attribute__((target("thumb")))
+void emit_LEA(uint32_t** emit, uint16_t opcode) {
     // < ea > → An
     uint8_t dReg = 6 + ((opcode >> 9) & 0x7);
     uint8_t sReg = 6 + ((opcode) & 0x7);
 
     switch(opcode & 0x3C) {
     case 0x0C:
-        *emit++ = mov(dReg, sReg); break;
+        *(*emit)++ = mov(dReg, sReg); break;
     case 0x14: case 0x18:
-        *emit++ = add(dReg, sReg, reg(r1)); break;
+        *(*emit)++ = add(dReg, sReg, reg(r1)); break;
     default:
-        *emit++ = mov(dReg, r1); break;
+        *(*emit)++ = mov(dReg, r1); break;
     }
+    *(*emit)++ = bx(lr);
 }
-THUMB void emit_LINK(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_LINK(uint32_t** emit, uint16_t opcode) {
     // SP – 4 -> SP; An -> (SP); SP -> An; SP + dn -> SP
     uint8_t aReg = 6 + (opcode & 7);
-    *emit++ = str(aReg, sp, index_imm(1, 1, -4));
-    *emit++ = add(sp, aReg, reg(r1));
+    *(*emit)++ = str(aReg, sp, index_imm(1, 1, -4));
+    *(*emit)++ = add(sp, aReg, reg(r1));
+    *(*emit)++ = bx(lr);
 }
-THUMB void emit_LSdBW(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_LSdBW(uint32_t** emit, uint16_t opcode) {
     emit_ImmReg_Shift(emit, opcode, (opcode & 0x0100) ? ALU_OP_LSL : ALU_OP_LSR);
 }
-THUMB void emit_LSdL(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_LSdL(uint32_t** emit, uint16_t opcode) {
     emit_ImmReg_Shift(emit, opcode, (opcode & 0x0100) ? ALU_OP_LSL : ALU_OP_LSR);
 }
-THUMB void emit_LSd(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_LSd(uint32_t** emit, uint16_t opcode) {
     emit_Mem_Shift(emit, opcode, (opcode & 0x0100) ? ALU_OP_LSL : ALU_OP_LSR);
 }
-THUMB void emit_MOVE_SR_TO(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_MOVE_SR_TO(uint32_t** emit, uint16_t opcode) {
     emit_load_SR(emit, 1);
     uint8_t dEA = 0x40 | (opcode & 0x3F);
     emit_EA_Store(emit, dEA, 1, 1, 0);
 }
-THUMB void emit_MOVE_TO_CCR(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_MOVE_TO_CCR(uint32_t** emit, uint16_t opcode) {
     uint8_t sEA  = opcode & 0x3F;
     uint8_t regS = emit_EA_Load(emit, sEA, 1, 1, 0);
     emit_save_CR(emit, regS);  // put r2-> cpu_t and CPSR
+    *(*emit)++ = bx(lr);
 }
-THUMB void emit_MOVE_TO_SR(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_MOVE_TO_SR(uint32_t** emit, uint16_t opcode) {
     emit_load_SR(emit, 2);  // r2=sr, r1=imm
     emit_is_SVC(emit);
     uint8_t sEA  = 0x40 | (opcode & 0x3F);
     uint8_t regS = emit_EA_Load(emit, sEA, 1, 1, 0);
     emit_save_SR(emit, regS);  // put r2-> cpu_t and CPSR
+    *(*emit)++ = bx(lr);
 }
-THUMB void emit_MOVE_TO_USP(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_MOVE_TO_USP(uint32_t** emit, uint16_t opcode) {
     emit_load_SR(emit, 2);  // r2=sr, r1=imm
     emit_is_SVC(emit);
     uint8_t aReg = 6 + (opcode & 0x7);
-    *emit++ = str(aReg, r5, index_imm(1, 0, __offsetof(cpu_t, usp)));
+    *(*emit)++ = str(aReg, r5, index_imm(1, 0, __offsetof(cpu_t, usp)));
+    *(*emit)++ = bx(lr);
 }
-THUMB void emit_MOVE_USP_TO(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_MOVE_USP_TO(uint32_t** emit, uint16_t opcode) {
     emit_load_SR(emit, 2);  // r2=sr, r1=imm
     emit_is_SVC(emit);
     uint8_t aReg = 6 + (opcode & 0x7);
-    *emit++ = ldr(aReg, r5, index_imm(1, 0, __offsetof(cpu_t, usp)));
+    *(*emit)++ = ldr(aReg, r5, index_imm(1, 0, __offsetof(cpu_t, usp)));
+    *(*emit)++ = bx(lr);
 }
-THUMB void emit_MOVEAL(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_MOVEAL(uint32_t** emit, uint16_t opcode) {
     uint8_t sEA  = 0x80 | (opcode & 0x3F);
     uint8_t regD = 6 + ((opcode & 0x0E00) >> 9) & 0x7;
     emit_EA_Load(emit, sEA, regD, 1, 0);
+    *(*emit)++ = bx(lr);
 }
-THUMB void emit_MOVEAW(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_MOVEAW(uint32_t** emit, uint16_t opcode) {
     uint8_t sEA  = 0x40 | (opcode & 0x3F);
     uint8_t regD = 6 + ((opcode & 0x0E00) >> 9) & 0x7;
     emit_EA_Load(emit, sEA, regD, 1, 0);
+    *(*emit)++ = bx(lr);
 }
-THUMB void emit_MOVEB(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_MOVEB(uint32_t** emit, uint16_t opcode) {
     uint8_t sEA  = 0x00 | (opcode & 0x3F);
     uint8_t dEA  = 0x00 | ((opcode & 0x0E00) >> 9) | ((opcode & 0x01C0) >> 3);
     uint8_t regS = emit_EA_Load(emit, sEA, 0, 1, 0);
-    *emit++   = 0xE3500000 | (regS << 12);  // cmp reg, #0
+    *(*emit)++   = 0xE3500000 | (regS << 12);  // cmp reg, #0
     emit_EA_Store(emit, dEA, regS, 2, 0);
+    *(*emit)++ = bx(lr);
 }
 
-THUMB void emit_MOVEM(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_MOVEM(uint32_t** emit, uint16_t opcode) {
+    
     if((opcode & 0x3C) == 0x0C) { 
         // r2m, (An)+, unique per opcode, mask in r1
         uint8_t aReg = 6 + opcode & 0x7;
         int word = !(opcode & 0x0040);
         for(int i=0; i<2; i++) {
-            *emit++ = ror_imm(r1, r1, 1);
-            *emit++ = word
+            *(*emit)++ = ror_imm(r1, r1, 1);
+            *(*emit)++ = word
                 ? strh_cc(ARM_CC_CS, r3 + i, aReg, index_imm(0, 1, 2))
                 : str_cc(ARM_CC_CS, r3 + i, aReg, index_imm(0, 1, 4));
         }
         for(int i=2; i<8; i++) {
-            *emit++ = ror_imm(r1, r1, 1);
-            *emit++ = word
+            *(*emit)++ = ror_imm(r1, r1, 1);
+            *(*emit)++ = word
                 ? ldrh_cc(ARM_CC_CS, r0, r5, index_imm(0, 0, __offsetof(cpu_t, d0) + 2 + i * 4))
                 : ldr_cc(ARM_CC_CS, r0, r5, index_imm(0, 0, __offsetof(cpu_t, d0) + i * 4));
-            *emit++ = word
+            *(*emit)++ = word
                 ? strh_cc(ARM_CC_CS, r0, aReg, index_imm(0, 1, 2))
                 : str_cc(ARM_CC_CS, r0, aReg, index_imm(0, 1, 4));
         }
         for(int i=0; i<8; i++) {
-            *emit++ = ror_imm(r1, r1, 1);
-            *emit++ = word
+            *(*emit)++ = ror_imm(r1, r1, 1);
+            *(*emit)++ = word
                 ? strh_cc(ARM_CC_CS, r6 + i, aReg, index_imm(0, 1, 2))
                 : str_cc(ARM_CC_CS, r6 + i, aReg, index_imm(0, 1, 4));
         }
@@ -1107,23 +1251,23 @@ THUMB void emit_MOVEM(uint32_t* emit, uint16_t opcode) {
         uint8_t aReg = 6 + opcode & 0x7;
         int word = !(opcode & 0x0040);
         for(int i=7; i!=-1; i--) {
-            *emit++ = ror_imm(r2, r2, 1);
-            *emit++ = word
+            *(*emit)++ = ror_imm(r2, r2, 1);
+            *(*emit)++ = word
                 ? ldrh_cc(ARM_CC_CS, r6 + i, aReg, index_imm(1, 1, -2))
                 : ldr_cc(ARM_CC_CS, r6 + i, aReg, index_imm(1, 1, -4));
         }
         for(int i=7; i!=1; i--) {
-            *emit++ = ror_imm(r2, r2, 1);
-            *emit++ = word
+            *(*emit)++ = ror_imm(r2, r2, 1);
+            *(*emit)++ = word
                 ? ldrh_cc(ARM_CC_CS, r0, aReg, index_imm(1, 1, -2))
                 : ldr_cc(ARM_CC_CS, r0, aReg, index_imm(1, 1, -4));
-            *emit++ = word
+            *(*emit)++ = word
                 ? strh_cc(ARM_CC_CS, r0, r5, index_imm(0, 0, __offsetof(cpu_t, d0) + 2 + i * 4))
                 : str_cc(ARM_CC_CS, r0, r5, index_imm(0, 0, __offsetof(cpu_t, d0) + i * 4));
         }
         for(int i=0; i<2; i++) {
-            *emit++ = ror_imm(r2, r2, 1);
-            *emit++ = word
+            *(*emit)++ = ror_imm(r2, r2, 1);
+            *(*emit)++ = word
                 ? strh_cc(ARM_CC_CS, r4 - i, aReg, index_imm(1, 1, -2))
                 : str_cc(ARM_CC_CS, r4 - i, aReg, index_imm(1, 1, -4));
         }
@@ -1134,219 +1278,256 @@ THUMB void emit_MOVEM(uint32_t* emit, uint16_t opcode) {
         uint8_t tReg = (opcode & 0x0400) ? r1 : r2;
         switch(opcode & 0x3C) {
         case 0x08: // (An)
-            *emit++ = mov(tReg, aReg); break;
+            *(*emit)++ = mov(tReg, aReg); break;
         case 0x14: case 0x18: // (d16,An), (d8,An,Xn)
-            *emit++ = add(tReg, aReg, reg(tReg)); break;
+            *(*emit)++ = add(tReg, aReg, reg(tReg)); break;
         default: // asb.w, abs.l, (d16,PC), (d8,PC,Xn)
-            *emit++ = nop(); break;
+            *(*emit)++ = nop(); break;
         }
 
         switch(opcode & 0x0440) {
-        case 0x0000: *emit = b_imm(calc_offset(emit, r2m_word)); break;
-        case 0x0040: *emit = b_imm(calc_offset(emit, r2m_long)); break;
-        case 0x0400: *emit = b_imm(calc_offset(emit, m2r_word)); break;
-        case 0x0440: *emit = b_imm(calc_offset(emit, m2r_long)); break;
+        case 0x0000: **emit = b_imm(calc_offset((uint32_t)emit, (uint32_t)r2m_word)); break;
+        case 0x0040: **emit = b_imm(calc_offset((uint32_t)emit, (uint32_t)r2m_long)); break;
+        case 0x0400: **emit = b_imm(calc_offset((uint32_t)emit, (uint32_t)m2r_word)); break;
+        case 0x0440: **emit = b_imm(calc_offset((uint32_t)emit, (uint32_t)m2r_long)); break;
         }
     }        
 }
-THUMB void emit_MOVEP(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_MOVEP(uint32_t** emit, uint16_t opcode) {
     // MOVEP Dx,(d16,Ay)
     // MOVEP (d16,Ay),Dx
     uint8_t aReg = (opcode & 0x7);
-    *emit++ = add(r2, aReg, reg(r1)); // r2 contains address
+    *(*emit)++ = add(r2, aReg, reg(r1)); // r2 contains address
     uint8_t dEA = (opcode >> 9) & 0x7;
     uint8_t dReg = emit_EA_Load(emit, dEA, 0, 0, 0); // 0, 3 or 4
 
     switch(opcode & 0x00C0) {
     case 0x00: // Transfer word from memory to register
-        *emit++ = ldrb(r1, r2, index_imm(1, 0, 0));
-        *emit++ = bfi(dReg, r1, 8, 8);
-        *emit++ = ldrb(r1, r2, index_imm(1, 0, 2));
-        *emit++ = bfi(dReg, r1, 0, 8);
+        *(*emit)++ = ldrb(r1, r2, index_imm(1, 0, 0));
+        *(*emit)++ = bfi(dReg, r1, 8, 8);
+        *(*emit)++ = ldrb(r1, r2, index_imm(1, 0, 2));
+        *(*emit)++ = bfi(dReg, r1, 0, 8);
         emit_EA_Store(emit, dEA, dReg, 0, 0);
         break;
     case 0x40: // Transfer long from memory to register
-        *emit++ = ldrb(r1, r2, index_imm(1, 0, 0));
-        *emit++ = bfi(dReg, r1, 24, 8);
-        *emit++ = ldrb(r1, r2, index_imm(1, 0, 2));
-        *emit++ = bfi(dReg, r1, 16, 8);
-        *emit++ = ldrb(r1, r2, index_imm(1, 0, 4));
-        *emit++ = bfi(dReg, r1, 8, 8);
-        *emit++ = ldrb(r1, r2, index_imm(1, 0, 6));
-        *emit++ = bfi(dReg, r1, 0, 8);
+        *(*emit)++ = ldrb(r1, r2, index_imm(1, 0, 0));
+        *(*emit)++ = bfi(dReg, r1, 24, 8);
+        *(*emit)++ = ldrb(r1, r2, index_imm(1, 0, 2));
+        *(*emit)++ = bfi(dReg, r1, 16, 8);
+        *(*emit)++ = ldrb(r1, r2, index_imm(1, 0, 4));
+        *(*emit)++ = bfi(dReg, r1, 8, 8);
+        *(*emit)++ = ldrb(r1, r2, index_imm(1, 0, 6));
+        *(*emit)++ = bfi(dReg, r1, 0, 8);
         emit_EA_Store(emit, dEA, dReg, 0, 0);
         break;
     case 0x80: // Transfer word from register to memory
-        *emit++ = strb(dReg, r2, index_imm(1, 0, 2));
-        *emit++ = ror_imm(dReg, dReg, 8);
-        *emit++ = strb(dReg, r2, index_imm(1, 0, 0));
-        *emit++ = ror_imm(dReg, dReg, 24);
+        *(*emit)++ = strb(dReg, r2, index_imm(1, 0, 2));
+        *(*emit)++ = ror_imm(dReg, dReg, 8);
+        *(*emit)++ = strb(dReg, r2, index_imm(1, 0, 0));
+        *(*emit)++ = ror_imm(dReg, dReg, 24);
         break;
     case 0xC0: // Transfer long from register to memory
-        *emit++ = strb(dReg, r2, index_imm(1, 0, 6));
-        *emit++ = ror_imm(dReg, dReg, 8);
-        *emit++ = strb(dReg, r2, index_imm(1, 0, 4));
-        *emit++ = ror_imm(dReg, dReg, 8);
-        *emit++ = strb(dReg, r2, index_imm(1, 0, 2));
-        *emit++ = ror_imm(dReg, dReg, 8);
-        *emit++ = strb(dReg, r2, index_imm(1, 0, 0));
-        *emit++ = ror_imm(dReg, dReg, 8);
+        *(*emit)++ = strb(dReg, r2, index_imm(1, 0, 6));
+        *(*emit)++ = ror_imm(dReg, dReg, 8);
+        *(*emit)++ = strb(dReg, r2, index_imm(1, 0, 4));
+        *(*emit)++ = ror_imm(dReg, dReg, 8);
+        *(*emit)++ = strb(dReg, r2, index_imm(1, 0, 2));
+        *(*emit)++ = ror_imm(dReg, dReg, 8);
+        *(*emit)++ = strb(dReg, r2, index_imm(1, 0, 0));
+        *(*emit)++ = ror_imm(dReg, dReg, 8);
         break;
     }
+    *(*emit)++ = bx(lr);
 }
-THUMB void emit_MOVEQ(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_MOVEQ(uint32_t** emit, uint16_t opcode) {
     int n = (int8_t)opcode;
     if (n > 0)
-        *emit++ = 0xE3A01000 | (n & 0xFFF);  // mov r1, value
+        *(*emit)++ = 0xE3A01000 | (n & 0xFFF);  // mov r1, value
     else
-        *emit++ = 0xE3E01000 | (~n & 0xFFF);  // mov r1, -value
+        *(*emit)++ = 0xE3E01000 | (~n & 0xFFF);  // mov r1, -value
     emit_EA_Store(emit, (opcode & 0x0E00) >> 9, 1, 2, 0);
+    *(*emit)++ = bx(lr);
 }
-THUMB void emit_MOVEW(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_MOVEW(uint32_t** emit, uint16_t opcode) {
     uint8_t sEA  = 0x40 | (opcode & 0x3F);
     uint8_t dEA  = 0x40 | ((opcode & 0x0E00) >> 9) | ((opcode & 0x01C0) >> 3);
     uint8_t regS = emit_EA_Load(emit, sEA, 0, 1, 0);
-    *emit++   = 0xE3500000 | (regS << 12);  // cmp reg, #0
+    *(*emit)++   = 0xE3500000 | (regS << 12);  // cmp reg, #0
     emit_EA_Store(emit, dEA, regS, 2, 0);
+    *(*emit)++ = bx(lr);
 }
-THUMB void emit_MOVEL(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_MOVEL(uint32_t** emit, uint16_t opcode) {
     uint8_t sEA  = 0x80 | (opcode & 0x3F);
     uint8_t dEA  = 0x80 | ((opcode & 0x0E00) >> 9) | ((opcode & 0x01C0) >> 3);
     uint8_t regD = (dEA < 2) ? (3 + dEA) : 0;
     uint8_t regS = emit_EA_Load(emit, sEA, regD, 1, 0);
-    *emit++   = 0xE3500000 | (regS << 12);  // cmp reg, #0
+    *(*emit)++   = 0xE3500000 | (regS << 12);  // cmp reg, #0
     emit_EA_Store(emit, dEA, regS, 2, 0);
+    *(*emit)++ = bx(lr);
 }
-THUMB void emit_MULS(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_MULS(uint32_t** emit, uint16_t opcode) {
     emit_EA_ALU(emit, (opcode & 0xFEFF), ALU_OP_MULSW);
 }
-THUMB void emit_MULU(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_MULU(uint32_t** emit, uint16_t opcode) {
     emit_EA_ALU(emit, (opcode & 0xFEFF), ALU_OP_MULUW);
 }
-THUMB void emit_NBCD(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_NBCD(uint32_t** emit, uint16_t opcode) {
     uint8_t dEA = (opcode & 0x3F);
 
     emit_load_X(emit);
 
-    if(dEA == 0) *emit = b_imm(calc_offset(emit, nbcd_d0));
-    else if(dEA == 1) *emit = b_imm(calc_offset(emit, nbcd_d0));
+    if(dEA == 0) **emit = b_imm(calc_offset((uint32_t)emit, (uint32_t)nbcd_d0));
+    else if(dEA == 1) **emit = b_imm(calc_offset((uint32_t)emit, (uint32_t)nbcd_d0));
     else {
         switch(dEA & 0x38) {
         case 0x00: /* Dx */ 
-            *emit++ = add(r1, r5, imm(__offsetof(cpu_t, d0) + (dEA & 7) * 4 + 3));
+            *(*emit)++ = add(r1, r5, imm(__offsetof(cpu_t, d0) + (dEA & 7) * 4 + 3));
             break;
         case 0x08: /* Ax, INVALID */ break;
         case 0x10: /* (Ax) */ 
-            *emit++ = mov(r0, reg(r6 + (dEA & 7)));
+            *(*emit)++ = mov(r0, reg(r6 + (dEA & 7)));
             break;
         case 0x18: /* (Ax)+ */ 
-            *emit++ = mov(r0, reg(r6 + (dEA & 7))); 
-            *emit++ = add(r6 + (dEA & 7), r6 + (dEA & 7), imm(1)); 
+            *(*emit)++ = mov(r0, reg(r6 + (dEA & 7))); 
+            *(*emit)++ = add(r6 + (dEA & 7), r6 + (dEA & 7), imm(1)); 
             break;
         case 0x20: /* -(Ax) */
-            *emit++ = sub(r6 + (dEA & 7), r6 + (dEA & 7), imm(1)); 
-            *emit++ = mov(r0, reg(r6 + (dEA & 7))); 
+            *(*emit)++ = sub(r6 + (dEA & 7), r6 + (dEA & 7), imm(1)); 
+            *(*emit)++ = mov(r0, reg(r6 + (dEA & 7))); 
             break;
         case 0x28: /* (d16,An) */ 
         case 0x30: /* (d8,An,Xn) */
-            *emit++ = add(r0, r6 + (dEA & 7), reg(r1)); 
+            *(*emit)++ = add(r0, r6 + (dEA & 7), reg(r1)); 
             break;
         case 0x38:
-            *emit++ = mov(r0, reg(r1));
+            *(*emit)++ = mov(r0, reg(r1));
             break;
         } // end switch
-        *emit = b_imm(calc_offset(emit, abcd_an));
+        **emit = b_imm(calc_offset((uint32_t)emit, (uint32_t)abcd_an));
     }
-    emit += 1;
+    *emit += 1;
 
 }
-THUMB void emit_NEGBW(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_NEGBW(uint32_t** emit, uint16_t opcode) {
     emit_UNARY_EA_ALU(emit, opcode, ALU_OP_NEG);
 }
-THUMB void emit_NEGL(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_NEGL(uint32_t** emit, uint16_t opcode) {
     emit_UNARY_EA_ALU(emit, opcode, ALU_OP_NEG);
 }
-THUMB void emit_NEGXBW(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_NEGXBW(uint32_t** emit, uint16_t opcode) {
     emit_BCD_XOP_EA_ALU(emit, opcode, ALU_OP_NEGX);
 }
-THUMB void emit_NEGXL(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_NEGXL(uint32_t** emit, uint16_t opcode) {
     emit_BCD_XOP_EA_ALU(emit, opcode, ALU_OP_NEGX);
 }
-THUMB void emit_NOP(uint32_t* emit, uint16_t opcode) {
-    *emit++ = nop();
-    *emit++ = nop();
+__attribute__((target("thumb")))
+void emit_NOP(uint32_t** emit, uint16_t opcode) {
+    *(*emit)++ = nop();
+    *(*emit)++ = bx(lr);
 }
-THUMB void emit_NOTBW(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_NOTBW(uint32_t** emit, uint16_t opcode) {
     emit_UNARY_EA_ALU(emit, opcode, ALU_OP_NOT);
 }
-THUMB void emit_NOTL(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_NOTL(uint32_t** emit, uint16_t opcode) {
     emit_UNARY_EA_ALU(emit, opcode, ALU_OP_NOT);
 }
-THUMB void emit_ORBW(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_ORBW(uint32_t** emit, uint16_t opcode) {
     emit_EA_ALU(emit, opcode, ALU_OP_OR);
 }
-THUMB void emit_ORL(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_ORL(uint32_t** emit, uint16_t opcode) {
     emit_EA_ALU(emit, opcode, ALU_OP_OR);
 }
-THUMB void emit_ORIBW(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_ORIBW(uint32_t** emit, uint16_t opcode) {
     emit_IMD_ALU(emit, opcode, ALU_OP_OR);
 }
-THUMB void emit_ORIL(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_ORIL(uint32_t** emit, uint16_t opcode) {
     emit_IMD_ALU(emit, opcode, ALU_OP_OR);
 }
-THUMB void emit_ORI_TO_CCR(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_ORI_TO_CCR(uint32_t** emit, uint16_t opcode) {
     emit_load_CR(emit, 2);  // r2=sr, r1=imm
     emit_ALU(emit, ALU_OP_OR, 1, 2);
     emit_save_CR(emit, 2);  // put r2-> cpu_t and CPSR
+    *(*emit)++ = bx(lr);
 }
-THUMB void emit_ORI_TO_SR(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_ORI_TO_SR(uint32_t** emit, uint16_t opcode) {
     emit_load_SR(emit, 2);  // r2=sr, r1=imm
     emit_is_SVC(emit);
     emit_ALU(emit, ALU_OP_OR, 1, 2);
     emit_save_SR(emit, 2);  // put r2-> cpu_t and CPSR
+    *(*emit)++ = bx(lr);
 }
-THUMB void emit_ORW(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_ORW(uint32_t** emit, uint16_t opcode) {
     emit_EA_ALU(emit, opcode, ALU_OP_OR);
 }
-THUMB void emit_PEA(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_PEA(uint32_t** emit, uint16_t opcode) {
     // SP – 4 → SP; < ea > → (SP)
     uint8_t sReg = 6 + ((opcode) & 0x7);
 
     switch(opcode & 0x3C) {
     case 0x0C:
-        *emit++ = str(sReg, sp, index_imm(1, 1, -4));
+        *(*emit)++ = str(sReg, sp, index_imm(1, 1, -4));
         break;
     case 0x14: case 0x18:
-        *emit++ = add(r1, sReg, reg(r1));
+        *(*emit)++ = add(r1, sReg, reg(r1));
     default:
-        *emit++ = str(r1, sp, index_imm(1, 1, -4));
+        *(*emit)++ = str(r1, sp, index_imm(1, 1, -4));
         break;
     }
+    *(*emit)++ = bx(lr);
 }
-THUMB void emit_RESET(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_RESET(uint32_t** emit, uint16_t opcode) {
     emit_SVC(emit, RESET_SP);
 }
-THUMB void emit_ROdBW(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_ROdBW(uint32_t** emit, uint16_t opcode) {
     emit_ImmReg_Shift(emit, opcode, (opcode & 0x0100) ? ALU_OP_ROL : ALU_OP_ROR);
 }
-THUMB void emit_ROdL(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_ROdL(uint32_t** emit, uint16_t opcode) {
     emit_ImmReg_Shift(emit, opcode, (opcode & 0x0100) ? ALU_OP_ROL : ALU_OP_ROR);
 }
-THUMB void emit_ROd(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_ROd(uint32_t** emit, uint16_t opcode) {
     emit_Mem_Shift(emit, opcode, (opcode & 0x0100) ? ALU_OP_ROL : ALU_OP_ROR);
 }
-THUMB void emit_ROXdBW(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_ROXdBW(uint32_t** emit, uint16_t opcode) {
     emit_ROXd_opcode(emit, opcode);
 }
-THUMB void emit_ROXdL(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_ROXdL(uint32_t** emit, uint16_t opcode) {
     emit_ROXd_opcode(emit, opcode);
 }
-THUMB void emit_ROXd(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_ROXd(uint32_t** emit, uint16_t opcode) {
     emit_load_X(emit);
     emit_Mem_Shift(emit, opcode, (opcode & 0x0100) ? ALU_OP_ROXL : ALU_OP_ROXR);
     emit_save_X(emit);
 }
-THUMB void emit_RTE(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_RTE(uint32_t** emit, uint16_t opcode) {
     // If Not Supervisor State Then TRAP
     emit_load_SR(emit, r2);
     emit_is_SVC(emit);
@@ -1355,24 +1536,30 @@ THUMB void emit_RTE(uint32_t* emit, uint16_t opcode) {
     //    SP + 2 → SP
     //    (SP) → PC
     //    SP + 4 → SP
-    *emit++ = ldrh(r2, sp, index_imm(0, 1, 2));
+    *(*emit)++ = ldrh(r2, sp, index_imm(0, 1, 2));
     emit_save_SR(emit, r2);
-    *emit++ = ldr(r0, sp, index_imm(0, 1, 4));
-    *emit = b_imm(calc_offset(emit, pjit_lookup));
-|
-THUMB void emit_RTR(uint32_t* emit, uint16_t opcode) {
-    // (SP) → CCR; SP + 2 → SP; (SP) → PC; SP + 4 → SP
-    *emit++ = ldrh(r2, sp, index_imm(0, 1, 2));
-    emit_save_CR(emit, r2);
-    *emit++ = ldr(r0, sp, index_imm(0, 1, 4));
-    *emit = b_imm(calc_offset(emit, pjit_lookup));
-|
-THUMB void emit_RTS(uint32_t* emit, uint16_t opcode) {
-    // (SP) → PC; SP + 4 → SP
-    *emit++ = ldr(r0, sp, index_imm(0, 1, 4));
-    *emit = b_imm(calc_offset(emit, pjit_lookup));
+    *(*emit)++ = ldr(r0, sp, index_imm(0, 1, 4));
+    **emit = b_imm(calc_offset((uint32_t)*emit, pjit_jmp));
+    *emit += 1;
 }
-THUMB void emit_SBCD(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_RTR(uint32_t** emit, uint16_t opcode) {
+    // (SP) → CCR; SP + 2 → SP; (SP) → PC; SP + 4 → SP
+    *(*emit)++ = ldrh(r2, sp, index_imm(0, 1, 2));
+    emit_save_CR(emit, r2);
+    *(*emit)++ = ldr(r0, sp, index_imm(0, 1, 4));
+    **emit = b_imm(calc_offset((uint32_t)*emit, pjit_jmp));
+    *emit += 1;
+}
+__attribute__((target("thumb")))
+void emit_RTS(uint32_t** emit, uint16_t opcode) {
+    // (SP) → PC; SP + 4 → SP
+    *(*emit)++ = ldr(r0, sp, index_imm(0, 1, 4));
+    **emit = b_imm(calc_offset((uint32_t)*emit, pjit_jmp));
+    *emit += 1;
+}
+__attribute__((target("thumb")))
+void emit_SBCD(uint32_t** emit, uint16_t opcode) {
     uint8_t sReg = (opcode & 0x7);
     uint8_t dReg = (opcode >> 9) & 0x7;
 
@@ -1380,24 +1567,26 @@ THUMB void emit_SBCD(uint32_t* emit, uint16_t opcode) {
 
     if(opcode & 0x0008) {
         // -(Ax), -(An)
-        *emit++ = ldrb(r0, r6 + sReg, index_imm(0, 1, -1));
-        *emit++ = sub(r1, r6 + dReg, imm(1));
-        *emit++ = mov(r6 + dReg, reg(r1));
-        *emit = b_imm(calc_offset(emit, sbcd_an));
+        *(*emit)++ = ldrb(r0, r6 + sReg, index_imm(0, 1, -1));
+        *(*emit)++ = sub(r1, r6 + dReg, imm(1));
+        *(*emit)++ = mov(r6 + dReg, reg(r1));
+        **emit = b_imm(calc_offset((uint32_t)emit, (uint32_t)sbcd_an));
 
     } else {
         // Dx, Dy
-        if(sReg < 2) *emit++ = uxtb(r0, r3 + sReg, 0);
-        else *emit++ = ldrb(r0, r5, index_imm(1, 0, sReg * 4 + 3 + __offsetof(cpu_t, d0)));
-        if(dReg == 0) *emit = b_imm(calc_offset(emit, sbcd_d0));
-        else if(dReg == 1) *emit = b_imm(calc_offset(emit, sbcd_d1));
+        if(sReg < 2) *(*emit)++ = uxtb(r0, r3 + sReg, 0);
+        else *(*emit)++ = ldrb(r0, r5, index_imm(1, 0, sReg * 4 + 3 + __offsetof(cpu_t, d0)));
+        if(dReg == 0) **emit = b_imm(calc_offset((uint32_t)emit, (uint32_t)sbcd_d0));
+        else if(dReg == 1) **emit = b_imm(calc_offset((uint32_t)emit, (uint32_t)sbcd_d1));
         else {
-            *emit++ = add(r1, r5, imm(__offsetof(cpu_t, d0) + dReg * 4 + 3));
-            *emit = b_imm(calc_offset(emit, sbcd_an));
+            *(*emit)++ = add(r1, r5, imm(__offsetof(cpu_t, d0) + dReg * 4 + 3));
+            **emit = b_imm(calc_offset((uint32_t)emit, (uint32_t)sbcd_an));
         }
     }
-|
-THUMB void emit_Scc(uint32_t* emit, uint16_t opcode) {
+    *emit += 1;
+}
+__attribute__((target("thumb")))
+void emit_Scc(uint32_t** emit, uint16_t opcode) {
     uint8_t cc = arm_cc(opcode);
     if(cc == ARM_CC_HI) {
         /* ARM C=1 & Z=0, 68K C=0 | Z = 0
@@ -1407,9 +1596,9 @@ THUMB void emit_Scc(uint32_t* emit, uint16_t opcode) {
          * 1 0  1   1
          * 1 1  0   0
          */
-        *emit++ = mov(r0, imm(0));
-        *emit++ = mov_cc(ARM_CC_CC, r0, imm(0xFF));
-        *emit++ = mov_cc(ARM_CC_NE, r0, imm(0xFF));
+        *(*emit)++ = mov(r0, imm(0));
+        *(*emit)++ = mov_cc(ARM_CC_CC, r0, imm(0xFF));
+        *(*emit)++ = mov_cc(ARM_CC_NE, r0, imm(0xFF));
 
     } else if(cc == ARM_CC_LS) {
         /* ARM C=0 & Z=1, 68K C=1 & Z=1
@@ -1419,91 +1608,114 @@ THUMB void emit_Scc(uint32_t* emit, uint16_t opcode) {
          * 1 0  0   0
          * 1 1  0   1
          */
-        *emit++ = mov(r0, imm(0xFF));
-        *emit++ = mov_cc(ARM_CC_CC, r0, imm(0));
-        *emit++ = mov_cc(ARM_CC_NE, r0, imm(0));
+        *(*emit)++ = mov(r0, imm(0xFF));
+        *(*emit)++ = mov_cc(ARM_CC_CC, r0, imm(0));
+        *(*emit)++ = mov_cc(ARM_CC_NE, r0, imm(0));
 
     } else {
-        *emit++ = mov_cc(cc, r0, imm(0xFF));
-        *emit++ = mov_cc(cc ^ 1, r0, imm(0));
+        *(*emit)++ = mov_cc(cc, r0, imm(0xFF));
+        *(*emit)++ = mov_cc(cc ^ 1, r0, imm(0));
     }
     uint8_t dEA = (opcode & 0x3F);
     emit_EA_Store(emit, dEA, r0, 2, 0);
+    *(*emit)++ = bx(lr);
 }
-THUMB void emit_STOP(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_STOP(uint32_t** emit, uint16_t opcode) {
     emit_load_SR(emit, 2);
     emit_is_SVC(emit);
     emit_save_SR(emit, 1);
-    *emit++ = hlt(0);
+    *(*emit)++ = hlt(0);
+    *(*emit)++ = bx(lr);
 }
-THUMB void emit_SUBBW(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_SUBBW(uint32_t** emit, uint16_t opcode) {
     emit_EA_ALU(emit, opcode, ALU_OP_SUB);
 }
-THUMB void emit_SUBL(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_SUBL(uint32_t** emit, uint16_t opcode) {
     emit_EA_ALU(emit, opcode, ALU_OP_SUB);
 }
-THUMB void emit_SUBAL(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_SUBAL(uint32_t** emit, uint16_t opcode) {
     emit_EA_ALU(emit, opcode, ALU_OP_SUB);
 }
-THUMB void emit_SUBAW(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_SUBAW(uint32_t** emit, uint16_t opcode) {
     emit_EA_ALU(emit, opcode, ALU_OP_SUB);
 }
-THUMB void emit_SUBIBW(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_SUBIBW(uint32_t** emit, uint16_t opcode) {
     emit_IMD_ALU(emit, opcode, ALU_OP_SUB);
 }
-THUMB void emit_SUBIL(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_SUBIL(uint32_t** emit, uint16_t opcode) {
     emit_IMD_ALU(emit, opcode, ALU_OP_SUB);
 }
-THUMB void emit_SUBQBW(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_SUBQBW(uint32_t** emit, uint16_t opcode) {
     uint8_t value = (opcode & 0x0E00) >> 9;
     if (!value) value = 8;
-    *emit++ = 0xE3A01000 | (value);  // mov r1, value
+    *(*emit)++ = 0xE3A01000 | (value);  // mov r1, value
     emit_IMD_ALU(emit, opcode, ALU_OP_SUB);
 }
-THUMB void emit_SUBQL(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_SUBQL(uint32_t** emit, uint16_t opcode) {
     uint8_t value = (opcode & 0x0E00) >> 9;
     if (!value) value = 8;
-    *emit++ = 0xE3A01000 | (value);  // mov r1, value
+    *(*emit)++ = 0xE3A01000 | (value);  // mov r1, value
     emit_IMD_ALU(emit, opcode, ALU_OP_SUB);
 }
-THUMB void emit_SUBW(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_SUBW(uint32_t** emit, uint16_t opcode) {
     emit_EA_ALU(emit, opcode, ALU_OP_SUB);
 }
-THUMB void emit_SUBXBW(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_SUBXBW(uint32_t** emit, uint16_t opcode) {
     emit_BCD_XOP_ALU(emit, opcode, ALU_OP_SUBX);
 }
-THUMB void emit_SUBXL(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_SUBXL(uint32_t** emit, uint16_t opcode) {
     emit_BCD_XOP_ALU(emit, opcode, ALU_OP_SUBX);
 }
-THUMB void emit_SWAP(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_SWAP(uint32_t** emit, uint16_t opcode) {
     emit_IMD_ALU(emit, opcode, ALU_OP_SWAP);
 }
-THUMB void emit_TAS(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_TAS(uint32_t** emit, uint16_t opcode) {
     // Destination Tested -> Condition Codes; 1 -> Bit 7 of Destination
     uint8_t sEA = (opcode & 0x3F);
     uint8_t sReg = emit_EA_Load(emit, sEA, 1, 1, 1);
-    *emit++ = cmp(sReg, imm(0));
-    *emit++ = orr(sReg, sReg, imm(0x80));
+    *(*emit)++ = cmp(sReg, imm(0));
+    *(*emit)++ = orr(sReg, sReg, imm(0x80));
     emit_EA_Store(emit, sEA, sReg, 1, 1);
+    *(*emit)++ = bx(lr);
 }
-THUMB void emit_TRAP(uint32_t* emit, uint16_t opcode) {
-    emit_SVC(emit, TRAP0 + (opcode & 0xF));
+__attribute__((target("thumb")))
+void emit_TRAP(uint32_t** emit, uint16_t opcode) {
+    return emit_SVC(emit, TRAP0 + (opcode & 0xF));
 }
-THUMB void emit_TRAPV(uint32_t* emit, uint16_t opcode) {
-    *emit++ = svc_cc(ARM_CC_VS, TRAPV);
-    *emit++ = nop();
+__attribute__((target("thumb")))
+void emit_TRAPV(uint32_t** emit, uint16_t opcode) {
+    *(*emit)++ = 0xEF000000 | TRAPV;
+    *(*emit)++ = bx(lr);
 }
-THUMB void emit_TSTBW(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_TSTBW(uint32_t** emit, uint16_t opcode) {
     emit_IMD_ALU(emit, opcode, ALU_OP_TST);
 }
-THUMB void emit_TSTL(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_TSTL(uint32_t** emit, uint16_t opcode) {
     emit_IMD_ALU(emit, opcode, ALU_OP_TST);
 }
-THUMB void emit_UNLK(uint32_t* emit, uint16_t opcode) {
+__attribute__((target("thumb")))
+void emit_UNLK(uint32_t** emit, uint16_t opcode) {
     // An -> SP; (SP) -> An; SP + 4 -> SP
     uint8_t aReg = 6 + (opcode & 7);
-    *emit++ = mov(sp, reg(aReg));
-    *emit++ = ldr(aReg, sp, index_imm(0, 1, 4));
+    *(*emit)++ = mov(sp, reg(aReg));
+    *(*emit)++ = ldr(aReg, sp, index_imm(0, 1, 4));
+    *(*emit)++ = bx(lr);
 }
 
 /***
@@ -2132,7 +2344,8 @@ __attribute__((used)) const op_details_t optab_040mmu[] = {
  *     |_____|_| |_| |_|_|\__|\__\___|_|    |_| \_\___/ \__,_|\__|_|_| |_|\___|
  *
  */
-THUMB void emit_op(uint32_t* emit, op_details_t* op, uint16_t opcode) {
+__attribute__((target("thumb")))
+static void emit_op(uint32_t** emit, op_details_t* op, uint16_t opcode) {
     while (1) {
         if ((opcode & op->match) == op->equal) {
             op->emit(emit, opcode);
@@ -2142,9 +2355,11 @@ THUMB void emit_op(uint32_t* emit, op_details_t* op, uint16_t opcode) {
     }
 }
 
-THUMB void emit_opcode_table() {
+__attribute__((target("thumb")))
+void emit_opcode_table() {
     // Generate opcode tables
-    stubs = cpu->opcode_stubs;
+    uint32_t* opcodes    = cpu_state.opcode_table;
+    uint32_t* stubs      = cpu->opcode_stubs;
 
     // check opcode mode
     config_t c = cpu_state.config;
@@ -2177,33 +2392,45 @@ THUMB void emit_opcode_table() {
     }
 
     for (int opcode = 0; opcode < 65536; opcode++) {
-        static uint32_t buffer[2];
+        static uint32_t buffer[32];  // big enough?
+        uint32_t*       b;
+        uint32_t        len;
+
+        b = buffer;
 
         // Start with the 68000 (common base)
-        emit_op(buffer, optab_68000, opcode);
+        emit_op(&b, optab_68000, opcode);
 
         // Add applicable 680x0 opcodes
-             if(c.cpu_enable_68040) emit_op(buffer, optab_68040, opcode);
-        else if(c.cpu_enable_68030) emit_op(buffer, optab_68030, opcode);
-        else if(c.cpu_enable_68020) emit_op(buffer, optab_68020, opcode);
+             if(c.cpu_enable_68040) emit_op(&b, optab_68040, opcode);
+        else if(c.cpu_enable_68030) emit_op(&b, optab_68030, opcode);
+        else if(c.cpu_enable_68020) emit_op(&b, optab_68020, opcode);
 
         // Add applicable FPU opcodes
         if(c.cpu_enable_fpu) {
             // 68040 has a very different FPU
             if(c.cpu_enable_68040)
-                emit_op(buffer, optab_040fpu, opcode);
+                emit_op(&b, optab_040fpu, opcode);
             // ...than the 68020 and 68030 (the 68882)
             else if(c.cpu_enable_68020 | c.cpu_enable_68030)
-                emit_op(buffer, optab_68882, opcode);
+                emit_op(&b, optab_68882, opcode);
             // and the 68000 does not have an FPU
         }
 
         // Add applicable MMU opcodes
         if(c.cpu_enable_mmu)
-            emit_op(buffer, optab_040mmu, opcode);
+            emit_op(&b, optab_040mmu, opcode);
 
-        cpu->opcode_table[opcode * 2 + 0] = buffer[0];
-        cpu->opcode_table[opcode * 2 + 1] = buffer[1];
+        len = b - buffer;
+
+        if ((len == 1) || (len == 2 && buffer[1] == bx_lr())) {
+            *opcodes++ = buffer[0];
+        } else {
+            *opcodes = b_imm(calc_offset(opcodes, stubs));
+            opcodes++;
+            memcpy(stubs, buffer, len * sizeof(uint32_t));
+            stubs += len;
+        }
     }
     uint32_t len = (uint32_t)stubs - (uint32_t)cpu->opcode_stubs;
     printf("[PJIT] Stub table %08X (%d) bytes\n", len, len);

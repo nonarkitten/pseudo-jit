@@ -61,8 +61,8 @@ const config_t default_config = {
     0,                           // dcache_mask_24b, 1 to allow data caching of region
     0,                           // icache_mask_24b, 1 to allow instruction caching
     0,                           // last boot good
-    11,                          // cache_index_bits, Cache size = 8 << (cache_index_bits + cache_block_bits)
-    7,                           // cache_block_bits
+    INDEX_BITS,                  // cache_index_bits, Cache size = 8 << (cache_index_bits + cache_block_bits)
+    BLOCK_BITS,                  // cache_block_bits
     0xFF,                        // MapROM page from 24-bit RAM (single 512KB), 0xFF to disable
     8000,                        // Default kHz
     0,                           // not dirty
@@ -71,9 +71,9 @@ const config_t default_config = {
 cpu_t cpu_state = {0};
 
 static uint32_t * cache_clear_block(uint32_t* block) {
-    uint32_t *end = block + 1 << (BLOCK_BITS + 2);
+    uint32_t *end = (uint32_t)block + (1 << (BLOCK_BITS + CACHE_OP_BITS));
     while(block < end) {
-        *block++ = ldr(r0, r5, offsetof(cpu_t, pc));
+        // *block++ = nop();
         *block++ = blx(r5);
     }
     return end;
@@ -81,7 +81,7 @@ static uint32_t * cache_clear_block(uint32_t* block) {
 
 static void cache_clear(void) {
     uint32_t *start = cpu->cache_data;
-    uint32_t *end = start + 1 << (BLOCK_BITS + INDEX_BITS + 2);
+    uint32_t *end = (uint32_t)start + (1 << (BLOCK_BITS + INDEX_BITS + CACHE_OP_BITS));
     while(start < end) start = cache_clear_block(start);
 }
 
@@ -100,10 +100,10 @@ uint32_t cache_find_entry(uint32_t m68k) {
 		
 	if(cpu->cache_tags[index] != tag) {
 		cpu->cache_tags[index] = tag;
-		cache_clear_block(index << (2 + BLOCK_BITS));
+		cache_clear_block(index << (CACHE_OP_BITS + BLOCK_BITS));
 	}
 
-	return cpu->cache_data | (m68k & ((1 << (1 + BLOCK_BITS + INDEX_BITS)) - 1))
+	return (uint32_t)cpu->cache_data | (m68k & ((1 << (1 + BLOCK_BITS + INDEX_BITS)) - 1));
 }
 
 pjit_start(uint32_t top) {
@@ -115,8 +115,7 @@ pjit_start(uint32_t top) {
     //                                  config.cache_index_bits (11 default)
     //                                  config.cache_block_bits (7 default)
     //                                  bits must be >= 16 total
-    uint32_t data_cache_size = 8 << 
-        (cpu_state.config.cache_index_bits + cpu_state.config.cache_block_bits);
+    uint32_t data_cache_size = 1 << (CACHE_OP_BITS + INDEX_BITS + BLOCK_BITS);
     memory -= data_cache_size;
     cpu_state.cache_data = (uint32_t*)memory;
 
@@ -126,14 +125,14 @@ pjit_start(uint32_t top) {
     memory -= data_cache_size;
     cpu_state.maprom_data = (uint32_t*)memory;
 
-    // 512KB*   PJIT Opcode Table
-    //
-    memory -= 0x80000;
-    cpu_state.opcode_table = (uint32_t*)memory;
-
-    // 256KB    PJIT Opcode Stubs       should be smaller, but just in case
+    // 256KB    PJIT Opcode Table
     //
     memory -= 0x40000;
+    cpu_state.opcode_table = (uint32_t*)memory;
+
+    // 2MB    PJIT Opcode Stubs
+    //
+    memory -= 0x200000;
     cpu_state.opcode_stubs = (uint32_t*)memory;
 
     // 128KB    PJIT Core
@@ -144,7 +143,7 @@ pjit_start(uint32_t top) {
     // 4KB      PJIT Cache Tags         cpu->cache_tags
     //          Size is 2 << cache_index_bits
     //
-    uint32_t cache_tags_size = 2 << cpu_state.config.cache_index_bits;
+    uint32_t cache_tags_size = 2 << INDEX_BITS;
     memory -= cache_tags_size;
     cpu_state.cache_tags = (uint16_t*)memory;
 
@@ -165,5 +164,6 @@ pjit_start(uint32_t top) {
 
     // Load our initial PC and SP
     cpu_state.a7 = *(uint32_t*)0;
-    pjit_lookup(cpu_state.pc = *(uint32_t*)4);
+    cpu_state.pc = *(uint32_t*)4;
+    pjit_jmp((uint16_t*)cpu_state.pc);
 }

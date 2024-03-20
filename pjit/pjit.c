@@ -241,136 +241,196 @@ static uint8_t get_ext(uint16_t opcode) {
 }
 
 __attribute__((naked,used,target("arm")))
-void pjit_m68k_pc(void) {
+void pjit_lookup(void) {
+    pjit_jmp((uint16_t*)pjit_cache_reverse());
+}
+
+__attribute__((naked,used,target("arm")))
+void pjit_bsr4p(void) {
     register uint32_t r1 asm("r1");
-    r1 = 0;
-    asm volatile("" :: "r"(r1)); 
-}
-
-__attribute__((naked,used,target("arm")))
-void pjit_m68k_pc_relative(uint32_t unused, int32_t offset) {
-    pjit_cache_reverse(offset);
-    asm("b       pjit_lookup");
-}
-
-__attribute__((naked,used,target("arm")))
-void pjit_m68k_pc_subroutine(void) {
-    register uint32_t r1 asm("r1");
-    r1 = 0;
-    asm volatile("" :: "r"(r1)); 
-}
-
-__attribute__((naked,used,target("arm")))
-void pjit_m68k_pc_relative_subroutine(uint32_t unused, int32_t offset) {
-    pjit_cache_reverse(offset);
+    r1 += pjit_cache_reverse();
+    asm("add     r0, r0, #4");
     asm("str     r0, [sp, #-4]");
+    pjit_jmp((uint16_t*)r1);
 }
 
 __attribute__((naked,used,target("arm")))
-void pjit_lookup(uint16_t *m68k_pc) {
-	static uint32_t exec_buffer[8];
-	register uint32_t *out asm("lr");
+void pjit_bsr2p(void) {
+    register uint32_t r1 asm("r1");
+    r1 += pjit_cache_reverse();
+    asm("add     r0, r0, #2");
+    asm("str     r0, [sp, #-4]");
+    pjit_jmp((uint16_t*)r1);
+}
 
-    if(((uint32_t)m68k_pc) & 1) {
-        asm("svc    %0" :: "i"(ADDRESSERR));
-        // does not return
-    }
-	
-	// are we cached or uncached (write to buffer or write to cache)
-	// just read the MMU table to see how we should proceed
-	// the C bit tells us if we're cacheable.
-    extern uint32_t *mmu_table;
-	if ((mmu_table[m68k_pc >> 20] & 0x4)
-	&& ((m68k_pc & CACHE_PAGE_MASK) < CACHE_PAGE_SAFE_LIMIT)) {
-		// cache yea, but did we come from cache?
-        if (lr >= cpu->cache_data) {
-            // came from cache; adjust back to prior instruction
-    		lr -= 4;
-        } else {
-            // we did NOT come from cache, find out where we're going
-            lr = cache_find_entry(m68k_pc);
+__attribute__((naked,used,target("arm")))
+void pjit_bsr(void) {
+    register uint32_t r1 asm("r1");
+    r1 += pjit_cache_reverse();
+    asm("str     r0, [sp, #-4]");
+    pjit_jmp((uint16_t*)r1);
+}
+
+__attribute__((naked,used,target("arm")))
+void pjit_bra(void) {
+    register uint32_t r1 asm("r1");
+    r1 += pjit_cache_reverse();
+    asm("add     r0, r0, #2");
+    asm("str     r0, [sp, #-4]");
+    pjit_jmp((uint16_t*)r1);
+}
+
+__attribute__((naked,used,target("arm")))
+void pjit_jsr4p(void) {
+    register uint32_t r1 asm("r1");
+    pjit_cache_reverse();
+    asm("add     r0, r0, #4");
+    asm("str     r0, [sp, #-4]");
+    pjit_jmp((uint16_t*)r1);
+}
+
+__attribute__((naked,used,target("arm")))
+void pjit_jsr2p(void) {
+    register uint32_t r1 asm("r1");
+    pjit_cache_reverse();
+    asm("add     r0, r0, #2");
+    asm("str     r0, [sp, #-4]");
+    pjit_jmp((uint16_t*)r1);
+}
+
+__attribute__((naked,used,target("arm")))
+void pjit_jsr(void) {
+    register uint32_t r1 asm("r1");
+    pjit_cache_reverse();
+    asm("str     r0, [sp, #-4]");
+    pjit_jmp((uint16_t*)r1);
+}
+
+__attribute__((naked,used,target("arm")))
+void pjit_jmp(uint16_t *m68k_pc) {
+    #define CACHE_PAGE_MASK ((2 << BLOCK_BITS) - 1)
+    #define CACHE_PAGE_SAFE_LIMIT (CACHE_PAGE_MASK - 10)
+
+    asm("ldrh    r1, [r5, %0]" :: "i"(__offsetof(cpu_t, sr)));
+    asm("bic     r1, r1, #0xF");
+    asm("orcs    r1, r1, #0x1");
+    asm("orvs    r1, r1, #0x2");
+    asm("oreq    r1, r1, #0x4");
+    asm("ormi    r1, r1, #0x8");
+    asm("strh    r1, [r5, %0]" :: "i"(__offsetof(cpu_t, sr)));
+
+    register uint32_t *out;
+    {
+        static uint32_t exec_buffer[8];
+        register uint32_t *lr asm("lr");
+
+        if(((uint32_t)m68k_pc) & 1) {
+            asm("svc    %0" :: "i"(ADDRESSERR));
+            // does not return
         }
-        out = lr;
-		
-	} else {
-		// no cache, so point to our mini-buffer instead
-		out = exec_buffer;
-	}
+        
+        // are we cached or uncached (write to buffer or write to cache)
+        // just read the MMU table to see how we should proceed
+        // the C bit tells us if we're cacheable.
+        extern uint32_t *mmu_table;
+        if ((mmu_table[((uint32_t)m68k_pc) >> 20] & 0x4)
+        && ((((uint32_t)m68k_pc) & CACHE_PAGE_MASK) < CACHE_PAGE_SAFE_LIMIT)) {
+            // cache yea, but did we come from cache?
+            if (lr >= cpu->cache_data) {
+                // came from cache; adjust back to prior instruction
+                lr -= 4;
+            } else {
+                // we did NOT come from cache, find out where we're going
+                lr = cache_find_entry(m68k_pc);
+            }
+            out = lr;
+            
+        } else {
+            // no cache, so point to our mini-buffer instead
+            out = exec_buffer;
+        }
 
-	// get the opcode from 68K memory based on m68k_pc
-	uint32_t opcode = *m68k_pc++;
-	uint32_t i = 0;
-			
-	// determine opcode length (extension words)
-	uint32_t ext = get_ext(opcode);
-	
-	// write out the extension word opcodes, incrementing m68k_pc			
-	switch((ext_t)(ext & 0x0F)) {
-	case EXT_I16:
-		out[i++] = movw(r1, *m68k_pc++);				out[i++] = nop();
-		break;
-	case EXT_I32:
-		out[i++] = movw(r1, m68k_pc[1]);				out[i++] = nop();
-		out[i++] = movt(r1, m68k_pc[0]);				out[i++] = nop();
-		m68k_pc += 2;
-		break;
-	case EXT_D8_XAREG:
-		out[i++] = mov_signed(r1, (int8_t)opcode);
-		out[i++] = emit_src_ext((uint32_t)out, *m68k_pc++);
-		break;
-	case EXT_D16_PC:
-		out[i++] = movw(r1, m68k_pc[1]);
-		out[i++] = emit_src_ext_pc((uint32_t)out, m68k_pc[0]);
-		m68k_pc += 2;
-		break;
-	case EXT_D8_XPC:       
-		out[i++] = mov_signed(r1, (int8_t)opcode);
-		out[i++] = emit_src_ext_pc((uint32_t)out, *m68k_pc++);
-	default:
-		break;
-	}
+        // get the opcode from 68K memory based on m68k_pc
+        uint32_t opcode = *m68k_pc++;
+        uint32_t i = 0;
+                
+        // determine opcode length (extension words)
+        uint32_t ext = get_ext(opcode);
+        
+        // write out the extension word opcodes, incrementing m68k_pc			
+        switch((ext_t)(ext & 0x0F)) {
+        case EXT_I16:
+            out[i++] = movw(r1, *m68k_pc++);				out[i++] = nop();
+            break;
+        case EXT_I32:
+            out[i++] = movw(r1, m68k_pc[1]);				out[i++] = nop();
+            out[i++] = movt(r1, m68k_pc[0]);				out[i++] = nop();
+            m68k_pc += 2;
+            break;
+        case EXT_D8_XAREG:
+            out[i++] = mov_signed(r1, (int8_t)opcode);
+            out[i++] = emit_src_ext((uint32_t)out, *m68k_pc++);
+            break;
+        case EXT_D16_PC:
+            out[i++] = movw(r1, m68k_pc[1]);
+            out[i++] = emit_src_ext_pc((uint32_t)out, m68k_pc[0]);
+            m68k_pc += 2;
+            break;
+        case EXT_D8_XPC:       
+            out[i++] = mov_signed(r1, (int8_t)opcode);
+            out[i++] = emit_src_ext_pc((uint32_t)out, *m68k_pc++);
+        default:
+            break;
+        }
 
-	switch((ext_t)(ext & 0x0F)) {
-	case EXT_I16:
-		out[i++] = movw(r2, *m68k_pc++);				out[i++] = nop();
-		break;
-	case EXT_I32:
-		out[i++] = movw(r2, m68k_pc[1]);				out[i++] = nop();
-		out[i++] = movt(r2, m68k_pc[0]);				out[i++] = nop();
-		m68k_pc += 2;
-		break;
-	case EXT_D8_XAREG:
-		out[i++] = mov_signed(r2, (int8_t)opcode);
-		out[i++] = emit_dst_ext((uint32_t)out, *m68k_pc++);
-		break;
-	default:
-		break;
-	}
-	
-	cpu->pc = m68k_pc;
-	
-	// write out (copy) the opcode instruction
-	// opcode fits entire in one or two instructions
-	// We need to trust the emitters to align to the
-	// no-branch-branch rule of instruction order
-	uint32_t *fetch = cpu->opcode_table + (opcode * 2);
-	out[i++] = *fetch++;
-	uint32_t op2 = *fetch;
-	
-	// is the second instruction a branch
-	if (op2 == bx_lr()) {
-		op2 = nop();
-	} else if((op2 & 0xFF000000) == 0xEA000000) {
-		op2 = op2 + (uint32_t)out - (uint32_t)fetch;
-	}
-	out[i++] = op2;
-	
-	// are we in cache mode?
-	if (out == exec_buffer) {
-		// no, write postable to buffer and call it			
-		out[i++] = ldr(r0, r5, offsetof(cpu_t, pc));
-		// postamble should return to pjit_iagf
-		out[i++] = b_imm(calc_b_offset(out, pjit_lookup));
-	}
+        switch((ext_t)(ext & 0x0F)) {
+        case EXT_I16:
+            out[i++] = movw(r2, *m68k_pc++);				out[i++] = nop();
+            break;
+        case EXT_I32:
+            out[i++] = movw(r2, m68k_pc[1]);				out[i++] = nop();
+            out[i++] = movt(r2, m68k_pc[0]);				out[i++] = nop();
+            m68k_pc += 2;
+            break;
+        case EXT_D8_XAREG:
+            out[i++] = mov_signed(r2, (int8_t)opcode);
+            out[i++] = emit_dst_ext((uint32_t)out, *m68k_pc++);
+            break;
+        default:
+            break;
+        }
+        
+        cpu->pc = m68k_pc;
+        
+        // write out (copy) the opcode instruction
+        // opcode fits entire in one or two instructions
+        // We need to trust the emitters to align to the
+        // no-branch-branch rule of instruction order
+
+        uint32_t *fetch = cpu->opcode_table + opcode;
+        // out[i++] = *fetch++;
+        uint32_t op2 = *fetch;
+        
+        // is the instruction a branch, then fixup the offset
+        if((op2 & 0xFF000000) == 0xEA000000) {
+            op2 = op2 + (uint32_t)out - (uint32_t)fetch;
+        }
+        out[i++] = op2;
+        
+        // are we in cache mode?
+        if (out == exec_buffer) {
+            // no, write postable to buffer and call it			
+            out[i++] = ldr(r0, r5, __offsetof(cpu_t, pc));
+            // postamble should return to pjit_iagf
+            out[i++] = b_imm(calc_b_offset(out, pjit_lookup));
+        }
+    }
+
+    asm("ldrh    r1, [r5, %0]" :: "i"(__offsetof(cpu_t, sr)));
+    asm("rbit    r1, r1");
+    asm("bfi     r1, r1, #2, #2)");
+    asm("ror     r1, r1, #2");
+    asm("msr     cpsr_r, r1");
+
 	goto *out;
 }
