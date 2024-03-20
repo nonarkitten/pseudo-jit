@@ -1115,8 +1115,16 @@ void emit_JSR(uint32_t** emit, uint16_t opcode) {
     uint8_t sEA = 0xC0 | (opcode & 0x3F);
     uint8_t sReg = emit_EA_Load(emit, sEA, 1, 1, 0);
     *(*emit)++ = push(R7);
-    // TODO: fix me for 2 and 4 byte extension words!!
-    **emit = b_imm(calc_offset((uint32_t)*emit, pjit_jsr));
+    // 110xxx,111011,111000=W,111001=L
+    if(((opcode & 0x3C) == 0x30)
+    || ((opcode & 0x3F) == 0x3B)
+    || ((opcode & 0x3F) == 0x38)) {
+        **emit = b_imm(calc_offset((uint32_t)*emit, pjit_jsr2));
+    } else if((opcode & 0x3F) == 0x39) {
+        **emit = b_imm(calc_offset((uint32_t)*emit, pjit_jsr4));
+    } else {
+        **emit = b_imm(calc_offset((uint32_t)*emit, pjit_jsr0));
+    }
     *emit += 1;
 }
 __attribute__((target("thumb")))
