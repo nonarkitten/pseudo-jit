@@ -313,10 +313,10 @@ void pjit_jmp(uint16_t *m68k_pc) {
 
     asm("ldrh    r1, [r5, %0]" :: "i"(__offsetof(cpu_t, sr)));
     asm("bic     r1, r1, #0xF");
-    asm("orcs    r1, r1, #0x1");
-    asm("orvs    r1, r1, #0x2");
-    asm("oreq    r1, r1, #0x4");
-    asm("ormi    r1, r1, #0x8");
+    asm("orrcs    r1, r1, #0x1");
+    asm("orrvs    r1, r1, #0x2");
+    asm("orreq    r1, r1, #0x4");
+    asm("orrmi    r1, r1, #0x8");
     asm("strh    r1, [r5, %0]" :: "i"(__offsetof(cpu_t, sr)));
 
     register uint32_t *out;
@@ -422,15 +422,15 @@ void pjit_jmp(uint16_t *m68k_pc) {
             // no, write postable to buffer and call it			
             out[i++] = ldr(r0, r5, __offsetof(cpu_t, pc));
             // postamble should return to pjit_iagf
-            out[i++] = b_imm(calc_b_offset(out, pjit_lookup));
+            out[i++] = b_imm(calc_offset(out, pjit_lookup));
         }
     }
 
     asm("ldrh    r1, [r5, %0]" :: "i"(__offsetof(cpu_t, sr)));
     asm("rbit    r1, r1");
-    asm("bfi     r1, r1, #2, #2)");
+    asm("bfi     r1, r1, #2, #2");
     asm("ror     r1, r1, #2");
-    asm("msr     cpsr_r, r1");
+    asm("msr     cpsr_f, r1");
 
 	goto *out;
 }

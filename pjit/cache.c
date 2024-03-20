@@ -74,7 +74,7 @@ static uint32_t * cache_clear_block(uint32_t* block) {
     uint32_t *end = (uint32_t)block + (1 << (BLOCK_BITS + CACHE_OP_BITS));
     while(block < end) {
         // *block++ = nop();
-        *block++ = blx(r5);
+        *block++ = blx_reg(r5);
     }
     return end;
 }
@@ -106,7 +106,7 @@ uint32_t cache_find_entry(uint32_t m68k) {
 	return (uint32_t)cpu->cache_data | (m68k & ((1 << (1 + BLOCK_BITS + INDEX_BITS)) - 1));
 }
 
-pjit_start(uint32_t top) {
+pjit_cache_init(uint32_t top) {
     // TOP OF RAM
     uint8_t* memory = (uint8_t*)top;
 
@@ -159,11 +159,6 @@ pjit_start(uint32_t top) {
     cpu_state.b_lookup = b_imm(calc_offset(cpu, &pjit_lookup));
 
     // Clear caches
-    cpu = &cpu_state;
     cache_clear();
 
-    // Load our initial PC and SP
-    cpu_state.a7 = *(uint32_t*)0;
-    cpu_state.pc = *(uint32_t*)4;
-    pjit_jmp((uint16_t*)cpu_state.pc);
 }

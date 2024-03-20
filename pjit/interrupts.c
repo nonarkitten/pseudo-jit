@@ -53,8 +53,7 @@ __attribute__((naked)) void C_SVC_Handler(uint32_t svc, uint32_t* stack) {
     asm("strd   r2, r3, [r5, %0]" :: "i"(__offsetof(cpu_t, r2)));
 
     // change to system mode so we're using the same stack and LR
-    register uint32_t *out asm("lr");
-    uint32_t           m68k_pc = cache_reverse((uint32_t)(out - 1));
+    uint32_t m68k_pc = cache_reverse();
 
     // switch User SP with Supervisor SP
     if(!(cpu->sr & 0x2000)) {

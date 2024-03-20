@@ -1115,15 +1115,15 @@ void emit_JSR(uint32_t** emit, uint16_t opcode) {
     uint8_t sEA = 0xC0 | (opcode & 0x3F);
     uint8_t sReg = emit_EA_Load(emit, sEA, 1, 1, 0);
     *(*emit)++ = push(R7);
-    // 110xxx,111011,111000=W,111001=L
-    if(((opcode & 0x3C) == 0x30)
-    || ((opcode & 0x3F) == 0x3B)
-    || ((opcode & 0x3F) == 0x38)) {
-        **emit = b_imm(calc_offset((uint32_t)*emit, pjit_jsr2));
-    } else if((opcode & 0x3F) == 0x39) {
-        **emit = b_imm(calc_offset((uint32_t)*emit, pjit_jsr4));
+
+    if(((opcode & 0x3C) == 0x30)            // 110xxx Mode bits
+    || ((opcode & 0x3F) == 0x3B)            // 111011
+    || ((opcode & 0x3F) == 0x38)) {         // 111000
+        **emit = b_imm(calc_offset((uint32_t)*emit, pjit_jsr2p));
+    } else if((opcode & 0x3F) == 0x39) {    // 111001
+        **emit = b_imm(calc_offset((uint32_t)*emit, pjit_jsr4p));
     } else {
-        **emit = b_imm(calc_offset((uint32_t)*emit, pjit_jsr0));
+        **emit = b_imm(calc_offset((uint32_t)*emit, pjit_jsr));
     }
     *emit += 1;
 }

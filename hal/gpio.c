@@ -10,6 +10,10 @@
 
 #include "ioam3358.h"
 
+static IrqGPIO(void) {
+
+}
+
 void InitGPIO(void) {
     CM_WKUP_GPIO0_CLKCTRL->BIT.MODULEMODE = 2;
     while(CM_WKUP_GPIO0_CLKCTRL->BIT.IDLEST);

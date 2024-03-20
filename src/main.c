@@ -651,6 +651,12 @@ int main(void) {
     printf("[BOOT] Image %p ~ %p (%d bytes)\n", &_image_start, &_image_end, (&_image_end - &_image_start));    
     printf("[BOOT] Stack %p ~ %p (%d bytes)\n", &_stack_end, &_stack_top, (&_stack_top - &_stack_end));    
 
+    // Load our initial PC and SP
+    // cpu = &cpu_state;
+    // cpu_state.a7 = *(uint32_t*)0;
+    // cpu_state.pc = *(uint32_t*)4;
+    // pjit_jmp((uint16_t*)cpu_state.pc);
+
     if(cpu_state.config.is_dirty) SaveConfigEEPROM(1); else MakeGoodEEPROM();
 
     if(!cpu_state.config.cpu_enable_icache) {

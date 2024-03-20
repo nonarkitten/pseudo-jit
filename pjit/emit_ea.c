@@ -98,10 +98,6 @@
 #include "emitters.h"
 #include "pjit.h"
 
-typedef struct {
-    unsigned enable_32b_addr : 1;
-} config_t;
-
 // @brief Performs an Effective-Address (EA) Load
 // @param uint32t** emit  stream to output opcodes
 // @param uint8_t   sEA   source size, effective addres and register

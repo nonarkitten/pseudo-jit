@@ -127,7 +127,7 @@ uint32_t _wait = 1;
 uint32_t _vpa;
 uint32_t _cyc;
 
-volatile uint32_t* smem = (volatile uint32_t*)PRU_SHARED_MEM_ADDR;
+volatile uint32_t* smem = (volatile uint32_t*)0x00012000;
 
 static void update_estate(void) {
     /* Get inputs */
