@@ -207,6 +207,7 @@ static int print(char **out, const char *format, va_list vl) {
 }
 
 volatile double printf_overhead = 0.0;
+bool printTimeStamp = false;
 
 int vprintf(const char *format, va_list vl) {
     double t1 = ReadDMTimerSeconds();
@@ -216,8 +217,23 @@ int vprintf(const char *format, va_list vl) {
     return r;
 }
 
+static int printproxy(const char *format, ...) {
+    va_list vl;
+    va_start (vl, format);
+    int r = print(0, format, vl);
+    va_end (vl);
+    return r;
+}
+
 int printf(const char *format, ...) {
     double t1 = ReadDMTimerSeconds();
+    if(printTimeStamp) {
+        static double lastTime = 0.0;
+        double thisTime = ReadDMTimerSeconds();
+        printproxy("%4.5f (+%3dms): ", thisTime, (int)((thisTime - lastTime) * 1000));
+        lastTime = thisTime;
+    }
+
     va_list vl;
     va_start (vl, format);
     int r = print(0, format, vl);
@@ -228,7 +244,7 @@ int printf(const char *format, ...) {
 }
 
 int sprintf(char *out, const char *format, ...) {
-    double t1 = ReadDMTimerSeconds();
+double t1 = ReadDMTimerSeconds();
     va_list vl;
     va_start (vl, format);
     int r = print(&out, format, vl);

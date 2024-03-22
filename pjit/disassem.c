@@ -653,7 +653,7 @@ const char* m68k_disasm(uint16_t op) {
 	
 	for(uint32_t i=0; i<OPCODE_COUNT; i++) {
 		if((op & optab_68000[i].match) == optab_68000[i].equal) {
-			sprintf( buffer, "%s", &opcodes[i][17] );
+			sprintf( buffer, "%s", opcodes[i] ); // e.g., "ORI.BW #,%E"
 
 			//int x = strlen(ops[i].op) - 5; // back up over \n
 			//if(debug) printf("@ Disassembling opcode %04hX\n", op);

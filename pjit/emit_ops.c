@@ -183,7 +183,6 @@ typedef enum {
 // @brief emit supervisor exception
 __attribute__((target("thumb")))
 static void emit_SVC(uint32_t** emit, int exception) {
-    *(*emit)++ = nop();
     *(*emit)++ = svc(exception);
 }
 // @brief check if we're in supervisor mode, exception if not
@@ -1168,6 +1167,7 @@ void emit_MOVE_SR_TO(uint32_t** emit, uint16_t opcode) {
     emit_load_SR(emit, 1);
     uint8_t dEA = 0x40 | (opcode & 0x3F);
     emit_EA_Store(emit, dEA, 1, 1, 0);
+    *(*emit)++ = bx(lr);
 }
 __attribute__((target("thumb")))
 void emit_MOVE_TO_CCR(uint32_t** emit, uint16_t opcode) {
@@ -1253,6 +1253,7 @@ void emit_MOVEM(uint32_t** emit, uint16_t opcode) {
                 ? strh_cc(ARM_CC_CS, r6 + i, aReg, index_imm(0, 1, 2))
                 : str_cc(ARM_CC_CS, r6 + i, aReg, index_imm(0, 1, 4));
         }
+        *(*emit)++ = bx(lr);
 
     } else if((opcode & 0x3C) == 0x10) {
         // m2r, -(An), unique per opcode, mask in r2
@@ -1279,6 +1280,7 @@ void emit_MOVEM(uint32_t** emit, uint16_t opcode) {
                 ? strh_cc(ARM_CC_CS, r4 - i, aReg, index_imm(1, 1, -2))
                 : str_cc(ARM_CC_CS, r4 - i, aReg, index_imm(1, 1, -4));
         }
+        *(*emit)++ = bx(lr);
 
     } else {
         // common routines
@@ -1533,6 +1535,7 @@ void emit_ROXd(uint32_t** emit, uint16_t opcode) {
     emit_load_X(emit);
     emit_Mem_Shift(emit, opcode, (opcode & 0x0100) ? ALU_OP_ROXL : ALU_OP_ROXR);
     emit_save_X(emit);
+    *(*emit)++ = bx(lr);  
 }
 __attribute__((target("thumb")))
 void emit_RTE(uint32_t** emit, uint16_t opcode) {
@@ -2352,16 +2355,16 @@ __attribute__((used)) const op_details_t optab_040mmu[] = {
  *     |_____|_| |_| |_|_|\__|\__\___|_|    |_| \_\___/ \__,_|\__|_|_| |_|\___|
  *
  */
-__attribute__((target("thumb")))
-static void emit_op(uint32_t** emit, op_details_t* op, uint16_t opcode) {
-    while (1) {
-        if ((opcode & op->match) == op->equal) {
-            op->emit(emit, opcode);
-            return;
-        }
-        op++;
-    }
-}
+// __attribute__((target("thumb")))
+// static void emit_op(uint32_t** emit, op_details_t* op, uint16_t opcode) {
+//     while (1) {
+//         if ((opcode & op->match) == op->equal) {
+//             op->emit(emit, opcode);
+//             return;
+//         }
+//         op++;
+//     }
+// }
 
 __attribute__((target("thumb")))
 void emit_opcode_table() {
@@ -2400,46 +2403,104 @@ void emit_opcode_table() {
     }
 
     for (int opcode = 0; opcode < 65536; opcode++) {
-        static uint32_t buffer[32];  // big enough?
-        uint32_t*       b;
-        uint32_t        len;
-
-        b = buffer;
-
-        // Start with the 68000 (common base)
-        emit_op(&b, optab_68000, opcode);
-
-        // Add applicable 680x0 opcodes
-             if(c.cpu_enable_68040) emit_op(&b, optab_68040, opcode);
-        else if(c.cpu_enable_68030) emit_op(&b, optab_68030, opcode);
-        else if(c.cpu_enable_68020) emit_op(&b, optab_68020, opcode);
-
-        // Add applicable FPU opcodes
-        if(c.cpu_enable_fpu) {
-            // 68040 has a very different FPU
-            if(c.cpu_enable_68040)
-                emit_op(&b, optab_040fpu, opcode);
-            // ...than the 68020 and 68030 (the 68882)
-            else if(c.cpu_enable_68020 | c.cpu_enable_68030)
-                emit_op(&b, optab_68882, opcode);
-            // and the 68000 does not have an FPU
-        }
-
-        // Add applicable MMU opcodes
-        if(c.cpu_enable_mmu)
-            emit_op(&b, optab_040mmu, opcode);
-
-        len = b - buffer;
-
-        if ((len == 1) || (len == 2 && buffer[1] == bx_lr())) {
-            *opcodes++ = buffer[0];
-        } else {
-            *opcodes = b_imm(calc_offset(opcodes, stubs));
-            opcodes++;
-            memcpy(stubs, buffer, len * sizeof(uint32_t));
-            stubs += len;
-        }
+        cpu_state.opcode_table[opcode] = svc(ILLINSTR);
     }
+
+    op_details_t* op = optab_68000;
+    uint32_t buffer[32];
+    int ops = 0, inlined = 0;
+
+    while(op->match || op->equal) {
+        // int printed = 0;
+        uint16_t m, match, equal;
+        m = match = op->match;
+        equal = op->equal;
+        while(1) {
+            uint32_t *b = buffer;
+            uint16_t opcode = equal | (m & ~match);
+            op->emit(&b, opcode);
+            int len = b - buffer;
+            if(len == 0) continue;
+            ops++;
+            if((len == 1) || ((len == 2) && (buffer[1] == bx_lr()))) {
+                *opcodes = buffer[0];
+                inlined++;
+            } else {
+                // if (!printed) {
+                //     if (buffer[len-1] == bx_lr()) {
+                //         /* yay */
+                //     } else if((buffer[len-1] & 0x0E000000) == 0x0A000000) {
+                //         /* Branch immediate */
+                //     } else if((buffer[len-1] & 0x0FFFFFF0) == 0x012FFF10) {
+                //         /* Branch and Exchange */
+                //     } else if(buffer[len-1] == pop(PC)) {
+                //         /* pop PC from stack */
+                //     } else {
+                //         printf("[PJIT] No return from at %04X: %s\n", opcode, m68k_disasm(opcode));
+                //     }
+                //     printed = 1;
+                // }
+                *opcodes = b_imm(calc_offset(opcodes, stubs));
+                memcpy(stubs, buffer, len * sizeof(uint32_t));
+                stubs += len;
+            }            
+            if(m == 0xFFFF) break;
+            m = (m + 1) | match;
+            opcodes++;
+        }
+        op++;
+    }
+
+
+    // }
+
+
+    //     } while(m != 0xFFFF);
+
+
+
+    // for (int opcode = 0; opcode < 65536; opcode++) {
+    //     static uint32_t buffer[32];  // big enough?
+    //     uint32_t*       b;
+    //     uint32_t        len;
+
+    //     b = buffer;
+
+    //     // Start with the 68000 (common base)
+    //     emit_op(&b, optab_68000, opcode);
+
+    //     // Add applicable 680x0 opcodes
+    //          if(c.cpu_enable_68040) emit_op(&b, optab_68040, opcode);
+    //     else if(c.cpu_enable_68030) emit_op(&b, optab_68030, opcode);
+    //     else if(c.cpu_enable_68020) emit_op(&b, optab_68020, opcode);
+
+    //     // Add applicable FPU opcodes
+    //     if(c.cpu_enable_fpu) {
+    //         // 68040 has a very different FPU
+    //         if(c.cpu_enable_68040)
+    //             emit_op(&b, optab_040fpu, opcode);
+    //         // ...than the 68020 and 68030 (the 68882)
+    //         else if(c.cpu_enable_68020 | c.cpu_enable_68030)
+    //             emit_op(&b, optab_68882, opcode);
+    //         // and the 68000 does not have an FPU
+    //     }
+
+    //     // Add applicable MMU opcodes
+    //     if(c.cpu_enable_mmu)
+    //         emit_op(&b, optab_040mmu, opcode);
+
+    //     len = b - buffer;
+
+    //     if ((len == 1) || (len == 2 && buffer[1] == bx_lr())) {
+    //         *opcodes++ = buffer[0];
+    //     } else {
+    //         *opcodes = b_imm(calc_offset(opcodes, stubs));
+    //         opcodes++;
+    //         memcpy(stubs, buffer, len * sizeof(uint32_t));
+    //         stubs += len;
+    //     }
+    // }
     uint32_t len = (uint32_t)stubs - (uint32_t)cpu->opcode_stubs;
     printf("[PJIT] Stub table %08X (%d) bytes\n", len, len);
+    printf("[PJIT] %d total opcodes, %d (%0.1f%c) inlined\n", ops, inlined, (100.0 * inlined) / ops, '%');
 }

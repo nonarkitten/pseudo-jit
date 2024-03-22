@@ -53,6 +53,7 @@
 #include <stdbool.h>
 #include <string.h>
 
+#include "cp15.h"
 #include "power.h"
 #include "ddr.h"
 #include "flash.h"
@@ -96,6 +97,8 @@ extern int prom_detected;
 extern char _image_start, _image_end;
 extern char _stack_end, _stack_top;
 extern void test_printf(void);
+
+extern int confirm(void);
 
 extern void WriteImage(void* start, void* end);
 

@@ -388,8 +388,8 @@ static inline uint32_t bx_lr() { return bx(lr); }
 // Calculate the LDR/STR index for immediate offset
 static inline uint32_t index_imm(index_t pre, int wb, int32_t offset) {
     uint32_t ls = (offset >= 0)
-                      ? 0x00800000 | (0xFFF & (uint32_t)offset)
-                      : 0x00000000 | (0xFFF & (uint32_t)(-offset));
+                ? 0x00800000 | (0xFFF & (uint32_t)offset)
+                : 0x00000000 | (0xFFF & (uint32_t)(-offset));
     if (pre) ls |= 0x01000000;
     if (wb) ls |= 0x00200000;
     return (ls);

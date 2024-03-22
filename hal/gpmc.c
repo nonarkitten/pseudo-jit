@@ -459,7 +459,6 @@ void TestGPMC(void) {
         bool allpassed = true;
 
         if(option[0] == 'p' || option[0] == 'P') {
-            char buffer[65] = { 0 };
             int mult = 1000, div = 24;
             printf("Warning, adjusting Core PLL may crash or halt Buffee\n");
             if(!Prompt("Enter Core DPLL multiplier [%d]: ", &mult)) continue;
@@ -586,7 +585,7 @@ void TestGPMC(void) {
             double timeTaken = endTimer - startTimer;
             printf("[GPMC] Read %ld words in %0.2f s, expecting 0.358 s\n", i, timeTaken);
             printf("[GPMC] Read CIA at %0.2f kB/s, expecting 716kB/s\n", 256.0 / timeTaken);
-            bool passed = ~(timeTaken < 0.286 || timeTaken > 0.448);
+            bool passed = !(timeTaken < 0.286 || timeTaken > 0.448);
             printf("[GPMC] Test %sed\n", passed ? "pass" : "fail");
             (void)r;
             allpassed &= passed;
@@ -754,7 +753,7 @@ void TestGPMC(void) {
             }
 
             if((i & 7) == 0) printf("\n");
-            printf("[GPMC] Test %sed, %d errors, %0.1f%%\n",  (errors == 0) ? "pass" : "fail", errors, (33.333f * errors) / TEST_LEN);
+            printf("[GPMC] Test %sed, %d errors, %0.1f%%\n",  (errors == 0) ? "pass" : "fail", errors, (33.333 * errors) / TEST_LEN);
             allpassed &= (errors == 0);
         }
 

@@ -118,27 +118,33 @@ pjit_cache_init(uint32_t top) {
     uint32_t data_cache_size = 1 << (CACHE_OP_BITS + INDEX_BITS + BLOCK_BITS);
     memory -= data_cache_size;
     cpu_state.cache_data = (uint32_t*)memory;
+    printf("[INIT] Allocated %d bytes for cache at %p\n", data_cache_size, cpu_state.cache_data);
 
     // 2MB*     PJIT MapROM Cache       cpu->maprom_data
     //          (optional)              config.maprom_page (00-1F, FF disabled)
     uint32_t maprom_size = (cpu_state.config.maprom_page != 0xFF) ? 0x200000 : 0;
     memory -= data_cache_size;
     cpu_state.maprom_data = (uint32_t*)memory;
+    printf("[INIT] Allocated %d bytes for maprom at %p\n", maprom_size, cpu_state.maprom_data);
 
     // 256KB    PJIT Opcode Table
     //
-    memory -= 0x40000;
+    const uint32_t table_size = 0x40000;
+    memory -= table_size;
     cpu_state.opcode_table = (uint32_t*)memory;
+    printf("[INIT] Allocated %d bytes for PJIT table at %p\n", table_size, cpu_state.opcode_table);
 
     // 2MB    PJIT Opcode Stubs
     //
-    memory -= 0x200000;
+    const uint32_t opcode_size = 0x200000;
+    memory -= opcode_size;
     cpu_state.opcode_stubs = (uint32_t*)memory;
+    printf("[INIT] Allocated %d bytes for PJIT table at %p\n", opcode_size, cpu_state.opcode_stubs);
 
     // 128KB    PJIT Core
     //
-    memory -= 0x20000;
-    cpu_state.pjit_core = (void*)memory;
+    // memory -= 0x20000;
+    // cpu_state.pjit_core = (void*)memory;
 
     // 4KB      PJIT Cache Tags         cpu->cache_tags
     //          Size is 2 << cache_index_bits
@@ -146,17 +152,22 @@ pjit_cache_init(uint32_t top) {
     uint32_t cache_tags_size = 2 << INDEX_BITS;
     memory -= cache_tags_size;
     cpu_state.cache_tags = (uint16_t*)memory;
+    bzero(cpu_state.cache_tags, cache_tags_size);
+    printf("[INIT] Allocated %d bytes for PJIT cache tags at %p\n", cache_tags_size, cpu_state.cache_tags);
 
     // Align downwards to a 1MB boundary, this is top of RAM for
     // AmigaOS and Ataro
     memory           = (uint8_t*)(((uint32_t)memory) & 0xFFF00000);
     cpu_state.free_memory = ((uint32_t)memory - 0x80000000) >> 20;
+    printf("[INIT] Aligned memory base to %p, %dMB free memory\n", memory, cpu_state.free_memory);
 
     // Clear all of this
-    memset(memory, 0, (uint8_t*)0xA0000000 - memory);
+    // memset(memory, 0, (uint8_t*)0xA0000000 - memory);
 
     // Clear CPU state
-    cpu_state.b_lookup = b_imm(calc_offset(cpu, &pjit_lookup));
+    cpu_state.b_lookup = b_imm(calc_offset(&cpu_state, &pjit_lookup));
+
+    cpu = &cpu_state;
 
     // Clear caches
     cache_clear();

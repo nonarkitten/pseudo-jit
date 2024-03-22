@@ -11,6 +11,7 @@
 #include "gpak.h"
 #include "pjit.h"
 #include "gpak.h"
+#include "i2c.h"
 
 extern int core_pll;
 
@@ -85,10 +86,10 @@ static uint8_t gpak_read_reg(uint8_t addr, uint8_t reg) {
 #define NVM_BYTES  240
 
 static uint8_t nvmData[256] = { 
-        0x20, 0x70, 0x34, 0x47, 0xE3, 0x80, 0x8A, 0xCA, 0x24, 0x2A, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 
+        0x20, 0x70, 0x34, 0x47, 0xE3, 0x80, 0x8A, 0xCA, 0x24, 0x2A, 0xC3, 0x2C, 0x06, 0x00, 0x00, 0x00, 
         0x00, 0x00, 0x00, 0xB0, 0xFC, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xC0, 0x92, 
         0xFD, 0xD8, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
-        0x00, 0x00, 0x00, 0xD2, 0x3F, 0x3D, 0xEB, 0x0F, 0x00, 0x51, 0x00, 0x00, 0xC6, 0x0F, 0x00, 0x00, 
+        0x00, 0x00, 0x00, 0xD2, 0x3F, 0x3D, 0xEB, 0x0F, 0x00, 0x51, 0x00, 0x00, 0xD4, 0x0F, 0x00, 0x00, 
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
         0x00, 0x01, 0x00, 0x00, 0x80, 0x80, 0x00, 0x01, 0x00, 0x00, 0x80, 0x80, 0x00, 0x00, 0x00, 0x00, 
@@ -173,7 +174,6 @@ static GreenPAK_State_t ReadChip(int dump, uint32_t addr) {
 
 static int GetAddr(const char* prompt) {
     char option[4];
-    uint8_t addr = 0xFF;
     printf("Enter %saddress (0-F): ", prompt);
     gets(option);
     /**/ if (option[0] >= '0' && option[0] <= '9') return option[0] - '0';
@@ -238,12 +238,11 @@ uint8_t current_ds_delay;
 static void GetGPTiming(int addr, int quiet) {
     static volatile uint8_t t2;
     volatile int ns2 = 0, ns3 = 0;
-    volatile float ratio;
 
     if(addr < 0) {
         t2 = nvmData[0x9C];
     } else {
-        if(!I2C0Probe(addr << 3)) return 0.0;
+        if(!I2C0Probe(addr << 3)) return;
         t2 = gpak_read_reg(addr, 0x9C);
     }
 
@@ -262,10 +261,10 @@ static void GetGPTiming(int addr, int quiet) {
 static void SaveGPTiming(int addr, float rw, float ds) {
     uint8_t t2;
 
-    rw = (rw - 15.0f) / 20.0f - 0.5;
+    rw = (rw - 15.0f) / 20.0f - 0.5f;
     if(rw > 15) t2 = 0x0F; else t2 = (int)rw;
 
-    ds = (ds - 15.0f) / 20.0f - 0.5;
+    ds = (ds - 15.0f) / 20.0f - 0.5f;
     if(ds > 15) t2 |= 0xF0; else t2 |= ((int)ds) << 4;
 
     nvmData[0x9C] = t2;
@@ -336,11 +335,11 @@ int DetectGP(void) {
                 } else if(s == GP_BAD) {
                     EraseChip(0, 1);
                     float ns = (float)core_pll / (cpu_state.config.kHz * 0.001f);
-                    SaveGPTiming(-1, ns * 0.5, ns);
+                    SaveGPTiming(-1, ns * 0.5f, ns);
                     ProgramChip(0, 1);
                     GetGPTiming(1, 0);
                 }
-                return;
+                return 1;
             }
             break;
         }
@@ -348,10 +347,12 @@ int DetectGP(void) {
     if(I2C0Probe(0)) {
         printf("[I2C0] Blank GreenPAK Detected ($00~$03)\n");
         float ns = (float)core_pll / (cpu_state.config.kHz * 0.001f);
-        SaveGPTiming(-1, ns * 0.5, ns);
+        SaveGPTiming(-1, ns * 0.5f, ns);
         ProgramChip(0, 1);        
         GetGPTiming(1, 0);
+        return 1;
     } else {
         printf("[I2C0] GreenPAK Not Detected\n");
+        return 0;
     }
 }
