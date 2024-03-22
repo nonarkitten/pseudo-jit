@@ -229,19 +229,51 @@ static void PrintMarker(uint8_t off, uint8_t max) {
     for(;i<=max;i++) putchar(' ');
 }
 
-static void PrintTiming(Timing_t *t) {
-    int i;
-    printf("Timing Diagram:\n");
+static float host_bus_clock;
+extern uint8_t current_rw_delay;
+extern uint8_t current_ds_delay;
 
-    for(i=0; i<t->CYCLETIME; i++) putchar(" 123"[i / 10]); putchar('\n');
-    for(i=0; i<t->CYCLETIME; i++) putchar('0' + (i % 10)); putchar('\n');
+// GPMC runs at 100MHz (normally)
+// We also use TIMEPARAGRANULARITY_x2 which essentially halves that
+// The 68000 needs 4 cycles for each memory operation
+// That's roughly 1.79MHz or 27 ticks
+// That's ~140ns per cycle or 560ns for all 4
+// Or about 20ns per GPMC tick
+static void PrintTiming(Timing_t *t) {
+    char hline[32];
+    float ns = (4.0 * 1000.0 / host_bus_clock) / t->CYCLETIME;
+    int i;
+
+    sprintf(hline, "--------------------------------");
+    hline[(1 * t->CYCLETIME) / 4] = ':';
+    hline[(2 * t->CYCLETIME) / 4] = ':';
+    hline[(3 * t->CYCLETIME) / 4] = ':';
+    hline[(4 * t->CYCLETIME) / 4] = ':';
+    for(i=t->CYCLETIME; i<32; i++) hline[i] = ' ';
+    
+    printf("Timing Diagram (%dns resolution)\n", (int)(ns + 0.5f));
+
+    for(i=0; i<32; i++) putchar(" 123"[i / 10]); 
+    putchar('\n');
+    for(i=0; i<32; i++) putchar('0' + (i % 10)); 
+    putchar('\n');
     //PrintCycle(0, t->CYCLETIME); printf("  Cycle\n");
     //PrintCycle(0, t->ACCESSTIME); printf("  Access\n");
     PrintMarker(t->ACCESSTIME, t->CYCLETIME); printf("  Access\n");
-    PrintCycle(t->CSONTIME, t->CSOFFTIME, t->CYCLETIME); printf("  AS\n");
+    printf("%s\n", hline);
+    
+    PrintCycle(t->WEONTIME, t->WEOFFTIME + (int)(current_rw_delay / ns), t->CYCLETIME); printf("  R/W\n");    
+    printf("%s\n", hline);
+
+    PrintCycle(t->CSONTIME, t->CSOFFTIME, t->CYCLETIME); printf("  AS\n");    
     PrintMarker(t->CSONTIME+5, t->CYCLETIME); printf("  S4 Sync\n");
+    printf("%s\n", hline);
+
     PrintCycle(t->OEONTIME, t->OEOFFTIME, t->CYCLETIME); printf("  DS (Read)\n");
-    PrintCycle(t->WEONTIME, t->WEOFFTIME, t->CYCLETIME); printf("  DS (Write)\n\n");
+    printf("%s\n", hline);
+
+    PrintCycle(t->WEONTIME + (int)(current_ds_delay / ns), t->WEOFFTIME, t->CYCLETIME); printf("  DS (Write)\n\n");
+    printf("%s\n", hline);
 }
 
 static void SetGPMCTiming(Timing_t *t) {
@@ -307,7 +339,7 @@ static void SetGPMCTiming(Timing_t *t) {
 int core_pll = 1000;
 
 static void TuneCorePLL(int clk_mult, int clk_div) {
-    float clock = 48.0f * (float)clk_mult / (float)clk_div;
+    // float clock = 48.0f * (float)clk_mult / (float)clk_div;
     int m2;
 
     /*CORE_DPLL in baypass*/
@@ -346,6 +378,7 @@ static void TuneCorePLL(int clk_mult, int clk_div) {
 
 void InitGPMC(float bus_clock) {
     int cycle_time = 200.0f / bus_clock; // always round down here
+    host_bus_clock = bus_clock;
 
     // int _pll = 0.5f + (1000.0f * bus_clock) / (200.0f / (float)cycle_time);
     // if(_pll > 1000) _pll = 1000;
@@ -448,8 +481,9 @@ void TestGPMC(void) {
             "6. CIA read/write\n"
             "7. Chip RAM read/write\n"
             "A. Perform all tests and exit\n"
+            "C. Set Core PLL\n"
             "D. Set GPMC timing to default\n"
-            "P. Set Core PLL\n"
+            "P. Print GPMC timing\n"
             "T. Set GPMC timing\n"
             "X. Exit to main menu\n"
             "] "
@@ -459,15 +493,20 @@ void TestGPMC(void) {
         bool allpassed = true;
 
         if(option[0] == 'p' || option[0] == 'P') {
+            PrintTiming(&current_timing);
+            continue;
+        }
+
+        if(option[0] == 'c' || option[0] == 'C') {
             int mult = 1000, div = 24;
             printf("Warning, adjusting Core PLL may crash or halt Buffee\n");
             if(!Prompt("Enter Core DPLL multiplier [%d]: ", &mult)) continue;
             if(!Prompt("Enter Core DPLL divisor [%d]: ", &div)) continue;
             if((mult < 2) || (mult > 2047)) { printf("Invalid multipler\n"); continue; }
             if((div < 1) || (div > 128)) { printf("Invalid divisor\n"); continue; }
-            float clock = 24.0 * (float)mult / (float)div;
-            if(clock < 1.0 || clock > 1000.0) { printf("Invalid clock\n"); continue; }
-            printf("Changing Core PLL change to %0.1fMHz, ", clock);
+            float clock = 24.0f * (float)mult / (float)div;
+            if(clock < 1.0f || clock > 1000.0f) { printf("Invalid clock\n"); continue; }
+            printf("Changing Core PLL change to %0.1fMHz, ", (double)clock);
             if(confirm()) TuneCorePLL(mult, div);
             continue;
         }
