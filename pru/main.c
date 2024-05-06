@@ -3,97 +3,48 @@
 #include "inc/pru_cfg.h"
 #include "inc/pru_registers.h"
 
-/*  GPIO access adapted from Charles Steinkuehler
-    pru.main.p
+/*
+                                    PIN------------------------------------     SCHEMATIC-REFERENCES----------------------
+    SIGNAL NAME             FN      AM335x  OSD335x     IO   NAME               LABEL         M68K BUS IO         GREENPAK  NOTES
+    pr1_pru0_pru_r30_0      PRU0    A13     A1          O    MCASP0_ACLKX       PRU_VMA       U6.31 -> M68K_VMA   -         DNFW
+    pr1_pru0_pru_r31_1      PRU0    B13     A2          I*   MCASP0_FSX         BBB_BGACK     U6.44 <- M68K_BGACK -         DNFW
+    pr1_pru0_pru_r31_2      PRU0    D12     B2          I*   MCASP0_AXR0        BBB_RESET     U6.35 <- M68K_RST   -         DNFW
+    pr1_pru0_pru_r31_3      PRU0    C12     B1          I*   MCASP0_AHCLKR      BBB_BR        U6.42 <- M68K_BR    -         DNFW
+    pr1_pru0_pru_r31_4      PRU0    B12     A3          I    MCASP0_ACLKR       BBB_CLK7      U6.39 <- M68K_CLK7  -         DNFW
+    pr1_pru0_pru_r30_5      PRU0    C13     B3          O    MCASP0_FSR         BBB_BG        U6.46 -> M68K_BG    -         DNFW
+    pr1_pru0_pru_r30_6      PRU0    D13     C3          O    MCASP0_AXR1        PRU_EWAIT     -                   U3.2      Repurposable
+    pr1_pru0_pru_r30_7      PRU0    A14     C4          O    MCASP0_AHCLKX      PRU_ECLK      U6.30 -> M68K_E     -         DNFW
+    pr1_pru0_pru_r30_12     PRU0    G17     B15              MMC0_CLK           GPIO_SUPE     U5.9  -> M68K_FC2   U3.13     Also A24
+    pr1_pru0_pru_r30_13     PRU0    G18     B16              MMC0_CMD           GPIO_IACK     -                   U3.15     Also A25
+    pr1_pru0_pru_r31_16     PRU0    D14     B4          I*   XDMA_EVENT_INTR1   PRU_VPA       U6.28 <- M68K_VPA   -         DNFW
 
-    Original notes:
+    (GreenPAK)              -       -       -           O                       M68K_UDS      Header              U3.3      No direct MCU/PRU access             
+    (GreenPAK)              -       -       -           O                       M68K_LDS      Header              U3.4      No direct MCU/PRU access         
+    (GreenPAK)              -       -       -           O                       M68K_FC0      Header              U3.5      No direct MCU/PRU access        
+    (GreenPAK)              -       -       -           O                       M68K_RW       Header              U3.6      No direct MCU/PRU access              
+    (GreenPAK)              -       -       -           O                       M68K_DTACK    Header              U3.7      No direct MCU/PRU access                 
+    (GreenPAK)              -       -       -           O                       M68K_FC1      Header              U3.10     No direct MCU/PRU access
 
-    PRU GPIO Write Timing Details
-    The actual write instruction to a GPIO pin using SBBO takes two 
-    PRU cycles (10 nS).  However, the GPIO logic can only update every 
-    40 nS (8 PRU cycles).  This meas back-to-back writes to GPIO pins 
-    will eventually stall the PRU, or you can execute 6 PRU instructions 
-    for 'free' when burst writing to the GPIO.
+    gpmc_csn2               GPMC    V9      P1          I    GPMC_CSN2          GPMC_ASN      U4.13 -> M68K_AS    U3.20     DNFW     
+    gpmc_oen_ren            GPMC    T7      N1          I    GPMC_OEN           GPMC_OEN      -                   U3.19     Repurposable ???         
+    gpmc_wen                GPMC    U6      N2          I    GPMC_WEN           GPMC_WEN      -                   U3.18     Repurposable ???        
+    gpmc_be1n               GPMC    U18     N14         I    GPMC_BEN1          GPMC_BEN1     -                   U3.17     DNFW          
+    gpmc_be0n_cle           GPMC    T6      N3          I    GPMC_BEN0_CLE      GPMC_BEN0     -                   U3.16     DNFW          
+    gpmc_wait0              GPMC    T17     P15         I    GPMC_WAIT0         GPMC_WAIT0    -                   U3.12     DNFW           
 
-    Latency from the PRU write to the actual I/O pin changing state
-    (normalized to PRU direct output pins = zero latency) when the
-    PRU is writing to GPIO1 and L4_PERPort1 is idle measures 
-    95 nS or 105 nS (apparently depending on clock synchronization)
+    OEn is asserted on reads
+    WEn is asserted on writes
+    ASn is always asserted
 
-    PRU GPIO Posted Writes
-    When L4_PERPort1 is idle, it is possible to burst-write multiple
-    values to the GPIO pins without stalling the PRU, as the writes 
-    are posted.  With an unrolled loop (SBBO to GPIO followed by a 
-    single SET/CLR to R30), the first 20 write cycles (both 
-    instructions) took 15 nS each, at which point the PRU began
-    to stall and the write cycle settled in to the 40 nS maximum
-    update frequency.
+    So I think we can omit using OEn. This is not a PRU signal though, it's only accessible through GPIO and thus very slow.
 
-    PRU GPIO Read Timing Details
-    Reading from a GPIO pin when L4_PERPort1 is idle require 165 nS as
-    measured using direct PRU I/O updates bracking a LBBO instruction.
-    Since there is no speculative execution on the PRU, it is not possible
-    to execute any instructions during this time, the PRU just stalls.
+    Recommended rework:
 
-    Latency from the physical I/O pin to the PRU read seeing valid data
-    has not yet been measured.
+    Make GPMC_OEN (U3.19) GPIO_IACK since this can be a slow signal and needs to be driven by the CPU anyway.
+    Reuse PRU_EWAIT (U3.2) and GPIO_IACK (U3.15) for GreenPAK <-> PRU signalling
 
-         AM335x                                      68K BUS
-    --------------------.
-    pr1_pru0_pru_r3x_4  | <--------------------  CLK7    
-    pr1_pru0_pru_r3x_7  | -------------------->  ECLK    
-    pr1_pru0_pru_r3x_16 | <--------------------  VPA     
-    pr1_pru0_pru_r3x_0  | -------------------->  VMA     
-                        |     .-----------.    
-                  WAIT0 | <-- |12       7 | <--  DTACK  
-       (GPIO_IACK) CSN2 | --> |20       3 | -->  UDS    
-                    WEN | --> |18 Green 4 | -->  LDS    
-                    OEN | --> |19  PAK  5 | -->  FC0     
-                   BEN0 | --> |16       10| -->  FC1     
-                   BEN1 | --> |17       6 | -->  R/W     
-        (GPIO_SUPE) A24 | --> |13         |
-                        |     |           | 1, 14 Vcc      
-    pr1_pru0_pru_r3x_6  | --- | 2         | 8, 9  I2C          
-    pr1_pru0_pru_r3x_12 | --- |15         | 11    Ground
-    --------------------'     '-----------'
-
-    With two signals we need to
-
-    PRU_DTACK = M68K_DTACK || OEN || WEN
-        - rising PRU_DTACK signifies we're in S7
-        - falling PRU_DTACK signifies the bus is ready
-
-    GPMC_WAIT0 = PRU_WAIT0
-        - low WAIT0 will stall the GPMC
-        - WAIT0 should be low when entering S5 and DTACK is high
-        - WAIT0 should be high when entering S5 and DTACK is low
-        - WAIT0 should be low if VMA is low and E is high
-        - WAIT0 should be high if VMA is high or E is low
-        
-    68K Signals directly to GreenPAK
-        M68K_DTACK
-        M68K_UDS
-        M68K_LDS
-        M68K_FC0
-        M68K_FC1
-        M68K_RW
-
-    GPMC to GreenPAK
-        GPMC_WAIT0  gpmc_wait0
-        GPMC_SUPE   mmc0_clk (address pin 24)
-
-    GPIO to GreenPAK
-        GPIO_IACK   mmc0_cmd (gpio1_31, was GPMC_ASN)
-
-    68K Signals directly to PRU
-        BBB_CLK7    pr1_pru0_pru_r31_4  (MCASP0_ACLKR)
-        PRU_ECLK    pr1_pru0_pru_r30_7  (MCASP0_AHCLKX)
-        PRU_VPA     pr1_pru0_pru_r31_16 (XDMA_EVENT_INTR1)
-        PRU_VMA     pr1_pru0_pru_r30_0  (MCASP0_ACLKX)
-
-    PRU to GreenPAK
-        PRU_WAIT0   pr1_pru0_pru_r30_6  (MCASP0_AXR1, was PRU_EWAIT)
-        PRU_DTACK   pr1_pru0_pru_r30_12 (MMC0_CLK, was GPIO_IACK)
+    For our work here, this is simple renaming IACK and and EWAIT to DTACK and WAIT0 respectively and
+    ensuring we're using the correct bit offsets.
 */
 
 /* Output */
