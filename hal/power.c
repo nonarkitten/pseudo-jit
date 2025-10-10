@@ -100,11 +100,11 @@ int InitPower(PowerRail_t rail, double voltage) {
     uint8_t chipID;
 
     I2C0ReadCmd(PMIC_CNTL_I2C_SLAVE_ADDR, &idAddr, 1, &chipID, 1);
-    if(chipID == 0x72) printf("[I2C0] PMIC ID: TPS65217A\n");
-    else if(chipID == 0xF2) printf("[I2C0] PMIC ID: TPS65217B\n");
-    else if(chipID == 0xE2) printf("[I2C0] PMIC ID: TPS65217C\n");
-    else if(chipID == 0x62) printf("[I2C0] PMIC ID: TPS65217D\n");
-    else printf("[I2C0] PMIC ID invalid: %02X\n", chipID);
+    if(chipID == 0x72) printf("PMIC ID: TPS65217A\n");
+    else if(chipID == 0xF2) printf("PMIC ID: TPS65217B\n");
+    else if(chipID == 0xE2) printf("PMIC ID: TPS65217C\n");
+    else if(chipID == 0x62) printf("PMIC ID: TPS65217D\n");
+    else printf("PMIC ID invalid: %02X\n", chipID);
 
     switch(rail) {
     case RAIL_DCDC1:
@@ -123,7 +123,7 @@ int InitPower(PowerRail_t rail, double voltage) {
 
         I2C0ReadCmd(PMIC_CNTL_I2C_SLAVE_ADDR, &opRailSelector, 1, &opVerify, 1);
         float v = DCDCtoVoltage(opVerify);
-        printf("[I2C0] PMIC DCDC voltage: %0.2f\n", v);
+        printf("PMIC DCDC voltage: %0.2f\n", v);
         return (int)(v * 100.0) == (int)(voltage * 100.0);
     }
 }

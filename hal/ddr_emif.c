@@ -241,6 +241,7 @@ void InitDDR(void) {
 
 void DDRTest(void) {
     uint32_t expected, read;
+    int passed = 1;
     int i;
     
     for(i = 0; i < TEST_SIZE; i++) {
@@ -250,7 +251,9 @@ void DDRTest(void) {
     for(i = 0; i < TEST_SIZE; i++) {
         expected = 0x01010101 << i;
         read = ddr[i]; (void)read; // GCC bug
-        printf("[DDR0] Read %08lX from %p, expected  %08lX\n", read, (void*)&ddr[i], expected);
+        passed = passed & (expected == read);
+        // printf("Read %08lX from %p, expected  %08lX\n", read, (void*)&ddr[i], expected);
     }
+    printf("DDR test %s\n", passed ? "passed" : "failed");
 }
 

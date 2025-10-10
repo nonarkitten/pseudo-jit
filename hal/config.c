@@ -100,12 +100,12 @@ void SaveConfigEEPROM(int boot_good) {
     cpu_state.config.is_dirty = 0;
     cpu_state.config.last_boot_good = boot_good;
     cpu_state.config.crc16 = crc16_ccitt(config, sizeof(config_t) - 8, 0xFFFF);    
-    printf("[I2C0] Saving and verifying settings (CRC=%04X)\n", cpu_state.config.crc16);
+    printf("Saving and verifying settings (CRC=%04X)\n", cpu_state.config.crc16);
     I2C0SendCmd( 0x50, addr, 2, &cpu_state.config, sizeof(config_t));
     WaitMSDMTimer(10);
     I2C0ReadCmd( 0x50, addr, 2, &i2c_config, sizeof(config_t));
     if(memcmp(&i2c_config, &cpu_state.config, sizeof(config_t))) {
-        printf("[I2C0] Verify failed! EEPROM may be bad\n");
+        printf("Verify failed! EEPROM may be bad\n");
     }
 }
 static const char zero = 0;
@@ -127,28 +127,28 @@ void LoadConfigEEPROM(void) {
     if(i2c_config.ident == 0x704A4954) {
         uint16_t calc_crc = crc16_ccitt(config, sizeof(config_t) - 8, 0xFFFF);
         if(calc_crc == i2c_config.crc16) {
-            printf("[I2C0] Settings loaded, last boot was %s\n", i2c_config.last_boot_good ? "good" : "bad");
+            printf("Settings loaded, last boot was %s\n", i2c_config.last_boot_good ? "good" : "bad");
             // MakeGoodEEPROM();
             cpu_state.config = i2c_config;
             return;
         } else {
-            printf("[I2C0] CRC fail, %04X != %04X\n", calc_crc, i2c_config.crc16);
+            printf("CRC fail, %04X != %04X\n", calc_crc, i2c_config.crc16);
         }
     } else {
-        printf("[I2C0] Ident wrong, 0x704A4954 != 0x%08X\n", i2c_config.ident);
+        printf("Ident wrong, 0x704A4954 != 0x%08X\n", i2c_config.ident);
     }
     cpu_state.config = default_config;
     cpu_state.config.is_dirty = 1;
-    printf("[I2C0] Default settings loaded\n");
+    printf("Default settings loaded\n");
 }
 
 int DetectEEPROM(void) {
     if (I2C0Probe(0x50)) {
-        printf("[I2C0] EEPROM Detected ($50)\n");
+        printf("EEPROM Detected ($50)\n");
         LoadConfigEEPROM();
         return 1;
     } else {
-        printf("[I2C0] Default settings loaded\n");
+        printf("Default settings loaded\n");
         cpu_state.config = default_config;
         return 0;
     }

@@ -1,5 +1,7 @@
 OUTPUT := buffee-pru.out
 
+# $(info In pru.mk)
+
 CG_TOOL_ROOT := /Applications/ti/ti-cgt-pru_2.3.3
 
 CMD_SRCS := AM335x_PRU.cmd
@@ -10,9 +12,9 @@ RM := rm -f
 RMDIR := rm -rf
 
 CLPRU_OPTS := \
-    -v3 -O4 --opt_for_speed=2 --define=am3359 --define=pru0 -g \
+    -v3 --define=am3359 --define=pru0 -g \
     --diag_warning=225 --diag_wrap=off --display_error_number \
-    --endian=little --hardware_mac=on --asm_listing
+    --endian=little --hardware_mac=on --c_src_interlist
 
 CC_CLPRU_OPTS := $(CLPRU_OPTS) \
     --include_path=$(CG_TOOL_ROOT)/pru/include \
@@ -38,9 +40,9 @@ $(OUTPUT): $(C_SRCS:%.c=%.obj)
 	$(CG_TOOL_ROOT)/bin/lnkpru $(LD_CLPRU_OPTS) --output_file=$@ --map_file=$(@:%.out=%.map)
 	$(CG_TOOL_ROOT)/bin/hexpru  -o "buffee-pru.hex" $(OUTPUT) bin.cmd
 	-@gsed '$$ s/\x00*$$//' text.bin >pru_text.bin
-	-@xxd -i -a pru_text.bin >../inc/pru_text.h
+	-@xxd -i -a pru_text.bin >../src/pru_text.c
 	-@gsed '$$ s/\x00*$$//' data.bin >pru_data.bin
-	-@xxd -i -a pru_data.bin >../inc/pru_data.h
+	-@xxd -i -a pru_data.bin >../src/pru_data.c
 	-@echo ' '
 
 %.obj: %.c
@@ -54,8 +56,6 @@ clean:
 	-$(RM) $(OUTPUT:%.out=%.*)
 	-$(RM) text.bin pru_text.bin
 	-$(RM) data.bin pru_data.bin
-	-$(RM) ../pru_text.h
-	-$(RM) ../pru_data.h
-	-@echo 'Finished clean'
-	-@echo ' '
+	-$(RM) ../src/pru_text.c
+	-$(RM) ../src/pru_data.c
 

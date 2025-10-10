@@ -32,10 +32,10 @@ __attribute__((noinline)) double measure(void) {
 void test_native_bogomips(void) {
     static int pass = 0;
     pass++;
-    printf("[TEST] Performing Native BogoMIPS benchmark, warming up\n");
+    printf("Performing Native BogoMIPS benchmark, warming up\n");
 
     measure(); // warm up
-    printf("[TEST] Warm up complete, starting pass %d\n", pass);
-    printf("[TEST] Native BogoMIPS %0.2f\n", measure());
-    printf("[TEST] Loops: %d, duration %d ms\n", loops, (int)(duration * 1000.0));
+    printf("Warm up complete, starting pass %d\n", pass);
+    printf("Native BogoMIPS %0.2f\n", measure());
+    printf("Loops: %d, duration %d ms\n", loops, (int)(duration * 1000.0));
 }

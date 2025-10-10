@@ -130,7 +130,7 @@ uint32_t LoadXMODEM(uint32_t start) {
     const char *err = "XMODEM error";
     int seq;
 
-    printf("[XFER] Beginning XMODEM-1K");
+    printf("Beginning XMODEM-1K");
     while(retries--) {
         UART0Write(trychar);
 

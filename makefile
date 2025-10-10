@@ -1,15 +1,18 @@
 # All critical output, source folders
 OUTDIR  := binaries
 BINARY  := pjit.elf
-SRCDIRS := . clib/ hal/ pjit/ src/
+SRCDIRS := . clib/ hal/ pjit/ src/ greenpak/
 CROSS   := arm-none-eabi-
+
+GENERATED := src/pru_text.c src/pru_data.c
+GREENPAK := greenpak/buffee.hex
 
 # CPU type and common options
 CCFLAGS_CPU := \
 	-fno-exceptions -fno-unwind-tables -nostdlib -fno-common -ffreestanding \
 	-marm -mcpu=cortex-a8 -mfpu=vfpv3 -mfloat-abi=hard \
 	-ffunction-sections -fdata-sections -fomit-frame-pointer \
-	-std=gnu11 -MMD -fmax-errors=5 
+	-std=gnu11 -MMD -fmax-errors=5
 
 # Universally good compiler warnings	
 CCFLAGS_WARN := \
@@ -27,7 +30,7 @@ endif
 # Compiler optimizations
 ifeq ($(BUILD),release)
 # Optimize for release and raise the bar for errors
-CCFLAGS_OPT := -O3 -ffast-math -Werror -s
+CCFLAGS_OPT := -Os -ffast-math -Werror -s
 else
 # Optimize for debugging, but include basic optimizers for not-terrible-code
 CCFLAGS_OPT := -Og -g3 -ggdb -ftree-vectorize -D_DEBUG
@@ -50,9 +53,9 @@ SZ := $(QUIET)$(CROSS)size
 CC := $(QUIET)$(CROSS)gcc
 OC := $(QUIET)$(CROSS)objcopy
 DI := $(QUIET)$(CROSS)objdump --disassemble 
-RM := $(QUIET)rm -rf
-RD := $(QUIET)rmdir
 MD := $(QUIET)mkdir -p
+RM := rm -f
+RD := rm -rf
 
 OUTPUT := $(OUTDIR)/$(BUILD)/$(BINARY)
 OBJDIR := $(OUTDIR)/$(BUILD)/obj
@@ -66,40 +69,55 @@ LDFLAGS := -static -ffreestanding -T linker.lds \
 	-Wl,--Map=$(MAPFILE)
 
 INCLUDES := -I./inc $(addprefix -I./,$(SRCDIRS))
-SOURCES := $(foreach dir,$(SRCDIRS),$(wildcard $(dir)/*.c) $(wildcard $(dir)/*.s))
-OBJECTS := $(addprefix $(OBJDIR)/,$(addsuffix .o,$(basename $(foreach file,$(SOURCES),$(notdir $(file))))))
+SOURCES := $(foreach dir,$(SRCDIRS),$(wildcard $(dir)/*.c) $(wildcard $(dir)/*.s)) $(GENERATED) $(GREENPAK)
+OBJECTS := $(sort $(addprefix $(OBJDIR)/,$(addsuffix .o,$(basename $(foreach file,$(SOURCES),$(notdir $(file)))))))
 
 VPATH := $(SRCDIRS)
 
-.PHONY: all premake clean debug release
+.PHONY: all premake clean debug release generate-pru
 
 # $(info $(addprefix $(OBJDIR)/,$(notdir $(filter %.d,$(SOURCES:%.c=%.d)))))
 
-all: premake $(OUTPUT)
+all: premake $(OUTPUT) $(GREENPAK)
 
 clean:
 	@echo Cleaning $(OUTPUT)...
+	-$(RM) $(OBJDIR)/*
+	-$(RD) $(OBJDIR)
+	-$(RM) $(OUTPUT)
+	-$(RM) $(BINARY)
+	-$(RM) $(MAPFILE)
+	-$(RM) $(MAPFILE).bak
+	-$(RM) $(DISFILE)
+	-$(RD) $(OUTDIR)/$(BUILD)
+	-$(RM) greenpak/*.c
+	-$(RM) $(GENERATED)
 	@make -C pru -f pru.mk clean
-	$(RM) $(OBJDIR)/* 2>/dev/null || true
-	$(RD) $(OBJDIR) 2>/dev/null || true
-	$(RM) $(OUTPUT) 2>/dev/null || true
-	$(RM) $(BINARY) 2>/dev/null || true
-	$(RM) $(MAPFILE) 2>/dev/null || true	
-	$(RM) $(MAPFILE).bak 2>/dev/null || true	
-	$(RM) $(DISFILE) 2>/dev/null || true
-	$(RM) $(OUTDIR)/$(BUILD) 2>/dev/null || true
+	-@echo 'Finished clean'
 
 premake:
 	$(MD) $(OBJDIR)
+
+generate-pru: pru/main.c
 	@make -C pru -f pru.mk
 
-$(OUTPUT): $(OBJECTS) pru/main.c
+$(GENERATED): generate-pru
+
+$(OUTPUT): $(OBJECTS) $(GENERATED)
 	@echo Building PJIT Bootloader...
 	$(CC) $(CFLAGS) $(LDFLAGS) $(OBJECTS) -o $@
 	$(DI) $@ > $(DISFILE) &
 	$(OC) -O binary $@ $(BINARY)
 	$(SZ) $@
 	$(QUIET)nm --print-size --size-sort --radix=x $@ | grep -v -E "\.debug|\.group" > $(@:%.elf=%.sz)
+
+$(OBJDIR)/%.o: %.hex
+	@echo Compiling $<...
+	$(OC) --input-target=ihex --output-target=binary '$<' $(@:%.o=%.bin)
+	$(QUIET)xxd -i -u -a -n nvmData $(@:%.o=%.bin) >$(<:%.hex=%.c)
+	$(QUIET)sed -i '' 's/0X/0x/g' $(<:%.hex=%.c)
+	$(CC) $(CFLAGS) $(INCLUDES) -S -c $(<:%.hex=%.c) -o $(@:%.o=%.s) &
+	$(CC) $(CFLAGS) $(INCLUDES) -c $(<:%.hex=%.c) -o $@
 
 $(OBJDIR)/%.o: %.c
 	@echo Compiling $<...

@@ -62,11 +62,11 @@ void WriteImage(void* start, void* end) {
 
     //len += 4; // add room for zee header
 
-    printf("[SPI0] Programming %lu bytes\n", len);
-    printf("[SPI0] Erasing block %08lx\n", (pos >> 12));
+    printf("Programming %lu bytes\n", len);
+    printf("Erasing block %08lx\n", (pos >> 12));
     EraseSPI(pos, ERASE_4K);
     WaitMSDMTimer(400);
-    printf("[SPI0] Programming");
+    printf("Programming");
 
     // Write length
     pos = WriteChunk(pos, len, 0);
@@ -79,7 +79,7 @@ void WriteImage(void* start, void* end) {
             printf("\n[SPI0] Erasing block %08lx\n", (pos >> 12));
             EraseSPI(pos, ERASE_4K);
             WaitMSDMTimer(400);
-            printf("[SPI0] Programming");
+            printf("Programming");
         }
         pos = WriteChunk(pos, *src++, 0); // TODO CRC check?
         if((pos & 0xFF) == 0) putchar('.');
@@ -92,13 +92,13 @@ void WriteImage(void* start, void* end) {
 
     ReadSPIBlock(pos, (uint8_t*)&data, sizeof(data));
     data = rev32(data);
-    printf("[SPI0] Read length %lu bytes\n", data);
+    printf("Read length %lu bytes\n", data);
     if(data != len) goto verify_failed;
     pos += 4;
 
     ReadSPIBlock(pos, (uint8_t*)&data, sizeof(data));
     data = rev32(data);
-    printf("[SPI0] Read load address %08lx\n", data);
+    printf("Read load address %08lx\n", data);
     if(data != 0x402F0400) goto verify_failed;
     pos += 4;
 
@@ -108,10 +108,10 @@ void WriteImage(void* start, void* end) {
         if(data != *src++) goto verify_failed;
         pos += 4;
     }
-    printf("[SPI0] Verify passed!\n");
+    printf("Verify passed!\n");
     return;
 
 verify_failed:
-    printf("[SPI0] Verify failed at %08lx!\n", pos);
+    printf("Verify failed at %08lx!\n", pos);
     return;
 }

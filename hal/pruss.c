@@ -13,7 +13,6 @@
 #include "ioam3358.h"
 
 #include "pru_data.h"
-#include "pru_text.h" 
 
 #define SOC_PRUICSS1_REGS               (0x4A300000)
 
@@ -79,13 +78,34 @@ void PRUHalt(PRU_CORE_t PRUCore) {
     if(PRUCore & PRU1) PRU1_CTRL->BIT.ENABLE = 0;
 }
 
+void PRUFullReset(PRU_CORE_t PRUCore) {
+    if(PRUCore & PRU0) {
+        PRUHalt(PRU0);
+        PRUMemSet(PRU0_DRAM, 0, 8*1024, 0);
+        PRUMemSet(PRU0_IRAM, 0, 8*1024, 0);
+        PRUMemCpy(PRU0_IRAM, 0, pru_text_bin_len, pru_text_bin);
+        PRUMemCpy(PRU0_DRAM, 0, pru_data_bin_len, pru_data_bin);
+        PRUReset(PRU0);
+        PRUEnable(PRU0);
+    }
+}
+
+// GreenPAK -> (13) -> GPIO_SUPE -> (B15) -> MMC0_CLK (pr1_pru0_pru_r30_12)
+// GreenPAK -> (15) -> GPIO_IACK -> (B16) -> MMC0_CMD (pr1_pru0_pru_r30_13)
+
 void InitPRU(void) {
     static const pin_muxing_t pru_pins[] = {
-        { PINMUX_CONF_MCASP0_ACLKR,     (PIN_CFG_INEN | PIN_CFG_PDIS | PIN_CFG_M6) }, /* CLK7  pr1_pru0_pru_r31_4  */
-        { PINMUX_CONF_MCASP0_AHCLKX,    (PIN_CFG_PDIS | PIN_CFG_M5) },                /* E-CLK pr1_pru0_pru_r30_7  */
-        { PINMUX_CONF_MCASP0_AXR1,      (PIN_CFG_PDIS | PIN_CFG_M5) },                /* EWAIT pr1_pru0_pru_r30_6  */
-        { PINMUX_CONF_XDMA_EVENT_INTR1, (PIN_CFG_INEN | PIN_CFG_PDIS | PIN_CFG_M5) }, /* VPA   pr1_pru0_pru_r31_16 */
-        { PINMUX_CONF_MCASP0_ACLKX,     (PIN_CFG_PDIS | PIN_CFG_M5) },                /* VMA   pr1_pru0_pru_r30_0  */
+		/* INPUTS */
+		{ PINMUX_CONF_MCASP0_ACLKR,     (PIN_CFG_INEN | PIN_CFG_PDIS | PIN_CFG_M6) }, /* CLK7    pr1_pru0_pru_r31_4   BBB_CLK7  -> M68K_CLK7   */
+        { PINMUX_CONF_MMC0_CLK,         (PIN_CFG_INEN | PIN_CFG_PDIS | PIN_CFG_M6) }, /* DTACK   pr1_pru0_pru_r31_12  GPIO_SUPE -> GreenPAK 13 */
+		{ PINMUX_CONF_MMC0_CMD,         (PIN_CFG_INEN | PIN_CFG_PDIS | PIN_CFG_M6) }, /* ASn     pr1_pru0_pru_r30_13  GPIO_IACK -> GreenPAK 15 */
+        { PINMUX_CONF_XDMA_EVENT_INTR1, (PIN_CFG_INEN | PIN_CFG_PDIS | PIN_CFG_M5) }, /* VPAn    pr1_pru0_pru_r31_16  PRU_VPA   -> M68K_VPA    */
+
+		/* OUTPUTS */
+        { PINMUX_CONF_MCASP0_ACLKX,     (PIN_CFG_PDIS | PIN_CFG_M5) },                /* VMAn    pr1_pru0_pru_r30_0   PRU_VMA   -> M68K_VMA    */
+        { PINMUX_CONF_MCASP0_AXR1,      (PIN_CFG_PDIS | PIN_CFG_M5) },                /* WAIT0n  pr1_pru0_pru_r30_6   PRU_EWAIT -> GreenPAK 2  */
+        { PINMUX_CONF_MCASP0_AHCLKX,    (PIN_CFG_PDIS | PIN_CFG_M5) },                /* CLK_E   pr1_pru0_pru_r30_7   PRU_ECLK  -> M58K_ECLK   */
+
         { 0xFFFFFFFF, 0xFFFFFFFF },
     };    
     /* bring PRU_ICSS module out of reset */
@@ -107,21 +127,22 @@ void InitPRU(void) {
     while(CM_PER_PRU_ICSS_CLKCTRL->BIT.IDLEST);
 
     /* Clear out the memory of both PRU cores */
-    PRUMemSet(PRU0_DRAM, 0, 8*1024, 0);   //Data 8KB RAM0
-    PRUMemSet(PRU1_DRAM, 0, 8*1024, 0);   //Data 8KB RAM1
-    PRUMemSet(PRU0_IRAM, 0, 8*1024, 0);
-    PRUMemSet(PRU1_IRAM, 0, 8*1024, 0);
+    // PRUMemSet(PRU0_DRAM, 0, 8*1024, 0);   //Data 8KB RAM0
+    // PRUMemSet(PRU1_DRAM, 0, 8*1024, 0);   //Data 8KB RAM1
+    // PRUMemSet(PRU0_IRAM, 0, 8*1024, 0);
+    // PRUMemSet(PRU1_IRAM, 0, 8*1024, 0); 
 
     /*Configure pins*/
     config_mux(pru_pins);
 
     WaitMSDMTimer(40); 
 
-    PRUHalt(PRU0);
-    PRUMemCpy(PRU0_IRAM, 0, pru_text_bin_len, pru_text_bin);
-    PRUMemCpy(PRU0_DRAM, 0, pru_data_bin_len, pru_data_bin);
-    PRUReset(PRU0);
-    PRUEnable(PRU0);
+    PRUFullReset(PRU0);
+    // PRUHalt(PRU0);
+    // PRUMemCpy(PRU0_IRAM, 0, pru_text_bin_len, pru_text_bin);
+    // PRUMemCpy(PRU0_DRAM, 0, pru_data_bin_len, pru_data_bin);
+    // PRUReset(PRU0);
+    // PRUEnable(PRU0);
 
 }
 

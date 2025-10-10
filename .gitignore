@@ -6,4 +6,6 @@ pru/*.map
 pru/*.lst
 pru/*.obj
 pru/*.out
-*.gp6
+src/greenpak.c
+src/pru_data.c
+src/pru_text.c

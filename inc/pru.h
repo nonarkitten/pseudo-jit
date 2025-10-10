@@ -27,6 +27,7 @@ extern void PRUInit(void);
 extern void PRUReset(PRU_CORE_t PRUCore);
 extern void PRUEnable(PRU_CORE_t PRUCore);
 extern void PRUHalt(PRU_CORE_t PRUCore);
+extern void PRUFullReset(PRU_CORE_t PRUCore);
 
 extern void PRUMemCpy(PRU_RAM_t MemoryType, uint32_t offset, uint32_t Length, const uint32_t *Pointer);
 extern void PRUMemSet(PRU_RAM_t MemoryType, uint32_t offset, uint32_t Length, uint32_t Pattern);
