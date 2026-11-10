@@ -1,124 +1,81 @@
-# The Buffee Accelerator
+# PJIT and Buffee
 
 PJIT is part of [the Buffee Project](https://www.buffee.ca).
 
-<a rel="license" href="http://creativecommons.org/licenses/by-nc-sa/4.0/"><img alt="Creative Commons Licence" style="border-width:0" src="https://i.creativecommons.org/l/by-nc-sa/4.0/88x31.png" /></a>
+**PJIT** runs Motorola 68000 programs on an ARM processor. It does not emulate the processor instruction by instruction: it keeps a ready-made piece of ARM code for every
+possible 68000 instruction, and strings the pieces together as a program runs. Code that runs rarely is interpreted, code that runs often is copied into a straight line, and the
+hottest code is optimised as a whole.
 
-This work is licensed under a <a rel="license" href="http://creativecommons.org/licenses/by-nc-sa/4.0/">Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License</a>. No part of this shall be used for any commercial gains without express and written permission from The Buffee Project.
+**Buffee** is the accelerator board that puts it to work: an OSD335x (a 1 GHz ARM Cortex-A8 with DDR3 memory) that plugs into the CPU socket of an Amiga 500+ and takes the place
+of its 68000. A small bootloader brings the board up, PJIT runs the Amiga's own Kickstart, and the Amiga's chipset sees what looks like an ordinary 68000 on the bus.
 
-Please visit [the Wiki](https://github.com/nonarkitten/pseudo-jit/wiki) for more information.
-
-## Future Plans
-
-While PJIT is working in principle, getting it loaded and debugging has been a huge challenge with open source offerings (though, to be fair, they're actually better than TI's own Code Compser Studio). As such we're refactoring PJIT into PJIT 2.0 with the following goals:
-- migrate old PJIT into pjit-legacy branch (to-do)
-- migrating the Buffee Bootloader code to this repository (done)
-- cleaning up instructions for Visual Studio Code for loading and debugging
-
-## Single Binary PJIT
-This meant making the whole executable under 127KB! This is incredibly small, but in our investigation, after many attempts at compressing code, we found that the generator itself was the smallest, by far. While making debugging much more accessible, it also makes booting much faster as our goal is to boot Buffee inside the 150ms window of the original 68000 (thus appearing virtually "instant").
-
-So, during boot, PJIT has to:
-- initialize all hardware including I2C, PMIC, clocks, EEPROM, DRAM, GPMC, GreenPAK, SPI and UART (done)
-- verify basic operating state of the system (i.e. Power-On Self Test or POST; to-do)
-- based on EEPROM settings, initialize PJIT cache and opcode jump tables (to-do)
-- finally, start PJIT
-
-Right now the bootloader is home to PJIT, mcl68k and a copy of tinyBASIC and we're still only at 100kB. We'll probably be removing mcl68k once PJIT is more stable which will clear up around 20kB for 680x0 opcodes.
-
-## Building
-
-We've moved to using Visual Studio Code -- a totally cross-platform development environment that's been working great on my Mac. Code Composer Studio was just too much to fight with. You'll need:
-
-- Visual Studio Code (latest version)
-- Cortex-debug extension (latest version)
-- ARM GNU Embedded Toolchain (either 12.2 or 8.3.1)
-- Segger J-Link (V6.32i ONLY)
-
-You'll need to stick with J-Link V6.32i as it seems to be the last version which reliably debugs big-endian code. GCC only supported the BE8 flag from 8.3.1 and onward, but versions 9 thru 11 produce oddly larger than necessary code. Our original testing was with 8.3.1 but we're using 12.2 now and it seems fine (knock on wood).
-
-I've included my .vscode/launch.json in the project which should "just work," as long as arm-none-eabi-* executables are in your path.
-
-To build, open the shell and type "make." I'm not 100% this works on Windows anymore, but it should on Linux and Mac. This is now a one-step make that will build everything required and spit out the binary at the end.
-
-## Programming -- UART
-You'll need a good Terminal emulator package. On MacOS, I cannot recommend Serial highly enough -- this is a great bit of software. On Windows, Tera Term is absolutely the best. On Linux you're on your own, but I'm sure there's something you can apt-get. Along with this, you'll need an FTDI USB to Serial adapter along with a Tag Connect TC2030 (or compatible). People comfortable with hacking can solder bodge wires directly to their board and use any sort of USB to UART bridge (or even use another PC old enough to have serial on board). Here's the pinout:
+The board's schematics and Gerber files are in <https://github.com/nonarkitten/buffee>.
 
 ```
-          _
-         (_)   Alignment pin (GND)
-         
-3.3VDC   o o   I2C SCL
-FTDI Rx  o o   FTDI Tx
-GND      o o   I2C SDA
-        _   _
-       (_) (_) Alignment pins (GND)
+  Amiga 500+ -- 68000 socket -- [ Buffee ]
+                                    |- GPMC + GreenPAK + PRU: a 68000 bus master (AS/UDS/LDS/DTACK, E clock, VPA/VMA, IPL, RESET)
+                                    |- AM335x Cortex-A8 at 1 GHz: PJIT, the guest's registers in ARM registers
+                                    |- DDR3: fast RAM for the guest, the translation caches, a MapROM copy of Kickstart
+                                    '- SPI flash + EEPROM: bootloader, Kickstart bundle, ROM image, settings
 ```
 
-To program connect everything and power-on Buffee. If Buffee is uninitialized you should simply see the letter C repeating indefinately. If Buffee has already been programmed, you'll see the POST along with a small menu to perform more functions. To reprogram Buffee, simply select 'E' to erase the SPI flash, then reboot; from here you'll get the repeating C's.
+## What it does
 
-To send the image, select XMODEM and the .BIN file generated when compiling PJIT (also provided here under releases). Once it uploads, you'll see the above menu again. To make the image permanent, select 'P' to program the SPI flash with the current version of PJIT.
+* Boots **Kickstart 3.1 to Workbench** on an Amiga 500+ (PAL) from the stock ROM and a floppy. Code that runs from the board's own DRAM (the ROM copy and, if you add it, fast RAM) runs at about 300 MIPS in SysInfo (see the table below for the benchmarks that are part of this repository).
+* Every access to the Amiga's bus takes 6 CLK7 periods (a real 68000 needs 4), about 2.3 MB/s. Code that lives on the bus (chip RAM, a RAM board) is interpreted and paced to the speed of a 68000, never translated, so DMA masters cannot surprise it.
+* Is tested against Ted Fried's MC68000 test suite, against an independent 68000 oracle, and with a set of programs under QEMU and on a BeagleBone Black (see [docs/building.md](docs/building.md)).
+* Emulates the 68000 only: no 68010 and later, no FPU, no MMU.
+
+## How fast
+
+Measured on a Buffee board (1 GHz Cortex-A8), with the benchmarks of [tests/bbb](tests/bbb) run by [tools/buffee/run_bench.py](tools/buffee/run_bench.py); the guest code is in the board's DDR.
+Timings move 5-10% with code alignment, and repeated runs of one image agree within a percent.
+
+| Benchmark | Interpreted | Translated |
+|---|---|---|
+| Dhrystone 2.1 | 26,356 cycles per run<br/>54.7 per instruction</br></br>21.6 DMIPS | 5,115 cycles, first run</br>1,629 cycles per run<br/>3.4 per instruction<br/>349 DMIPS  |
+| BogoMIPS | 18.8 | 287 |
+| SysInfo | 0.43 (Chip RAM) | 299 (CPU RAM) |
+
+On the Amiga's own bus every access takes 6 CLK7 periods (about 850 ns, 2.3 MB/s). Code that runs from there is interpreted at the speed of a 68000 (`buffee_kspeed`: 0.66 to 0.98 times).
+
+At 3.4 cycles per 68000 instruction there's not much left on the table for performance. There are plenty of edge cases where more optimization could be performed, but the extra work is unwarranted -- look at the cold versus warm times for translated code.
+
+## Where to start
+
+If you're new to the project, head over to **[Getting Started](https://github.com/nonarkitten/pseudo-jit/wiki/getting-started.md)** or explore  **[the Wiki](https://github.com/nonarkitten/pseudo-jit/wiki)** for more information.
+
+## Building in one minute
+
+```sh
+brew install arm-none-eabi-gcc qemu     # macOS; on Linux: gcc-arm-none-eabi and qemu-system-arm
+make venv                               # .venv with the Python packages the table generator needs
+make test                               # generates the tables, builds the tests and runs them under QEMU (about a minute)
+make firmware                           # the Buffee bootloader and the standard Kickstart bundle -> build/firmware/
+make help                               # every target
 ```
-[I2C0] Scanning bus..
-[I2C0] 101_0000 ($50) EEPROM Detected
-[I2C0] 000_10xx ($8~$A) GreenPAK Detected
-[I2C0] GreenPAK Protection Bits: $00 $00 $00
-[I2C0] 010_0100 ($24) PMIC Detected, Nitro mode enabled
-[BCLK] Main bus clock measured at 7.158
-[GPMC] Trimming Core PLL to: 966
-[GPMC] SYNC VIOLATION: t->CSOFFTIME >= (t->ACCESSTIME+1)
-[GPMC] Cycle Time: 27
-[GPMC] Access Time: 25
-[GPMC] nCS Timing (ON/OFF): 3/25
-[GPMC] nRE Timing (ON/OFF): 0/26
-[GPMC] nWE Timing (ON/OFF): 5/26
-[BOOT] Build Date Apr  6 2023, Time 00:52:00
-[BOOT] Image 402F0400 ~ 402FEABC (59068 bytes)
-[BOOT] Completed in 12.45209 seconds
 
-MENU
-----
-TESTS:
- 1. Quick-test DDR memory
- 2. Dump first 4K of SPI Flash
- 3. Quick-test SPI flash
- 4. Test GPMC
- 5. Test printf
- 6. Scan I2C Bus
- 7. Run Native BogoMIPS test
- 8. Run PJIT BogoMIPS test
- 9. Scan and verify GreenPAK
-SETUP:
- J. Jump to PJIT
- C. Set E Clock Divider
- G. Manage GreenPAK
- E. Erase SPI flash
- P. Program SPI flash
- H. Print help (this)
- X. Reboot
-Ready
-] █
+Everything is written to `build/<variant>/`; nothing is generated inside the source tree except the files that are checked in on purpose (`pjit/ext_table.c`, the GreenPAK image,
+the test data under `tests/data/`).
+
+## Layout
+
 ```
-Note: while rare, we may have to update the GreenPAK code. Presently, this is broken and you'll need to use an Arduino connected through the two pins on the TC-2030 header.
-
-Note 2: yes, the I2C pins allow you direct access to the EEPROM, PMIC and GreenPAK.
-
-## Programming -- JTAG
-To program via JTAG you need to have some JTAG Programmer such as a Segger JLINK (or clone) along with the 20-pin adapter and Tag Connect TC-2050. As with the UART method, if you feel comfortable with it, you're welcome to hack together any other solution you like. Here's the pinout for the JTAG header on Buffee:
+pjit/          the translator: interpreter, slot cache, block runtime (ARM assembly) and their glue
+platform/      the machines PJIT runs on: QEMU virt, BeagleBone Black, Buffee (+ a freestanding libc shim)
+bootloader/    the Buffee bootloader: starts the board and loads PJIT
+tools/         the table generator and its checks, board tools, studies, packers
+tests/         tests: tests/qemu (QEMU), tests/bbb (BeagleBone benchmarks), tests/buffee (on the board)
+golden/        Ted Fried's 68000 interpreter as an oracle, and his test suite
+mk/            the pieces of the Makefile
+test_progs/    guest programs the tests run (Dhrystone, a BASIC interpreter)
+local/         your machine's files: ROM images, traces, known-good firmware (git-ignored)
 ```
-          _
-         (_)   Alignment pin (GND)
-         
-3.3VDC   o o   Reset
-TMS      o o   TRST
-GND      o o   TDI
-TCK      o o   GND
-GND      o o   TDO
-        _   _
-       (_) (_) Alignment pins (GND)
-```
-From Visual Studio Code, simply hit the "Run" icon to then start debugging.
 
-Note on both Tag Connect headers: there are no "click" holes to hold the Tag Connect pogo pins firmly in place for prolonged programming times. My recommendation is to use ouchless hair elastics. Wrap the elastic around Buffee length-wise before replacing it into the 68000 socket and then loop that around the Tag Connect header at the taper (strain releif) part. You may have to play around with the tension to make it stand up right, but once you do, it should stay firm indefinately. I know this sounds supremely hacky, but it's actually better than trying to use their own "pin anchors".
+## Licence
 
-If you Flash to SPI and something bad happens, you can ONLY recover via JTAG on release v0.1. The next release will have an emergency erase that's triggered by holding down the ESC key in your terminal during boot. This will then allow you to re-upload a new image to RAM.
+Everything the Buffee Project wrote is licensed under **Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International** ([LICENSE](LICENSE)): you may copy, change
+and share it with credit and under the same licence, **not for commercial purposes**. A few files are someone else's and keep their own terms: Ted Fried's MC68000 core and
+test suite (MIT), Texas Instruments' start-up and board set-up routines (BSD), libbbb's SPI, timer and I2C setup (Apache 2.0), Georges Menie's XMODEM receiver (BSD), and Weicker's
+Dhrystone 2.1 source. They are listed, with what is not here at all, in [docs/third-party.md](docs/third-party.md). **No Kickstart ROM or other Commodore/Cloanto material is
+distributed**: Buffee copies the ROM out of your own Amiga.

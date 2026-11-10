@@ -1,0 +1,59 @@
+Buffee / PJIT
+Copyright (c) 2020-2026 Renee Cousins, the Buffee Project - http://www.buffee.ca
+
+The project is licensed under Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International (see LICENSE). It contains, and its binaries
+(the Buffee bootloader and the Kickstart bundle) are built from, the following work of others, each under its own terms. The notices below are the ones
+those terms ask to accompany copies. docs/third-party.md says which files they are.
+
+--------------------------------------------------------------------------------------------------------------------------------------------------------
+Texas Instruments StarterWare (BSD 3-clause)
+  files: platform/cp15.S, platform/cp15.h, bootloader/hal/cp15.s, bootloader/inc/cp15.h, bootloader/clib/init.s, bootloader/linker.lds;
+         and, derived and modified, bootloader/hal/power.c (from examples/beaglebone/demo/pmic.c)
+         and bootloader/hal/ddr_emif.c (from bootloader/src/armv7a/am335x/bl_platform.c)
+
+  Copyright (C) 2010, 2012 Texas Instruments Incorporated - http://www.ti.com/
+
+  Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
+
+    Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.
+
+    Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer in the documentation
+    and/or other materials provided with the distribution.
+
+    Neither the name of Texas Instruments Incorporated nor the names of its contributors may be used to endorse or promote products derived from this
+    software without specific prior written permission.
+
+  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+  IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+  LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
+  GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+  STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY
+  OF SUCH DAMAGE.
+
+  (The exact wording of each file's notice is in that file's header; where the two differ, the file's own text governs.)
+
+--------------------------------------------------------------------------------------------------------------------------------------------------------
+libbbb, the Beaglebone Black system library of the Haute ecole d'ingenierie et d'architecture de Fribourg (Apache License 2.0)
+  files, all modified: bootloader/hal/flash.c (InitSPI, from src/bbb/am335x_spi.c), bootloader/hal/dmtimer.c (from src/bbb/am335x_dmtimer1.c),
+         bootloader/hal/i2c0.c (from src/bbb/am335x_i2c.c) of https://gitlab.forge.hefr.ch/embsys/libbbb
+
+  Copyright 2015, 2019 University of Applied Sciences Western Switzerland / Fribourg
+
+  Licensed under the Apache License, Version 2.0; the text is in LICENSES/Apache-2.0.txt. Unless required by applicable law or agreed to in writing,
+  software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+
+--------------------------------------------------------------------------------------------------------------------------------------------------------
+xmodem.c by Georges Menie (BSD 3-clause)
+  file: bootloader/src/xmodem.c (the receiver follows his handshake and block loop; restructured and modified)
+
+  Copyright 2001-2022 Georges Menie (www.menie.org); the licence text is in that file's header.
+
+--------------------------------------------------------------------------------------------------------------------------------------------------------
+MC68000 emulator and test suite by Ted Fried, MicroCore Labs (MIT)
+  files: golden/mcl68k.c, golden/mcl68k_testsuite.c, golden/mcl68k_test_image.h   (the full licence text is in the header of golden/mcl68k.c)
+
+  Copyright (c) 2020 Ted Fried
+
+--------------------------------------------------------------------------------------------------------------------------------------------------------
+Dhrystone 2.1 benchmark by Reinhold P. Weicker (1988); no licence text, distributed freely by its author
+  files: test_progs/dhrystone/dhry.h, dhry_1.c, dhry_2.c (unmodified; see test_progs/dhrystone/README.md)

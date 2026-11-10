@@ -1,0 +1,13 @@
+# Python packages for the host tools.   make venv   (= python3 -m venv .venv; .venv/bin/pip install -r requirements.txt)
+
+# the table generator and its checks (tools/gen)
+capstone
+unicorn
+numpy
+
+# the board tools (tools/buffee, tools/bbb): the UART and XMODEM
+pyserial
+xmodem
+
+# optional: Saleae Logic 2 captures (tools/buffee/logic_capture.py, shotgun.py --capture, phase_cck.py)
+# logic2-automation

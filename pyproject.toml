@@ -1,0 +1,7 @@
+# Style for the Python tools: `black` (line length 110).  Format with:  black tools
+[tool.black]
+line-length = 110
+target-version = ["py311"]
+extend-exclude = '''
+/(\.venv|build|archive|local)/
+'''
