@@ -11,7 +11,8 @@ console until the
 image returns to U-Boot (or BBB_TIMEOUT seconds pass). The board is left at the U-Boot prompt.
 
 Environment: BBB_SERIAL (default /dev/cu.usbserial-ABBGCTNI), BBB_HOST (ssh host, default `bbb`), BBB_TIMEOUT.
-The board needs passwordless sudo for `reboot`."""
+The board needs passwordless
+sudo for `reboot` (/etc/sudoers.d/renee-nopasswd)."""
 
 import os, sys, termios, time, select, subprocess
 

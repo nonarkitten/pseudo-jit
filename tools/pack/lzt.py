@@ -2,11 +2,11 @@
 """LZT1: the table-image packer for boot-time loading (decoder: pjit/lzt.s).
 
 The image is cut into 16-byte records (the DT's slots; the other tables do not mind), the records are split
-into 16 byte planes (plane k = byte k of every record) and the planes are compressed as one LZ4 block
-(`lz4 -9` quality, liblz4's HC compressor through ctypes: needs liblz4, e.g. Homebrew's).
-
-On the 2.4 MB table arena: 291 KB with plain `lz4 -9`, 113 KB with the planes.  Layout (little-endian words):
-'LZT1', raw size, records (the input is padded with zeros to a multiple of 256 bytes), compressed size, then the block.
+into 16 byte planes (plane k = byte k of every record) and the
+planes are compressed as one LZ4 block (`lz4 -9` quality, liblz4's HC compressor through ctypes: needs liblz4,
+e.g. Homebrew's).  On the 2.4 MB table arena: 291 KB with
+plain `lz4 -9`, 113 KB with the planes.  Layout (little-endian words): 'LZT1', raw size, records (the input is
+padded with zeros to a multiple of 256 bytes), compressed size, then the block.
 
   tools/pack/lzt.py pack   in out [level]      (level 1..12, default 12)
   tools/pack/lzt.py unpack in out              (reference decoder, checks the format)

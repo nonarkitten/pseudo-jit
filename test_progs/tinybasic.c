@@ -8,8 +8,6 @@
  * Like Tiny BASIC it keeps the program as text and parses every statement again each time it runs, which makes it a good workload for a
  * translator: byte scanning, keyword compares, a jump per statement, calls and returns, a few 16 x 16 multiplications.
  *
- * It is not meant to be fast or featureful, and it is not a complete implementation of BASIC.
- *
  *   Immediate:  RUN  LIST  NEW  BYE        (and any statement without a line number)
  *   Statements: REM  PRINT  [LET] v=e  [LET] @(e)=e  IF a <rel> b [THEN] stmt|line  GOTO e  GOSUB e  RETURN
  *               FOR v=e TO e [STEP e]  NEXT v  END  STOP

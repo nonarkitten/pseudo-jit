@@ -9,5 +9,6 @@
 | [`bbb/`](bbb) | running and timing images on a BeagleBone Black |
 | [`amiga/`](amiga) | the differential harness against an independent 68000 |
 | [`study/`](study) | the models and measurements the design decisions came from |
+| `wiki.py` | publishes `docs/` as a GitHub wiki |
 
-Python tools run with the project's virtual environment (`make venv`) from the repository root.
+Every tool, one line each: **[docs/tools.md](../docs/tools.md)**. Python tools run with the project's virtual environment (`make venv`) from the repository root.

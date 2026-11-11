@@ -6,7 +6,7 @@ the SPI flash slots and resets the EEPROM config):
 The board must already be at the Buffee bootloader menu (run restore_bootloader.py first if it still runs the
 pseudo-jit_1 firmware; ESC x3 from a terminal if a guest is running,
 but never right after a reset: the first 30 ms are the emergency-erase window). This script never sends ESC.
-
+Flash writes need Renee's go.
 What it does, in order, and nothing else (no sector 0, no bootloader, no GreenPAK):
   1. menu F: a slot that is 'absent' or bad is filled -- PJIT <- --bundle (xmodem; the CRC the bootloader
   reports must equal the file's, padded to 128 bytes with 0x1A like xmodem does),

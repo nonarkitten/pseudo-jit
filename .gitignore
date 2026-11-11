@@ -6,3 +6,5 @@ pru/*.map
 pru/*.lst
 pru/*.obj
 pru/*.out
+build/**
+**/__pycache__/**

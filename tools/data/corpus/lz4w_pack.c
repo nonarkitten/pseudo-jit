@@ -1,4 +1,4 @@
-/* lz4w compressor for the host: (github.com/nonarkitten/GnGeo, lz4w/) with the AmigaOS calls replaced by libc and the output written big-endian
+/* lz4w compressor for the host: Renee Cousins' lz4w_pack.c (github.com/nonarkitten/GnGeo, lz4w/) with the AmigaOS calls replaced by libc and the output written big-endian
  * (the 68000 decompressor, lz4w_unpack.s, reads big-endian words). usage: lz4w_pack in out
  * Format: BE long = unpacked size; then per segment one BE word  literal words (4 bits) | match length - 1 (4 bits) | match offset - 1 (8 bits, in words), then the
  * literal words; a final empty segment, then one word: 0 (even size) or 0x8000 | the last byte (odd size). */

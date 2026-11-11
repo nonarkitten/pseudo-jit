@@ -1,0 +1,12 @@
+[BR] cached  SUBQ.L + BNE.S (loop crosses a line)             6.35 cycles   7.00 ARM instrs 0.00 mispredicts per iteration
+[BR] cached  DBF D5 (one slot, loops on itself)               7.93 cycles   8.00 ARM instrs 0.00 mispredicts per iteration
+[BR] cached  BSR.S + RTS + SUBQ + BNE.S                      24.94 cycles  27.00 ARM instrs 0.00 mispredicts per iteration
+[BR] cached  BSR.W + RTS (callee 3 lines away)               24.99 cycles  27.00 ARM instrs 0.00 mispredicts per iteration
+[BR] cached  JSR abs.L + RTS (callee 4 lines away)           24.97 cycles  27.00 ARM instrs 0.00 mispredicts per iteration
+[BR] cached  JSR (A2) + RTS (callee 4 lines away)            36.95 cycles  39.00 ARM instrs 0.00 mispredicts per iteration
+[BR] cached  JSR 8(A2) + RTS (callee 4 lines away)           36.98 cycles  40.00 ARM instrs 0.00 mispredicts per iteration
+[BR] cached  JMP (A2) forward, SUBQ + BNE.S back to it       18.97 cycles  20.00 ARM instrs 0.00 mispredicts per iteration
+[BR] cached  BRA.S forward, SUBQ + BNE.S back to the BRA      6.99 cycles   8.00 ARM instrs 0.00 mispredicts per iteration
+[BR] cached  strcpy: MOVE.B (A1)+,(A0)+ ; DBF D5             12.61 cycles  11.00 ARM instrs 0.00 mispredicts per iteration
+[BR] cached  BRA.S forward over a slot, then SUBQ + BNE.S     6.99 cycles   8.00 ARM instrs 0.00 mispredicts per iteration
+[BR] cached  NOP x4 + SUBQ + BNE.S (loop is 6 halfwords)      8.98 cycles  11.00 ARM instrs 0.00 mispredicts per iteration

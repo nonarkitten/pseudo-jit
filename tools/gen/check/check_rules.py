@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The hard rules for emitted code, checked on every generated sequence (leader + body, cached and
+"""The hard rules for emitted code (CLAUDE.md), checked on every generated sequence (leader + body, cached and
 interpretive path):
 
 - ends in a branch or a return (b / bx), never falls off the end
