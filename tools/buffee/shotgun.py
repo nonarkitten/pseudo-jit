@@ -70,7 +70,7 @@ def to_menu(limit=120):
 
 def load():
     to_menu()
-    s.write(b"L\r")
+    s.write(b"2\r")  # menu 2: run a bundle sent over XMODEM
     time.sleep(0.5)
     s.read(20000)
     data = open(a.bundle, "rb").read()

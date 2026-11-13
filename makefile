@@ -98,6 +98,9 @@ BUNDLES := $(BUILD)/buffee
 .DEFAULT_GOAL := all
 .SECONDARY:
 .PHONY: all test check help clean distclean venv toolchain-check FORCE
+
+# a recipe that fails (the table generator without its Python packages, say) must not leave an empty or partial target that the next make takes for finished work
+.DELETE_ON_ERROR:
 FORCE:
 
 include mk/pjit.mk
@@ -132,7 +135,7 @@ help:
 	@echo "  golden/            golden   golden-compare"
 	@echo "  Cortex-A8 model    a8-test"
 	@echo "  BeagleBone         bbb-<test>   e.g. bbb-bbb_dhrystone -> $(BBB)/bbb_dhrystone.bin      bbb-all"
-	@echo "  Buffee payloads    buffee-<test> (ELF)   bundle-<test> (.lzt for the bootloader's L command / flash slot)   e.g. bundle-boot"
+	@echo "  Buffee payloads    buffee-<test> (ELF)   bundle-<test> (.lzt for the bootloader's menu 2 / flash slot)   e.g. bundle-boot"
 	@echo "  Buffee firmware    bootloader [BL=asn|asn_cal]               firmware = the bootloader + the standard Kickstart bundle"
 	@echo "  housekeeping       venv   toolchain-check   clean   distclean"
 	@echo

@@ -1,26 +1,33 @@
 /*
- * Copyright (c) 2020-2023 Renee Cousins, the Buffee Project - http://www.buffee.ca
+ * config.c -- the boot settings in the EEPROM (I2C address $50): the defaults, and loading and saving them with a CRC.
  *
+ * Copyright (c) 2020-2026 Renee Cousins, the Buffee Project - http://www.buffee.ca
  * Licensed under Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International (see LICENSE).
  */
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
 #include "config.h"
+#include "init.h"
+
+#define EEPROM_I2C  0x50
+#define CONFIG_IDENT 0x704A4954u
+
+/* The board kind (whether the data lines go through the byte swapper) is a property of the board, not of the host or the settings: a record of its own, outside
+   config_t, so that the defaults, a bad settings CRC or a new settings layout never touch it. Written once (hal/amiga.c: the GreenPAK supply test), read at every boot. */
+#define BOARD_REC_ADDR  0x0100u         /* 8-byte aligned: one page write on any part */
+#define BOARD_REC_MAGIC 0x444E4B42u     /* 'BKND' */
+typedef struct { uint32_t magic; uint8_t kind, check, unused[2]; } board_rec_t;
 
 config_t settings;
 
 /* The settings of a board with nothing stored in its EEPROM. */
 void config_set_defaults(config_t *c) {
     memset(c, 0, sizeof *c);
-    c->ident = 0x704A4954;
+    c->ident = CONFIG_IDENT;
     c->cpu_enable_68000 = 1;
-    c->cpu_enable_icache = 1;
-    c->cpu_enable_dcache = 1;
-    c->post_enable_long_mem = 0;            /* 512 MB takes a while: off unless asked */
-    c->post_enable_gpack_ok = 1;
-    c->post_enable_checkclk = 1;
-    c->post_enable_autommap = 1;
+    c->first_boot = 1;                      /* the full self-test and the boot report, until a boot passes */
+    c->post_checkclk = 1;
     c->dpll_mul = 1000;
     c->pmic_voltage = 135;                  /* 1.35 V for 1 GHz */
     c->cache_index_bits = 11;
@@ -30,27 +37,12 @@ void config_set_defaults(config_t *c) {
     c->maprom_size_log2 = 19;               /* 512 KB */
     c->maprom_src = MAPROM_RAM;             /* copy the Amiga's own Kickstart into DRAM (works with nothing in the flash) */
     c->ram_mode = RAM_128M;
-    c->mem_region[0].base_mb = 0;           /* no fast RAM: whatever RAM the Amiga has is left alone; menu E, R adds e.g. 200000/8 */
-    c->mem_region[0].size_log2 = 0;
     c->pace = 100;                          /* interpreted code (chip RAM) runs at an MC68000's pace; fast RAM and the MapROM megabyte are translated at full speed */
-    c->boot_flags = 0;                      /* a fresh board stops at the menu until the payload is stored; storing it turns both on */
     c->kHz = 8000;
     c->is_dirty = 1;
 }
 
-/* The value of the first `len` hex digits of n. */
-static uint32_t toHex2(char* n, int len) {
-    static const char TOHEX[32] = {
-        0, 10, 11, 12, 13, 14, 15,
-        0,  0,  0,  0,  0,  0,  0,  0,  0,
-        0,  1,  2,  3,  4,  5,  6,  7,  8,  9,
-        0,  0,  0,  0,  0,  0,
-    };
-    uint32_t value = 0;
-    while(len--) value = (value << 4) | TOHEX[(*n++) & 0x1f];
-    return value;
-}
-
+/* The CRC covers the bytes after it up to and including is_dirty (pace, in the tail padding, is outside). */
 static unsigned short crc16_ccitt(const void *buf, uint32_t len, uint16_t init) {
     static const unsigned short crc16_table[256]= {
         0x0000, 0x1021, 0x2042, 0x3063, 0x4084, 0x50a5, 0x60c6, 0x70e7,
@@ -94,320 +86,60 @@ static unsigned short crc16_ccitt(const void *buf, uint32_t len, uint16_t init) 
     return crc;
 }
 
-void SaveConfigEEPROM(int boot_good) {
-    uint8_t addr[2] = { 0 };
-    const uint8_t* config = 6 + (uint8_t*)&settings;
-    config_t i2c_config;
+static uint16_t config_crc(const config_t *c) {
+    return crc16_ccitt(6 + (const uint8_t*)c, sizeof(config_t) - 8, 0xFFFF);
+}
+
+int SaveConfigEEPROM(void) {
+    static config_t back;
+    uint8_t addr[2] = { 0 }, a[2];
+    uint32_t off, n;
 
     settings.is_dirty = 0;
-    settings.last_boot_good = boot_good;
-    settings.crc16 = crc16_ccitt(config, sizeof(config_t) - 8, 0xFFFF);    
-    printf("Saving and verifying settings (CRC=%04X)\n", settings.crc16);
+    settings.crc16 = config_crc(&settings);
     /* A page write that crosses a page boundary wraps inside the page (the part is 8 / 16 / 32 bytes per page): write aligned chunks of 8 bytes, wait out the write cycle after each. */
-    for (uint32_t off = 0; off < sizeof(config_t); off += 8) {
-        uint32_t n = sizeof(config_t) - off < 8 ? sizeof(config_t) - off : 8;
-        uint8_t a[2] = { (uint8_t)(off >> 8), (uint8_t)off };
-        I2C0SendCmd( 0x50, a, 2, (const uint8_t*)&settings + off, n);
+    for (off = 0; off < sizeof(config_t); off += 8) {
+        n = sizeof(config_t) - off < 8 ? sizeof(config_t) - off : 8;
+        a[0] = (uint8_t)(off >> 8);
+        a[1] = (uint8_t)off;
+        I2C0SendCmd(EEPROM_I2C, a, 2, (const uint8_t*)&settings + off, n);
         WaitMSDMTimer(10);
     }
-    I2C0ReadCmd( 0x50, addr, 2, &i2c_config, sizeof(config_t));
-    if(memcmp(&i2c_config, &settings, sizeof(config_t))) {
-        printf("Verify failed! EEPROM may be bad\n");
-    }
-}
-static const char zero = 0;
-static const char one = 1;
-
-void MakeGoodEEPROM(void) {
-    uint8_t addr[2] = { 0 };
-    addr[1] = __offsetof(config_t, last_boot_good);
-    I2C0SendCmd( 0x50, addr, 2, &one, 1);
+    I2C0ReadCmd(EEPROM_I2C, addr, 2, (uint8_t*)&back, sizeof(config_t));
+    if (memcmp(&back, &settings, sizeof(config_t))) { printf("Settings: the EEPROM did not read back what was written\n"); return -1; }
+    info("Settings saved (CRC %04X)\n", settings.crc16);
+    return 0;
 }
 
-void LoadConfigEEPROM(void) {
-    static config_t i2c_config;
-    const uint8_t* config = 6 + (uint8_t*)&i2c_config;
+int LoadConfigEEPROM(void) {
+    static config_t stored;
     uint8_t addr[2] = { 0 };
-	int err = 0;
+    int why;
 
-    I2C0ReadCmd( 0x50, addr, 2, &i2c_config, sizeof(config_t));
-    if(i2c_config.ident == 0x704A4954) {
-        uint16_t calc_crc = crc16_ccitt(config, sizeof(config_t) - 8, 0xFFFF);
-        if(calc_crc == i2c_config.crc16) {
-            printf("Settings loaded, last boot was %s\n", i2c_config.last_boot_good ? "good" : "bad");
-            // MakeGoodEEPROM();
-            settings = i2c_config;
-            return;
-        } else {
-            printf("CRC fail, %04X != %04X\n", calc_crc, i2c_config.crc16);
-        }
-    } else {
-        printf("Ident wrong, 0x704A4954 != 0x%08X\n", i2c_config.ident);
-    }
+    if (!I2C0Probe(EEPROM_I2C)) { config_set_defaults(&settings); return CFG_NO_EEPROM; }
+    I2C0ReadCmd(EEPROM_I2C, addr, 2, (uint8_t*)&stored, sizeof(config_t));
+    if (stored.ident == CONFIG_IDENT && config_crc(&stored) == stored.crc16) { settings = stored; return CFG_LOADED; }
+    why = (stored.ident == CONFIG_IDENT) ? CFG_BAD_CRC : CFG_BLANK;
     config_set_defaults(&settings);
-    settings.is_dirty = 1;
-    printf("Default settings loaded\n");
+    return why;
 }
 
-int DetectEEPROM(void) {
-    if (I2C0Probe(0x50)) {
-        printf("EEPROM Detected ($50)\n");
-        LoadConfigEEPROM();
-        return 1;
-    } else {
-        printf("Default settings loaded\n");
-        config_set_defaults(&settings);
-        return 0;
-    }
+int LoadBoardKind(void) {
+    board_rec_t r;
+    uint8_t a[2] = { BOARD_REC_ADDR >> 8, BOARD_REC_ADDR & 0xFF };
+
+    if (!I2C0Probe(EEPROM_I2C) || !I2C0ReadCmd(EEPROM_I2C, a, 2, (uint8_t*)&r, sizeof r)) return -1;
+    if (r.magic != BOARD_REC_MAGIC || r.check != (uint8_t)~r.kind || r.kind > 1) return -1;
+    return r.kind;
 }
 
-static const char* GetConfigCPU(void) {
-    if(settings.cpu_enable_68000) return "68000";
-    if(settings.cpu_enable_68020) {
-        if(settings.cpu_enable_32bits) {
-            return (settings.cpu_enable_fpu) ? "68020/68882" : "68020";
-        } else {
-            return (settings.cpu_enable_fpu) ? "68EC020/68882" : "68EC020";
-        }
-    }
-    if(settings.cpu_enable_68030) {
-        if(!settings.cpu_enable_mmu) return "68EC030";
-        if(!settings.cpu_enable_fpu) return "68030";
-        return "68030/68882";
-    }
-    if(settings.cpu_enable_68040) {
-        if(!settings.cpu_enable_mmu) return "68EC040";
-        if(!settings.cpu_enable_fpu) return "68LC040";
-        return "68040";
-    }
-}
+int SaveBoardKind(int kind) {
+    board_rec_t r = { BOARD_REC_MAGIC, (uint8_t)kind, (uint8_t)~kind, { 0, 0 } }, back;
+    uint8_t a[2] = { BOARD_REC_ADDR >> 8, BOARD_REC_ADDR & 0xFF };
 
-static int streq(const char* l, const char* r) {
-    while(*l && *r) {
-        if(*l != *r) return 0;
-        l++; r++;
-    }
-    return 1;
-}
-
-static void SetConfigCPU(const char* CPU) {
-    if(streq(CPU, "68000")) {
-        settings.cpu_enable_68000 = 1;
-        settings.cpu_enable_68020 = 0;
-        settings.cpu_enable_68030 = 0;
-        settings.cpu_enable_68040 = 0;
-        settings.cpu_enable_32bits = 0;
-        settings.cpu_enable_icache = 0;
-        settings.cpu_enable_dcache = 0;
-        settings.cpu_enable_fpu = 0;
-        settings.cpu_enable_mmu = 0;
-    }
-    if(streq(CPU, "68EC020")) {
-        settings.cpu_enable_68000 = 0;
-        settings.cpu_enable_68020 = 1;
-        settings.cpu_enable_68030 = 0;
-        settings.cpu_enable_68040 = 0;
-        settings.cpu_enable_32bits = 0;
-        settings.cpu_enable_icache = 1;
-        settings.cpu_enable_dcache = 0;
-        settings.cpu_enable_fpu = streq(&CPU[7], "/68882");
-        settings.cpu_enable_mmu = 0;
-    }
-    if(streq(CPU, "68020")) {
-        settings.cpu_enable_68000 = 0;
-        settings.cpu_enable_68020 = 1;
-        settings.cpu_enable_68030 = 0;
-        settings.cpu_enable_68040 = 0;
-        settings.cpu_enable_32bits = 1;
-        settings.cpu_enable_icache = 1;
-        settings.cpu_enable_dcache = 0;
-        settings.cpu_enable_fpu = streq(&CPU[7], "/68882");
-        settings.cpu_enable_mmu = 0;
-    }
-    if(streq(CPU, "68EC030")) {
-        settings.cpu_enable_68000 = 0;
-        settings.cpu_enable_68020 = 0;
-        settings.cpu_enable_68030 = 1;
-        settings.cpu_enable_68040 = 0;
-        settings.cpu_enable_32bits = 1;
-        settings.cpu_enable_icache = 1;
-        settings.cpu_enable_dcache = 1;
-        settings.cpu_enable_fpu = streq(&CPU[7], "/68882");
-        settings.cpu_enable_mmu = 0;
-    }
-    if(streq(CPU, "68030")) {
-        settings.cpu_enable_68000 = 0;
-        settings.cpu_enable_68020 = 0;
-        settings.cpu_enable_68030 = 1;
-        settings.cpu_enable_68040 = 0;
-        settings.cpu_enable_32bits = 1;
-        settings.cpu_enable_icache = 1;
-        settings.cpu_enable_dcache = 1;
-        settings.cpu_enable_fpu = streq(&CPU[7], "/68882");
-        settings.cpu_enable_mmu = 1;
-    }
-    if(streq(CPU, "68EC040")) {
-        settings.cpu_enable_68000 = 0;
-        settings.cpu_enable_68020 = 0;
-        settings.cpu_enable_68030 = 0;
-        settings.cpu_enable_68040 = 1;
-        settings.cpu_enable_32bits = 1;
-        settings.cpu_enable_icache = 1;
-        settings.cpu_enable_dcache = 1;
-        settings.cpu_enable_fpu = 0;
-        settings.cpu_enable_mmu = 0;
-    }
-    if(streq(CPU, "68LC030")) {
-        settings.cpu_enable_68000 = 0;
-        settings.cpu_enable_68020 = 0;
-        settings.cpu_enable_68030 = 0;
-        settings.cpu_enable_68040 = 1;
-        settings.cpu_enable_32bits = 1;
-        settings.cpu_enable_icache = 1;
-        settings.cpu_enable_dcache = 1;
-        settings.cpu_enable_fpu = 0;
-        settings.cpu_enable_mmu = 1;
-    }
-    if(streq(CPU, "68030")) {
-        settings.cpu_enable_68000 = 0;
-        settings.cpu_enable_68020 = 0;
-        settings.cpu_enable_68030 = 0;
-        settings.cpu_enable_68040 = 1;
-        settings.cpu_enable_32bits = 1;
-        settings.cpu_enable_icache = 1;
-        settings.cpu_enable_dcache = 1;
-        settings.cpu_enable_fpu = 1;
-        settings.cpu_enable_mmu = 1;
-    }
-}
-
-int toupper(int c) { 
-    if(c < 'a' || c > 'z') return c;
-    else return c - 'a' + 'A';
-}
-double strtod(const char* in, char** out) {
-    int v = 0;
-    int d = 0;
-    int div = 1;
-    int c;
-
-    while(c = *in++) {
-        if(c == 0) break;
-        else if(c == '.') { d = 1; continue; }
-        else if(c >= '0' && c <= '9') {
-            v = (v * 10) + (c - '0');
-            if(d) div *= 10;
-        }
-        else break;
-    }
-
-    return (double)v / (double)div;
-}
-
-void ManageConfig(void) {
-    char option[12] = { 0 };
-    while(option[0] != 'x' && option[0] != 'X') {
-        printf("%s",
-            "1. Reload config from EEPROM\n"
-            "2. Save config to EEPROM\n"
-            "3. Display & Change config\n"
-            "X. Exit to main menu\n"
-            "] "
-        );
-        gets(option);
-        switch(option[0]) {
-        default: break;
-        case '1': LoadConfigEEPROM(); break;
-        case '2': SaveConfigEEPROM(1); break;
-        case '3':
-            while(1) {
-                printf("Config:\n");
-                printf("    CPU: 68000 (68020 and up: not offered yet)\n");
-                printf("B.  Clock: %0.3f MHz\n", settings.kHz * 0.001);
-                printf("C.  I$: %s\n", settings.cpu_enable_icache ? "Enabled" : "Disabled");
-                printf("D.  I$ Mask: %04X\n", settings.icache_mask_24b);
-                printf("E.  D$: %s\n", settings.cpu_enable_dcache ? "Enabled" : "Disabled");
-                printf("F.  D$ Mask: %04X\n", settings.dcache_mask_24b);
-                static const char* const msrc[] = { "Off (ROM stays where the Amiga has it)", "SPI flash image", "Copy of the Amiga's ROM" };
-                printf("G.  MapROM: %s\n", msrc[settings.maprom_src % 3]);
-                if(settings.maprom_src) {
-                    uint32_t base = (uint32_t)settings.maprom_base_64k << 16, sz = 1u << settings.maprom_size_log2;
-                    printf("P.    Base %06lX, Q. Size %lu KB (%06lX~%06lX)\n", (unsigned long)base, (unsigned long)(sz >> 10), (unsigned long)base, (unsigned long)(base + sz - 1));
-                }
-                printf("R.  Guest RAM regions (host DRAM, translated; enter BASE/SIZEMB[I|B],... e.g. 200000/8 or 200000/8I (I = interpret only, paced) or 200000/8B (B = RAM on the Amiga bus, e.g. a Zorro II board: no host DRAM, its code is translated and cached) or 0 for none):");
-                for (int k = 0; k < 4 && settings.mem_region[k].size_log2; k++) printf(" %lX/%luMB%s%s%s", (unsigned long)settings.mem_region[k].base_mb << 20, (unsigned long)(1ul << (settings.mem_region[k].size_log2 - 20)), (settings.mem_region[k].flags & 2) ? "B" : "", (settings.mem_region[k].flags & 1) ? "I" : "", (settings.mem_region[k].flags & 4) ? "F" : "");
-                if (!settings.mem_region[0].size_log2) printf(" none");
-                printf("\n");
-                printf("S.  Autoload PJIT from the SPI flash: %s\n", (settings.boot_flags & BOOT_AUTOLOAD) ? "Enabled" : "Disabled");
-                printf("T.  Autorun PJIT after loading: %s\n", (settings.boot_flags & BOOT_AUTORUN) ? "Enabled" : "Disabled");
-                printf("U.  24-bit guest address space: always on (68000; A24-A31 ignored, RAM regions must lie below 16 MB)\n");
-                printf("V.  Pace interpreted code (chip RAM) to percent of an MC68000 at 7.09 MHz, 0 = off: %u\n", (unsigned)settings.pace);
-                printf("    POST:\n");
-                printf("H.    Long Mem Test %s\n", settings.post_enable_long_mem ? "Enabled" : "Disabled");
-                printf("I.    GreenPAK Test %s\n", settings.post_enable_gpack_ok ? "Enabled" : "Disabled");
-                printf("J.    Bus Clock Test %s\n", settings.post_enable_checkclk ? "Enabled" : "Disabled");
-                printf("K.    Automap %s\n", settings.post_enable_autommap ? "Enabled" : "Disabled");
-                printf("L.  MCU CLK: %d\n" , settings.dpll_mul);
-                printf("M.  PMIC Voltage: %0.2f\n" , settings.pmic_voltage * 0.01);
-                printf("    PJIT Cache:\n");
-                printf("N.    Block Size: %d bytes\n", 8 << settings.cache_block_bits);
-                printf("O.    Block Count: %d\n", 1 << settings.cache_index_bits);
-                uint32_t cs = 8 << (settings.cache_index_bits + settings.cache_block_bits);
-                char* suffix = "bytes";
-                if(cs > 1024 & ((cs & 1023)==0)) cs = cs / 1024, suffix = "kB";
-                if(cs > 1024 & ((cs & 1023)==0)) cs = cs / 1024, suffix = "MB";
-                printf("      Cache Size: %d %s\n", cs, suffix);
-                printf("X.  Return to previous menu\n");
-                printf("] ");
-                gets(option);
-                uint8_t choice = toupper(option[0]);
-                if(choice == 'X') { option[0] = '?'; break; }
-
-                printf("New value? ");
-                gets(option);
-                option[0] = toupper(option[0]);
-
-                switch(choice) {
-                case 'B': settings.kHz = (int)(1000.0 * strtod(option, NULL)); break;
-                case 'C': settings.cpu_enable_icache = option[0] == 'E'; break;
-                case 'D': settings.icache_mask_24b = toHex2(option, 4); break;
-                case 'E': settings.cpu_enable_dcache = option[0] == 'E'; break;
-                case 'F': settings.dcache_mask_24b = toHex2(option, 4); break;
-                case 'G': settings.maprom_src = option[0] == 'F' ? MAPROM_FLASH : (option[0] == 'R' || option[0] == 'C') ? MAPROM_RAM : MAPROM_OFF; break;   /* Flash / Ram (Copy) / Off */
-                case 'P': { uint32_t v = 0; for (const char* c = option; (*c >= '0' && *c <= '9') || (*c >= 'A' && *c <= 'F'); c++) v = v << 4 | (*c <= '9' ? *c - '0' : *c - 'A' + 10); settings.maprom_base_64k = v > 0xFFFF ? v >> 16 : v; } break;   /* F80000 or F8 */
-                case 'Q': { uint32_t kb = (uint32_t)strtod(option, NULL), l = 10; while (kb > 1) { kb >>= 1; l++; } settings.maprom_size_log2 = l; } break;
-                case 'R': {                                      /* BASE(hex bytes, 1 MB aligned)/SIZE(decimal MB, a power of two), up to four, comma separated; anything else clears */
-                    int n = 0; const char* c = option;
-                    for (int k = 0; k < 4; k++) { settings.mem_region[k].base_mb = 0; settings.mem_region[k].size_log2 = 0; settings.mem_region[k].flags = 0; }
-                    while (n < 4) {
-                        if (*c == '$') c++;
-                        uint32_t base = 0, mb = 0; int digits = 0;
-                        for (; (*c >= '0' && *c <= '9') || (*c >= 'A' && *c <= 'F'); c++, digits++) base = base << 4 | (*c <= '9' ? *c - '0' : *c - 'A' + 10);
-                        if (!digits || *c != '/') break;
-                        for (c++; *c >= '0' && *c <= '9'; c++) mb = mb * 10 + (*c - '0');
-                        if (!mb || (mb & (mb - 1)) || (base & 0xFFFFF) || mb > 512) { printf("region %d rejected (needs a 1 MB aligned base and a power-of-two size in MB)\n", n + 1); break; }
-                        uint32_t l = 20; while ((1u << (l - 20)) < mb) l++;
-                        int interp = 0; for (;; c++) { if (*c == 'I' || *c == 'i') interp |= 1; else if (*c == 'B' || *c == 'b') interp |= 2; else if (*c == 'F' || *c == 'f') interp |= 4; else break; }          /* a trailing I: interpret only (never translated, paced like chip RAM) */
-                        settings.mem_region[n].base_mb = base >> 20; settings.mem_region[n].size_log2 = l; settings.mem_region[n].flags = interp; n++;
-                        if (*c != ',') break;
-                        c++;
-                    }
-                } break;
-                case 'S': if (option[0] == 'E') settings.boot_flags |= BOOT_AUTOLOAD; else settings.boot_flags &= ~BOOT_AUTOLOAD; break;
-                case 'T': if (option[0] == 'E') settings.boot_flags |= BOOT_AUTORUN; else settings.boot_flags &= ~BOOT_AUTORUN; break;
-                case 'U': if (option[0] == 'E') settings.boot_flags |= BOOT_24BIT; else settings.boot_flags &= ~BOOT_24BIT; break;
-                case 'V': { int v = (int)strtod(option, NULL); settings.pace = v < 0 ? 0 : v > 255 ? 255 : v; } break;
-                case 'H': settings.post_enable_long_mem = option[0] == 'E'; break;
-                case 'I': settings.post_enable_gpack_ok = option[0] == 'E'; break;
-                case 'J': settings.post_enable_checkclk = option[0] == 'E'; break;
-                case 'K': settings.post_enable_autommap = option[0] == 'E'; break;
-                case 'L': settings.dpll_mul = (int)strtod(option, NULL); break;
-                case 'M': settings.pmic_voltage = (int)(100.0 * strtod(option, NULL)); break;
-                case 'N': settings.cache_block_bits = toHex2(option, 1); break;
-                case 'O': settings.cache_index_bits = toHex2(option, 1); break;
-                }
-            } ;
-            break;
-        }
-    }
+    if (!I2C0Probe(EEPROM_I2C)) return -1;
+    I2C0SendCmd(EEPROM_I2C, a, 2, (const uint8_t*)&r, sizeof r);
+    WaitMSDMTimer(10);
+    if (!I2C0ReadCmd(EEPROM_I2C, a, 2, (uint8_t*)&back, sizeof back) || memcmp(&back, &r, sizeof r)) { printf("Board kind: the EEPROM did not read back what was written\n"); return -1; }
+    return 0;
 }

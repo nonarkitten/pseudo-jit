@@ -428,48 +428,40 @@ pjit_prefetch_count:
 	.weak	pjit_pace_gap
 	.weak	pjit_pace_wraps
 	.weak	pjit_pace_mb
-pjit_prefetch_pace:                     @ the pace governor's hook (cpu->prefetch_hook, chosen at start-up by the platform): the code below runs first, then it falls into the poll hook's own body
-	str	r4, [r5, #CPU_D0]               @ the 68000 PACE GOVERNOR (debug / compatibility build): the guest runs against a virtual MC68000 clock. D0 is parked (r4 is scratch here), the opcode's cycle estimate
-	ldr	r4, [r5, #CPU_IPC]              @ (pjit_pace_tab, one byte per opcode word) times pjit_pace_k (ARM cycles per 68000 cycle) advances the virtual clock pjit_pace_dl[0]; the instruction waits
-	ldrh	r3, [r4]                        @ until the PMU cycle counter has caught up with the clock as it stood after the PREVIOUS instruction; more than ~20 us behind = resync, never a catch-up burst.
-	movw	r2, #:lower16:pjit_pace_tab     @ N Z V C and GE (X) are live between guest instructions: saved in pjit_pace_dl[1] around the wait and restored. pjit_pace_dl[2] = the guest PC of the previous
-	movt	r2, #:upper16:pjit_pace_tab     @ instruction: a gap of more than ~134 ms between two instructions is logged in pjit_pace_gap (count, then {gap in ns, that instruction's PC} x 16): what stalled.
-	ldrb	r3, [r2, r3]
-	movw	r2, #:lower16:pjit_pace_k
-	movt	r2, #:upper16:pjit_pace_k
-	ldr	r2, [r2]
-	mul	r3, r3, r2
+pjit_prefetch_pace:                     @ the pace governor's hook (cpu->prefetch_hook, chosen at start-up by the platform), in place of the poll hook, whose test it ends with
+	.ifndef	PJIT_PIN_D0
+	.error	"the pace governor keeps D0 in r4 (PIN_D0=1)"
+	.endif
+	str	r4, [r5, #CPU_D0]               @ the 68000 PACE GOVERNOR: every interpreted instruction takes at least its MC68000 time, never less. D0 is parked (r4 is scratch here). The opcode is read
+	ldr	r4, [r5, #CPU_IPC]              @ once, here, and handed to the dispatch in r3 (pjit_prefetch_op): from chip RAM a second read would be a second bus cycle. The virtual clock
+	ldrh	r3, [r4]                        @ pjit_pace_dl[0] is when the previous instruction may end; the instruction waits for it, then adds its own estimate (pjit_pace_tab, one byte per opcode
+	movw	r1, #:lower16:pjit_pace_dl      @ word, times pjit_pace_k = ARM cycles per 68000 cycle). An instruction that took longer (a bus access is 6 clocks, a 68000's 4) moves the clock to
+	movt	r1, #:upper16:pjit_pace_dl      @ now: a lag is never paid back by running later ones faster. N Z V C and GE (X) are live between guest instructions: saved in pjit_pace_dl[1] around
+	mrs	r2, cpsr                        @ the wait. pjit_pace_dl[2] = the guest PC of the previous instruction; a gap of more than ~134 ms between two interpreted instructions is logged in
+	str	r2, [r1, #4]                    @ pjit_pace_gap (count, then {gap in ns, the previous instruction's PC} x 16).
 	lsr	r0, r4, #20                     @ an UNPACED megabyte (pjit_pace_mb, one byte per guest MB, set by the platform for a zone with the F flag: Fast RAM on the bus): run at the interpreter's own speed
-	movw	r2, #:lower16:pjit_pace_mb      @ (bit 31 of the cycle product carries the flag past the flag-free part of the hook)
+	movw	r2, #:lower16:pjit_pace_mb
 	movt	r2, #:upper16:pjit_pace_mb
 	ldrb	r0, [r2, r0]
-	orr	r3, r3, r0, lsl #31
-	movw	r1, #:lower16:pjit_pace_dl
-	movt	r1, #:upper16:pjit_pace_dl
-	ldr	r0, [r1]
-	mrs	r2, cpsr
-	str	r2, [r1, #4]
-	tst	r3, #0x80000000
-	mrcne	p15, 0, r0, c9, c13, 0          @ unpaced: no wait; the virtual clock follows the real one, so the paced code after it resumes without a lag burst
+	cmp	r0, #0
+	mrcne	p15, 0, r0, c9, c13, 0          @ unpaced: no wait; the virtual clock follows the real one, so the paced code after it starts from now
 	bne	4f
-1:	mrc	p15, 0, r4, c9, c13, 0
-	subs	r4, r4, r0                      @ now - clock
-	bge	2f                              @ at or past the clock: go
-	cmn	r4, #0x18000
-	bge	1b                              @ a short way ahead (under ~98 us, an instruction's worth): wait
-	add	r0, r0, r4                      @ implausibly far ahead: the guest was away for over half a wrap of the 32-bit counter (2.1 s), the signed difference flipped: resync (r4 = the gap, unsigned)
-	movw	r2, #:lower16:pjit_pace_wraps
-	movt	r2, #:upper16:pjit_pace_wraps
-	ldr	r3, [r2]
-	add	r3, r3, #1
-	str	r3, [r2]
-	b	5f
+	ldr	r0, [r1]
+	mrc	p15, 0, r4, c9, c13, 0
+	subs	r4, r4, r0                      @ now - clock, modulo 2^32: its SIGN says ahead or behind (mi / pl). A signed comparison (lt / ge, N != V) is wrong here: when the counter passes
+	bpl	2f                              @ 0x80000000 just after the clock, the difference is small but the subtraction overflows. The previous instruction took at least its 68000 time: no wait
+1:	cmn	r4, #0x18000
+	bmi	8f                              @ implausibly far ahead (more than ~98 us, over an instruction's worth): see 8
+	mrc	p15, 0, r4, c9, c13, 0
+	subs	r4, r4, r0
+	bmi	1b                              @ wait out the rest of the previous instruction's 68000 time; the clock stays exact
+	b	3f
 2:	cmp	r4, #0x5000
-	ble	3f
+	ble	9f
 	cmp	r4, #0x1000000
-	bgt	7f                              @ over ~17 ms behind is idle time (STOP waiting for a frame, a disk wait), not slowness: resync without counting it in the lag statistics
-	ldr	r2, [r1, #12]                   @ lag statistics (pjit_pace_dl[3..5], flags are saved): total us behind, number of resyncs, worst lag in ns: is the guest slower than the virtual 68000?
-	add	r2, r2, r4, lsr #10
+	bgt	7f                              @ over ~17 ms behind is idle time (STOP waiting for a frame, a disk wait) or the guest in translated code, not slowness
+	ldr	r2, [r1, #12]                   @ lag statistics for lags over ~20 us (pjit_pace_dl[3..7], flags are saved): total us behind, how many, the worst in ns, the PC of the instruction
+	add	r2, r2, r4, lsr #10             @ that took it, how many over 1 ms (about a video line's worth of frames lost every ~20 of them): is the guest slower than the virtual 68000?
 	str	r2, [r1, #12]
 	ldr	r2, [r1, #16]
 	add	r2, r2, #1
@@ -477,7 +469,7 @@ pjit_prefetch_pace:                     @ the pace governor's hook (cpu->prefetc
 	ldr	r2, [r1, #20]
 	cmp	r4, r2
 	strhi	r4, [r1, #20]
-	ldrhi	r2, [r5, #CPU_IPC]              @ the PC of the instruction that took the worst lag, and the number of lags over 1 ms (about a video line's worth of frames lost every ~20 of them)
+	ldrhi	r2, [r1, #8]
 	strhi	r2, [r1, #24]
 	movw	r2, #0x4240
 	movt	r2, #0x000F
@@ -485,31 +477,59 @@ pjit_prefetch_pace:                     @ the pace governor's hook (cpu->prefetc
 	ldrhi	r2, [r1, #28]
 	addhi	r2, r2, #1
 	strhi	r2, [r1, #28]
-	add	r0, r0, r4                      @ more than ~20 us behind: resync, no catch-up burst
-	cmp	r4, #0x1000000
-	bgt	5f                              @ ... and more than ~17 ms (a lost frame): log it (a nasty-blitter lockout of the bus is ~0.7 ms and routine)
-7:	add	r0, r0, r4
-	b	5f
-3:	add	r0, r0, r3
+9:	add	r0, r0, r4                      @ behind: the clock moves to now and this instruction's time counts from here
+3:	movw	r2, #:lower16:pjit_pace_tab
+	movt	r2, #:upper16:pjit_pace_tab
+	ldrb	r2, [r2, r3]
+	movw	r4, #:lower16:pjit_pace_k
+	movt	r4, #:upper16:pjit_pace_k
+	ldr	r4, [r4]
+	mla	r0, r2, r4, r0
 4:	str	r0, [r1]
-	ldr	r4, [r5, #CPU_IPC]
-	str	r4, [r1, #8]
-	ldr	r2, [r1, #4]
-	msr	cpsr_fs, r2
+	ldr	r2, [r5, #CPU_IPC]
+	str	r2, [r1, #8]
+	add	r2, r2, #2                      @ r2 = the address after the opcode, r3 = the opcode: what pjit_prefetch_op takes
+	ldr	r4, [r1, #4]
+	msr	cpsr_fs, r4
 	ldr	r4, [r5, #CPU_D0]
-	b	6f
+	.ifdef	PJIT_ITRACE
+	b	pjit_prefetch_poll              @ (the trace ring reads the opcode again)
+	.else
+	ldrb	r0, [r5, #CPU_IRQ_FLAG]         @ the poll hook's test
+	add	pc, pc, r0, lsl #2              @ pc reads as .+8: the entry below the nop
+	nop
+	b	pjit_prefetch_op
+	ldr	r0, [r5, #CPU_IPC]
+	.ifdef	PJIT_TIER
+	b	pjit_goto_slow
+	.else
+	b	pjit_blk_slow
+	.endif
+	.endif
+7:	add	r0, r0, r4                      @ resync; logged when over ~134 ms
+	cmp	r4, #0x8000000
+	bls	3b
+	str	r0, [r1]
+	b	5f
+8:	add	r0, r0, r4                      @ the guest was away from the interpreter for more than half a wrap of the 32-bit counter (2.1 s), the signed difference flipped: resync
+	str	r0, [r1]                        @ (r4 = the gap, unsigned)
+	movw	r2, #:lower16:pjit_pace_wraps
+	movt	r2, #:upper16:pjit_pace_wraps
+	ldr	r0, [r2]
+	add	r0, r0, #1
+	str	r0, [r2]
 5:	movw	r2, #:lower16:pjit_pace_gap     @ log: count, then the entry (gap, previous instruction's PC)
 	movt	r2, #:upper16:pjit_pace_gap
-	ldr	r3, [r2]
-	add	r3, r3, #1
-	str	r3, [r2]
-	and	r3, r3, #15
-	add	r2, r2, r3, lsl #3
+	ldr	r0, [r2]
+	add	r0, r0, #1
+	str	r0, [r2]
+	and	r0, r0, #15
+	add	r2, r2, r0, lsl #3
 	str	r4, [r2, #8]
-	ldr	r3, [r1, #8]
-	str	r3, [r2, #12]
-	b	4b
-6:
+	ldr	r0, [r1, #8]
+	str	r0, [r2, #12]
+	ldr	r0, [r1]
+	b	3b
 	.endif
 	.global	pjit_prefetch_poll
 pjit_prefetch_poll:                     @ the latch model's prefetch hook (cpu->prefetch_hook): one flag test per interpreted instruction; the flag set sends the PC to the router, which polls
@@ -557,6 +577,7 @@ pjit_prefetch:
 	.ifdef	PJIT_PIN_D0
 	ldr	r2, [r5, #CPU_IPC]              @ (r4 is D0: the PC lives in cpu->ipc between the handlers)
 	ldrh	r3, [r2], #2            @ the opcode; r2 now = the first extension word
+pjit_prefetch_op:                       @ the pace governor's way in: it has read the opcode (r3; r2 = the address after it)
 	add	r0, r5, #ARENA_EXT
 	ldrb	r0, [r0, r3]
 	str	r2, [r5, #CPU_IPC]
@@ -601,7 +622,7 @@ pjit_i_chk_pc:
 	and	r1, r0, #1
 	add	pc, pc, r1, lsl #2      @ pc reads as .+8: the entry below the nop
 	nop
-	bx	lr                      @ even
+	b	pjit_i_chk_xlat         @ even
 	mov	r2, #1                  @ odd: r0 = the fault address,
 	str	r2, [r5, #(CPU_SPILL + 28)]     @ (tell the exception entry cpu->ipc already holds the PC)
 	mov	r1, #0x18               @ r1 = program space, read (see pjit_i_deliver)
@@ -617,6 +638,30 @@ pjit_i_chk_pc:
 	str	r2, [r5, #(CPU_SPILL + 28)]     @ (tell the exception entry r4 already holds the PC)
 	mov	r1, #0x18               @ r1 = program space, read (see pjit_i_deliver)
 	svc	#VEC_ADDRESSERR
+	.endif
+
+	.ifdef	PJIT_PIN_D0
+@ An even new PC (r0) in a megabyte the platform's translate map (cpu->xlat) marks goes to the router, which runs it from a block or the slot cache (or comes back here for a target
+@ below cpu->dr_threshold); anything else is interpreted on. Without it, code the interpreter entered (exec's jump table in chip RAM, a JMP from there into the ROM) would run
+@ interpreted, and paced, until the next interrupt took it through the router. Without a map the threshold alone decides, and the interpreter goes on. Flag-free; E=BE.
+pjit_i_chk_xlat:
+	ldr	r2, [r5, #CPU_XLAT]
+	clz	r1, r2
+	lsr	r1, r1, #5              @ 1: no map
+	add	pc, pc, r1, lsl #2
+	nop
+	b	1f
+	bx	lr
+1:	rev	r2, r2                  @ (the pointer was stored little-endian; the halfword is only tested for 0)
+	lsr	r1, r0, #20
+	add	r2, r2, r1, lsl #1
+	ldrh	r2, [r2]
+	clz	r2, r2
+	lsr	r2, r2, #5              @ 1: not translated
+	add	pc, pc, r2, lsl #2
+	nop
+	b	pjit_goto
+	bx	lr
 	.endif
 
 @ ---- interpretive-mode exceptions ----------------------------------------------

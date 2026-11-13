@@ -59,20 +59,21 @@ void UART0Write(int c) {
     UART0_THR->BYTE = (uint8_t)c;
 }
 
-/* Receive side: the FIFO is drained into a ring by the UART interrupt (INTC 72) and, when interrupts are not on yet, from every read. Three ESC in a row
- * (nothing between them, no more than 1 s apart) set `uart_break`: whatever is running looks at it at its safe points and returns to the menu. The check is off
- * while an xmodem transfer runs (three 0x1B in a row are possible in binary data). */
+/* Receive side: the FIFO is drained into a ring by the UART interrupt (INTC 72) and, when interrupts are not on yet, from every read. Any ESC sets `uart_esc_seen`
+ * (the boot looks at it before it starts PJIT); three ESC in a row (nothing between them) set `uart_break`: whatever is running looks at it at its safe points and
+ * returns to the menu. Both checks are off while an xmodem transfer runs (0x1B bytes are possible in binary data). */
 #define RING 512
 static volatile uint8_t ring[RING];
 static volatile uint16_t rhead, rtail;
 volatile int uart_break;
+volatile int uart_esc_seen;
 volatile int uart_break_enable = 1;
 static uint8_t esc_run;
 
 static void rx_drain(void) {
     while(UART0_LSR->BIT.RX_FIFO_E) {
         uint8_t c = UART0_RHR->BYTE;
-        if(c == 0x1B) { if(++esc_run >= 3 && uart_break_enable) { uart_break = 1; esc_run = 0; rhead = rtail = 0; continue; } }
+        if(c == 0x1B && uart_break_enable) { uart_esc_seen = 1; if(++esc_run >= 3) { uart_break = 1; esc_run = 0; rhead = rtail = 0; continue; } }
         else esc_run = 0;
         uint16_t n = (rhead + 1) % RING;
         if(n != rtail) { ring[rhead] = c; rhead = n; }
@@ -94,6 +95,14 @@ static void drain_masked(void) {
 int UART0Ready(void) {
     drain_masked();
     return rhead != rtail;
+}
+
+void UART0Flush(void) {
+    drain_masked();
+    rtail = rhead;
+    uart_break = 0;
+    uart_esc_seen = 0;
+    esc_run = 0;
 }
 
 int UART0Getkey(void) {

@@ -24,6 +24,8 @@
  */
 #include <stdio.h>
 #include <stdint.h>
+#include <string.h>
+#include "init.h"
 
 /* These definitions are for xmodem protocol. */
 #define SOH     0x01
@@ -77,7 +79,7 @@ static unsigned short crc16_ccitt(const uint8_t *buf, uint32_t len, uint16_t ini
 
 static int readchar(int timeout) {
     uint32_t ticks = timeout;
-    int c;
+    int c = -1;
     while(ticks--) {
         c = UART0Getkey();
         if(c != -1) break;
@@ -93,18 +95,6 @@ static int readblock(uint8_t * buffer, uint32_t len) {
         *buffer++ = c;
     }
     return (len == -1U);
-}
-
-static int getseq(void) {
-    uint8_t seq[2];
-    if(!readblock(seq, 2)) return -1;
-    if(0xFF != (seq[0] + seq[1])) return -1;
-    else return seq[0];
-}
-
-static int getcrc(void) {
-    uint16_t crc;
-    return (readblock((uint8_t*)&crc, 2)) ? crc : -1;
 }
 
 static void flushinput(void) {
@@ -147,12 +137,10 @@ static uint32_t LoadXMODEM_raw(uint32_t start) {
     uint8_t xbuff[1030]; /* 1024 for XModem 1k + 3 head chars + 2 crc + nul */
 
     int trychar = 'C';
-    uint32_t len = 0, block, rem;
+    uint32_t len = 0, block;
     int32_t retries = 25;
-    int calc_crc, read_crc;
     uint8_t packet = 1;
     const char *err = "XMODEM error";
-    int seq;
 
     printf("Beginning XMODEM-1K");
     while(retries--) {
@@ -198,7 +186,6 @@ static uint32_t LoadXMODEM_raw(uint32_t start) {
     printf("\n[XFER] %s (last packet %02X)\n", err, packet);
     return 0;
 }
-extern volatile int uart_break_enable;
 uint32_t LoadXMODEM(uint32_t start) {
     uart_break_enable = 0;                  /* three 0x1B in a row can occur in the data */
     uint32_t n = LoadXMODEM_raw(start);

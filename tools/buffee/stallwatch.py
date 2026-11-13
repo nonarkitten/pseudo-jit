@@ -57,7 +57,7 @@ if b"Ready" not in buf:
     sys.exit("no bootloader menu")
 time.sleep(1.5)
 s.read(20000)
-s.write(b"L\r")
+s.write(b"2\r")  # menu 2: run a bundle sent over XMODEM
 time.sleep(0.5)
 s.read(20000)
 data = open(a.bundle, "rb").read()

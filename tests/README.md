@@ -67,4 +67,6 @@ with the board in it; most print one summary line and a `PASS`/`FAIL`.
 | `buffee_chips`, `buffee_floppy`, `buffee_peekrom` | bring-up probes: chip IDs and register stability, the floppy path without Kickstart, ROM words through the window |
 | `buffee_speed`, `buffee_kspeed`, `buffee_bus` | throughput by access type; guest loops on the bus vs in host DRAM; a bus-cycle generator for logic-analyser captures |
 | `buffee_shotgun` | the payload of `tools/buffee/shotgun.py`: GreenPAK and GPMC edits applied live while a read/write test runs |
+| `buffee_gpreset` | whether the board can power-cycle its GreenPAK through ball M1 (a v0.8 can, a v0.6 cannot): registers against the NVM after M1 pulses |
+| `buffee_boardkind` | writes the bootloader's board-kind record in the EEPROM (`-DKIND=0` swapper, `1` straight), to test how a wrong record is caught |
 | `buffee_blitdur`, `buffee_crumbs`, `buffee_reroll` | blit duration under CPU polling; the post-mortem ring that survives a watchdog reset; which board-side piece holds per-boot state |

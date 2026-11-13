@@ -3,8 +3,7 @@
   run_bench.py BUNDLE_DIR [--out DIR] [--region 0] [--seconds 420] [test ...]
 BUNDLE_DIR holds the bundles of `make ONBUFFEE=1 VARIANT=onbuffee onbuffee-all` (build/onbuffee/buffee). Without test names all of them run
 (the default list below). Each console goes to DIR/<test>.txt (default local/bench); the last line printed per test says whether the report ended in PASS.
-The board must be at the bootloader menu or running a payload that answers ESC x3 (never right after a reset: the first 30 ms are the emergency-erase
-window). The settings are the bootloader's RAM-only ones (tools/buffee/run_region.py): no guest RAM region, the benchmarks' guest memory is DDR of their own.
+The board must be at the bootloader menu, booting, or running a payload that answers ESC x3. The settings are the bootloader's RAM-only ones (tools/buffee/run_region.py): no guest RAM region, the benchmarks' guest memory is DDR of their own.
 """
 
 import argparse, os, subprocess, sys, time

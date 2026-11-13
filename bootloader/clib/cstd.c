@@ -1,5 +1,5 @@
 /*
- * cstd.c -- the few C library functions the bootloader needs: memcpy, memmove, memset, memcmp, strcmp, atoi, and a console gets / putchar.
+ * cstd.c -- the few C library functions the bootloader needs: memcpy, memmove, memset, memcmp, strcmp, atoi, and a console getsn / putchar.
  *
  *  Created on: Apr. 14, 2021
  *      Author: renee.cousins
@@ -90,25 +90,26 @@ int putchar ( int character ) {
 }
 
 
-char * gets (char * str) {
+/* A line from the console into str (at most size - 1 characters, the rest of a longer line is dropped), echoed when SetEcho(1); backspace edits. */
+char * getsn (char * str, int size) {
     int i = 0;
     char c;
-    do {
+    for (;;) {
         c = _getchar();
-        if(c == '\b') {
+        if(c == '\b' || c == 0x7F) {
             if(i) {
                 if(echo_on) printf("\b \b");
                 i--;
             }
-        } else {
-            if(c == '\n' || c == '\r') {
-                putchar('\n');
-                c = 0;
-            }
-            if(c && echo_on) putchar(c);
+        } else if(c == '\n' || c == '\r') {
+            putchar('\n');
+            break;
+        } else if(i < size - 1) {
+            if(echo_on) putchar(c);
             str[i++] = c;
         }
-    } while(c);
+    }
+    str[i] = 0;
     return str;
 }
 

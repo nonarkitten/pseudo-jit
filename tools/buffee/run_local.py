@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Runs a PJIT payload bundle on Buffee with the UART (FTDI) plugged straight into this machine (no bridge BBB):
   run_local.py [--port /dev/cu.usbserial-XXXX] bundle.lzt [seconds to watch, default 60]
-Power-cycle the board first: ESC x3 is sent until the bootloader's menu ('Ready') shows, then L + the bundle,
+Power-cycle the board first: ESC x3 is sent until the bootloader's menu ('Ready') shows, then menu 2 + the bundle,
 then the payload's output is streamed.
 """
 
@@ -25,7 +25,7 @@ if "Ready" not in buf:
     sys.exit("no menu (power-cycle the board; a running payload cannot be interrupted)")
 time.sleep(1.5)
 s.read(20000)
-s.write(b"L\r")
+s.write(b"2\r")  # menu 2: run a bundle sent over XMODEM
 time.sleep(0.5)
 s.read(20000)
 data = open(a.bundle, "rb").read()

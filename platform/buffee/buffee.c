@@ -10,6 +10,7 @@
 #include "buffee.h"
 #include "pjit.h"
 #include "mem_be.h"
+#include "blk.h"
 
 #define REG32(a)        (*(volatile uint32_t *)(a))
 #define UART0_BASE      0x44E09000u
@@ -62,14 +63,31 @@ uint32_t bbb_pmu_event(int n)
 static uint32_t pagetable[4096] __attribute__((aligned(16384)));
 #define SEC_DEVICE   0x0C06u            // AP=11, B=1
 #define SEC_DDR      0x1C0Eu            // TEX=001 C=1 B=1 (write-back, write-allocate)
+#define BOOT_NOSWAP  8u                 // bootinfo boot_flags (bootloader/inc/config.h): the board has no byte swapper
+#define BUS_DOMAIN   (1u << 5)          // section descriptor domain 1: the Amiga's address space on a board without the byte swapper
+#define DOMAIN_MASK  0x1E0u
+#define DACR_NOSWAP  0x00000001u        // domain 0 client, every other domain no access: an access in domain 1 is a domain fault
+#define BUS_ALIAS    0x02000000u        // the GPMC window, identity, domain 0: how the emulation of a trapped access reaches the bus
+
+// A board without the byte-swapper board meets the Amiga's data lines straight (bootloader/hal/amiga.c). Its sections of the Amiga's address space are then in domain 1,
+// where every access faults and buffee_bus_emulate() performs it with the bytes in the Amiga's order.
+int buffee_noswap;
+uint32_t buffee_bus_traps, buffee_bus_traps_c;     // accesses emulated: all of them (the fast path in boot.S counts too), and those buffee_bus_emulate() did
+static struct { uint32_t ins, psr, n; } bus_c_forms[32];   // the instruction words that came to buffee_bus_emulate() (with SPSR's E and mode bits): when full, a new one replaces the rarest
+uint32_t buffee_bus_align;                                  // of them, alignment faults (a word or long at an address the ARM does not allow)
+static uint32_t sec_bus = SEC_DEVICE;   // the descriptor bits of a section of the Amiga's address space
 
 static void smc_regions_init(void);
 static void smc_xlat_rom(int on);
 static void smc_xlat_low(int on);
 static void mmu_init(void)
 {
+    const volatile uint8_t *bi = (const volatile uint8_t *)0x9F5FFF00u;
+
+    buffee_noswap = *(const volatile uint32_t *)bi == 0x544F4F42u && (bi[9] & BOOT_NOSWAP);
+    if (buffee_noswap) sec_bus = SEC_DEVICE | BUS_DOMAIN;
     for (uint32_t i = 0; i < 4096; i++) pagetable[i] = 0;
-    for (uint32_t i = 0x000; i < 0x020; i++) pagetable[i] = (((i & 0xF) | 0x020) << 20) | SEC_DEVICE;   // 0x01000000-0x01FFFFFF wraps onto the first 16 MB: a 68000 has 24 address lines
+    for (uint32_t i = 0x000; i < 0x020; i++) pagetable[i] = (((i & 0xF) | 0x020) << 20) | sec_bus;   // 0x01000000-0x01FFFFFF wraps onto the first 16 MB: a 68000 has 24 address lines
     for (uint32_t i = 0x020; i < 0x030; i++) pagetable[i] = (i << 20) | SEC_DEVICE;
     static const uint16_t periph[] = { 0x400, 0x401, 0x402, 0x403, 0x44E, 0x480, 0x481, 0x482, 0x500 };
     for (unsigned k = 0; k < sizeof periph / sizeof periph[0]; k++) pagetable[periph[k]] = ((uint32_t)periph[k] << 20) | SEC_DEVICE;
@@ -83,6 +101,7 @@ static void mmu_init(void)
     CP15Ttb0Set((uint32_t)pagetable);
     CP15TtbCtlTtb0Config();
     CP15DomainAccessClientSet();
+    if (buffee_noswap) __asm__ volatile ("mcr p15, 0, %0, c3, c0, 0\n isb" :: "r"(DACR_NOSWAP) : "memory");
     CP15TlbInvalidate();
     CP15MMUEnable();
     CP15ICacheEnable();
@@ -175,7 +194,7 @@ uint32_t buffee_maprom(uint32_t size)
     CP15DCacheCleanFlushBuff(BUFFEE_MAPROM_PHYS - 0x100000u, 0x100000u);
     pagetable[0x00E] = pagetable[0x01E] = ((BUFFEE_MAPROM_PHYS - 0x100000u) & 0xFFF00000u) | SEC_DDR;
 #else
-    pagetable[0x00E] = pagetable[0x01E] = (0x02Eu << 20) | SEC_DEVICE;                     // the real bus: a Zorro II board in the machine configures itself here ($E80000); with none the pulled-up bus reads high nibbles of F, as the page of 0xFF did
+    pagetable[0x00E] = pagetable[0x01E] = (0x02Eu << 20) | sec_bus;                     // the real bus: a Zorro II board in the machine configures itself here ($E80000); with none the pulled-up bus reads high nibbles of F, as the page of 0xFF did
 #endif
     CP15DCacheCleanFlushBuff((uint32_t)&pagetable[0x00E], 4); CP15DCacheCleanFlushBuff((uint32_t)&pagetable[0x01E], 4);
     CP15DCacheCleanFlushBuff(BUFFEE_MAPROM_PHYS, 0x100000u);
@@ -222,6 +241,9 @@ unsigned buffee_ipl(void)
 uint32_t buffee_last_pc, buffee_last_r4, sample_stop, sample_verbose; volatile uint32_t buffee_sample_stopped;
 static volatile uint32_t sample_period;               // cycles between PC samples (0 = off)
 static volatile uint32_t sample_n;
+static uint32_t prof_pace, prof_other, prof_slot, prof_blk, prof_mb[17];   // the sampler's tally: where the host was (the pace governor's hook, other host code: the interpreter, C, the
+static struct { uint32_t pc, n; } prof_top[8];                            // runtime; the slot cache; blocks), the guest megabyte behind it (16: above 16 MB), the commonest host PCs outside the caches
+extern const char pjit_prefetch_pace[] __attribute__((weak)), pjit_prefetch_poll[] __attribute__((weak));
 uint32_t buffee_irq_pc, buffee_irq_r4;                             // the interrupted host PC (set by the stub in boot.S)
 
 /// The guest PC behind a host PC: inside the slot cache the tag of its line and the slot offset give it back (HOST2GUEST in runtime.s); elsewhere the interpreter's.
@@ -234,6 +256,70 @@ static uint32_t guest_pc_of(uint32_t host)
     }
     return __builtin_bswap32(cpu_state.ipc);
 }
+
+/// One sample of the PC sampler into the tally the ESC report prints (PROF).
+static void prof_note(uint32_t h)
+{
+    uint32_t base = (uint32_t)cpu_state.cache_data, g, k, low = 0;
+
+    if (h - base < DR_CACHE_BYTES) { prof_slot++; g = guest_pc_of(h); }
+    else if (pjit_blk.bc.ring && h - pjit_blk.bc.ring <= pjit_blk.bc.mask) { prof_blk++; return; }
+    else {
+        if (pjit_prefetch_pace && h - (uint32_t)pjit_prefetch_pace < (uint32_t)(pjit_prefetch_poll - pjit_prefetch_pace)) prof_pace++;
+        else prof_other++;
+        g = __builtin_bswap32(cpu_state.ipc);
+        for (k = 0; k < 8; k++) {
+            if (prof_top[k].n && prof_top[k].pc == h) break;
+            if (prof_top[k].n < prof_top[low].n) low = k;
+        }
+        if (k == 8) { k = low; prof_top[k].pc = h; }
+        prof_top[k].n++;
+    }
+    prof_mb[(g >> 20) < 16 ? g >> 20 : 16]++;
+}
+
+#ifdef FREEZEWATCH
+/// The freeze watch (-DFREEZEWATCH=<cycles between ticks>, on the PC sampler's interrupt, which still comes while the guest takes none): more than 200 ms without an exception
+/// delivered is a freeze (the pointer stops). Each is kept with the cycle counter where it began (the last delivery) and ended, where the host and the guest were at its first
+/// tick, the SR, the level the runtime latched against the IPL pins, and the commonest host PCs while it lasted. A deliverable level on the pins that differs from the latched
+/// one while no GPIO edge is waiting is a missed edge, counted on its own; a tick more than three periods after the previous one means the host interrupt was masked that long.
+#define FW_FREEZE_CYCLES 200000000u
+static struct { uint32_t c_begin, c_end, ticks, host, guest, sr, latched, pins, flag, intena, intreq; } fw_log[8];
+static uint32_t fw_n, fw_last_count, fw_last_c, fw_frozen, fw_missed, fw_missed_c, fw_late, fw_late_max, fw_prev_c;
+static struct { uint32_t pc, n; } fw_top[8];
+
+static void freeze_tick(uint32_t h)
+{
+    uint32_t now = bbb_pmu_cycles(), count = pjit_dlog_count, pins = buffee_ipl(), latched = cpu_state.irq_level & 0xFF;
+    uint32_t sr = __builtin_bswap16(cpu_state.sr), k, low = 0;
+
+    if (fw_prev_c && now - fw_prev_c > 3u * (FREEZEWATCH)) { fw_late++; if (now - fw_prev_c > fw_late_max) fw_late_max = now - fw_prev_c; }
+    fw_prev_c = now;
+    if (pins && pins != latched && (pins == 7 || pins > ((sr >> 8) & 7)) && !(REG32(GPIO2 + G_IRQSTATUS0) & IPL_MASK)) { fw_missed++; fw_missed_c = now; }
+    if (count != fw_last_count) {
+        if (fw_frozen) { fw_log[(fw_n - 1) & 7].c_end = now; fw_frozen = 0; }
+        fw_last_count = count;
+        fw_last_c = now;
+        return;
+    }
+    if (!fw_frozen && now - fw_last_c > FW_FREEZE_CYCLES) {
+        k = fw_n++ & 7;
+        fw_frozen = 1;
+        fw_log[k].c_begin = fw_last_c; fw_log[k].c_end = 0; fw_log[k].ticks = 0; fw_log[k].host = h; fw_log[k].guest = guest_pc_of(h); fw_log[k].sr = sr;
+        fw_log[k].latched = latched; fw_log[k].pins = pins; fw_log[k].flag = cpu_state.irq_flag & 0xFF;
+        fw_log[k].intena = buffee_noswap ? 0 : __builtin_bswap16(*(volatile uint16_t *)0xDFF01C);       // (no swapper: the Amiga's space faults in the host's own modes)
+        fw_log[k].intreq = buffee_noswap ? 0 : __builtin_bswap16(*(volatile uint16_t *)0xDFF01E);
+    }
+    if (!fw_frozen) return;
+    fw_log[(fw_n - 1) & 7].ticks++;
+    for (k = 0; k < 8; k++) {
+        if (fw_top[k].n && fw_top[k].pc == h) break;
+        if (fw_top[k].n < fw_top[low].n) low = k;
+    }
+    if (k == 8) { k = low; fw_top[k].pc = h; fw_top[k].n = 0; }
+    fw_top[k].n++;
+}
+#endif
 
 /// Starts the PC sampler: the ARM cycle counter's second event counter overflows every `cycles` and raises INTC line 3; the ISR prints where the guest is.
 void buffee_sampler_start(uint32_t cycles)
@@ -259,6 +345,10 @@ unsigned buffee_irq_c(void)
         __asm__ volatile("mcr p15, 0, %0, c9, c13, 2" :: "r"(-sample_period));
         uint32_t h = buffee_irq_pc; ++sample_n;
         buffee_last_pc = h; buffee_last_r4 = buffee_irq_r4;
+        prof_note(h);
+#ifdef FREEZEWATCH
+        freeze_tick(h);
+#endif
         if (sample_stop && sample_n >= sample_stop) { buffee_sample_stopped = 1; lvl = 8; }        // ends pjit_run() like a RESET: the caller inspects the machine
         else lvl = buffee_ipl();
         if (sample_verbose) { printf("[PC %u] r4 %08X guest %08X host %08X\n", (unsigned)sample_n, buffee_irq_r4, guest_pc_of(h), h); }
@@ -344,6 +434,7 @@ static void blt_imm(uint32_t a)
 static inline int wlog_keep(uint32_t a) { uint32_t r = a & 0x1FE; return buffee_wlog_all || (r >= 0x040 && r < 0x060) || r == 0x096; }
 void buffee_trace_custom(void)
 {
+    if (buffee_noswap) { printf("custom-chip write trace: not on a board without the byte swapper (its accesses are trapped already)\n"); return; }
     pagetable[0x300] = (0x02Du << 20) | SEC_DEVICE;                   // an alias of the custom-chip section that can be written
     pagetable[0x00D] = pagetable[0x01D] = (0x02Du << 20) | 0x8C06u;   // privileged read-only: every write is a permission fault that buffee_unaligned() performs through the alias and logs
     CP15DCacheCleanFlushBuff((uint32_t)&pagetable[0], 0x400 * 4);
@@ -434,6 +525,8 @@ static void smc_regions_init(void)
         if (bad || smc_nregion_mb + (bus ? 0 : mb) + meta_mb > POOL_MAX_MB) break;
         for (uint32_t i = 0; i < mb; i++) {
             if (!bus) pagetable[base + i] = ((POOL_BASE >> 20) + smc_nregion_mb + i) << 20 | SEC_DDR;
+            else if (buffee_noswap) pagetable[base + i] &= ~DOMAIN_MASK;    // without the byte swapper: RAM that only the CPU reaches keeps the CPU's own byte order consistently (a word
+                                                                            // stored reversed reads back reversed, a byte on the other lane reads back from it), so it needs no trap
             if (!(r[k].flags & 1)) smc_xlat[base + i] = ntrk + i + 1;          // flags bit 0 = interpret only: the memory is there, but its code is never translated (and so runs at the pace governor's speed)
             smc_inv[ntrk + i] = base + i;
             if (r[k].flags & 4) pjit_pace_mb[base + i] = 1;                    // flags bit 2 = unpaced (Fast RAM): interpreted at full speed, not at 68000 pace
@@ -466,7 +559,7 @@ static uint32_t *smc_pte(uint32_t a)                          // the small-page 
         uint32_t *t = smc_l2[smc_l2used++];
         for (uint32_t i = 0; i < 256; i++) t[i] = (base + (i << 12)) | attr;
         CP15DCacheCleanFlushBuff((uint32_t)t, 1024);
-        pagetable[s] = ((uint32_t)t & ~0x3FFu) | 1u;
+        pagetable[s] = ((uint32_t)t & ~0x3FFu) | (d & DOMAIN_MASK) | 1u;            // (a coarse descriptor keeps the section's domain)
         CP15DCacheCleanFlushBuff((uint32_t)&pagetable[s], 4);
         CP15TlbInvalidate();
     }
@@ -556,6 +649,7 @@ void buffee_smc_report(void) { printf("SMC: %u write faults in protected pages (
     printf("\n");
 }
 static int buffee_unaligned_inner(uint32_t *f, uint32_t spsr, uint32_t dfsr, uint32_t dfar);
+static uint32_t dump_rd32(uint32_t a);
 extern uint32_t pjit_trace[] __attribute__((weak)), pjit_trace_pos __attribute__((weak));
 extern uint32_t pjit_trace_frz __attribute__((weak));
 extern uint16_t pjit_xmem[320] __attribute__((weak));
@@ -573,6 +667,7 @@ uint32_t buffee_abort_bus, buffee_abort_addr, buffee_abort_last_pc, buffee_abort
 static int buffee_guest_abort(uint32_t *f, uint32_t spsr, uint32_t dfsr, uint32_t dfar)
 {
     if ((spsr & 0x1F) != 0x1F) return 0;                                      // not the guest's world (System mode)
+    if (f[2 + 5] != (uint32_t)pjit_arena.dt) return 0;                        // r5 is not the dispatch table: host code (a test payload's own C), not a guest
     uint32_t hpc = f[15] - 8;
     if (hpc - (uint32_t)pjit_exc_begin < (uint32_t)(pjit_exc_end - pjit_exc_begin)) return 0;     // a fault while delivering one
     int addr = (dfsr & 0x40F) == 1;                                           // alignment fault = an odd word / long access
@@ -602,7 +697,7 @@ int buffee_unaligned(uint32_t *f, uint32_t spsr, uint32_t dfsr, uint32_t dfar)
     if (!r) r = buffee_guest_abort(f, spsr, dfsr, dfar);
 #endif
     if (!r) { rawh("\r\n[ABT] dfsr ", dfsr); rawh("dfar ", dfar); rawh("pc ", f[15] - 8); rawh("ins ", *(volatile uint32_t *)(f[15] - 8)); rawh("spsr ", spsr); rawh("sp ", f[0]); rawc('\r'); rawc('\n');
-        if (f[0] < 0x200000) { rawh("guest stack:", 0); for (uint32_t k = 0; k < 24; k++) { volatile uint16_t *q = (volatile uint16_t *)(f[0] + 4 * k); rawh("", (uint32_t)__builtin_bswap16(q[0]) << 16 | __builtin_bswap16(q[1])); } rawc('\r'); rawc('\n'); }
+        if (f[0] < 0x200000) { rawh("guest stack:", 0); for (uint32_t k = 0; k < 24; k++) { volatile uint16_t *q = (volatile uint16_t *)(f[0] + 4 * k); rawh("", dump_rd32((uint32_t)q)); } rawc('\r'); rawc('\n'); }
         if (&pjit_trace_pos && pjit_trace_pos) { uint32_t pos = __builtin_bswap32(pjit_trace_pos); rawh("last guest PC / opcode (oldest first):", 0); rawc('\r'); rawc('\n');
             for (int k = 40; k >= 1; k--) { uint32_t o = (pos - 8u * k) & 0x7FFFF; rawh("  ", __builtin_bswap32(pjit_trace[o / 4])); rawh("", __builtin_bswap32(pjit_trace[o / 4 + 1]) & 0xFFFF); if (k % 4 == 1) { rawc('\r'); rawc('\n'); } } }
         rawh("exceptions delivered (vector, guest PC), oldest first:", 0); rawc('\r'); rawc('\n');
@@ -611,11 +706,11 @@ int buffee_unaligned(uint32_t *f, uint32_t spsr, uint32_t dfsr, uint32_t dfar)
           uint32_t pos = __builtin_bswap32(pjit_flog[0]);
           for (int j = 6; j >= 1; j--) { uint32_t e = 1 + 4 * (((pos / 16) - j) & 15); uint32_t sp = __builtin_bswap32(pjit_flog[e]);
               rawh(" sp", sp); rawh("sr", __builtin_bswap32(pjit_flog[e + 1])); rawh("push", __builtin_bswap32(pjit_flog[e + 2])); rawh("", __builtin_bswap32(pjit_flog[e + 3]));
-              if (sp < 0x200000) { volatile uint16_t *q = (volatile uint16_t *)sp; rawh("| now", (uint32_t)__builtin_bswap16(q[0]) << 16 | __builtin_bswap16(q[1])); rawh("", (uint32_t)__builtin_bswap16(q[2]) << 16 | __builtin_bswap16(q[3])); }
+              if (sp < 0x200000) { volatile uint16_t *q = (volatile uint16_t *)sp; rawh("| now", dump_rd32((uint32_t)q)); rawh("", dump_rd32((uint32_t)q + 4)); }
               rawc('\r'); rawc('\n'); } }
-        { rawh("guest 0x00-0x40:", 0); for (uint32_t a = 0; a < 0x40; a += 4) { volatile uint16_t *q = (volatile uint16_t *)a; rawh("", (uint32_t)__builtin_bswap16(q[0]) << 16 | __builtin_bswap16(q[1])); } rawc('\r'); rawc('\n'); }
-        { uint32_t usp = __builtin_bswap32(cpu->usp), ssp = __builtin_bswap32(cpu->ssp); rawh("SR", __builtin_bswap16(cpu->sr)); rawh("USP", usp); rawh("SSP", ssp); rawc('\r'); rawc('\n');
-          for (int w = 0; w < 2; w++) { uint32_t a = w ? ssp : usp; if (a < 0x200000) { rawh(w ? "SSP stack:" : "USP stack:", 0); for (uint32_t k = 0; k < 12; k++) { volatile uint16_t *q = (volatile uint16_t *)(a + 4 * k); rawh("", (uint32_t)__builtin_bswap16(q[0]) << 16 | __builtin_bswap16(q[1])); } rawc('\r'); rawc('\n'); } } }
+        { rawh("guest 0x00-0x40:", 0); for (uint32_t a = 0; a < 0x40; a += 4) { volatile uint16_t *q = (volatile uint16_t *)a; rawh("", dump_rd32((uint32_t)q)); } rawc('\r'); rawc('\n'); }
+        { uint32_t usp = __builtin_bswap32(cpu_state.usp), ssp = __builtin_bswap32(cpu_state.ssp); rawh("SR", __builtin_bswap16(cpu_state.sr)); rawh("USP", usp); rawh("SSP", ssp); rawc('\r'); rawc('\n');
+          for (int w = 0; w < 2; w++) { uint32_t a = w ? ssp : usp; if (a < 0x200000) { rawh(w ? "SSP stack:" : "USP stack:", 0); for (uint32_t k = 0; k < 12; k++) { volatile uint16_t *q = (volatile uint16_t *)(a + 4 * k); rawh("", dump_rd32((uint32_t)q)); } rawc('\r'); rawc('\n'); } } }
         rawh("regs r0-r12:", 0); for (int k = 2; k < 15; k++) rawh("", f[k]); rawc('\r'); rawc('\n'); }
     return r;
 }
@@ -665,8 +760,166 @@ static int buffee_smc_fault(uint32_t *f, uint32_t dfsr, uint32_t dfar)   // 0: n
     if (wb) sr(f, rn, nb);
     return 1;
 }
+// ---- boards without the byte swapper: every access to the Amiga's address space, emulated ---------------------------------------------
+/// Whether a (faulting) instruction's condition holds for the flags in spsr.
+static int cond_passed(uint32_t ins, uint32_t spsr)
+{
+    uint32_t n = spsr >> 31, z = spsr >> 30 & 1, c = spsr >> 29 & 1, v = spsr >> 28 & 1;
+
+    switch (ins >> 28) {
+    case 0: return z;               case 1: return !z;
+    case 2: return c;               case 3: return !c;
+    case 4: return n;               case 5: return !n;
+    case 6: return v;               case 7: return !v;
+    case 8: return c && !z;         case 9: return !c || z;
+    case 10: return n == v;         case 11: return n != v;
+    case 12: return !z && n == v;   case 13: return z || n != v;
+    default: return 1;
+    }
+}
+
+/// The offset of a load / store with a shifted register (bits 11:0): 0 for a form that is not one.
+static int shifted_offset(uint32_t *f, uint32_t ins, uint32_t spsr, uint32_t *off)
+{
+    uint32_t m = gr(f, ins & 15), sh = ins >> 7 & 31;
+
+    if ((ins & 15) == 15 || (ins & 0x10)) return 0;
+    switch (ins >> 5 & 3) {
+    case 0: *off = m << sh; break;
+    case 1: *off = sh ? m >> sh : 0; break;
+    case 2: *off = sh ? (uint32_t)((int32_t)m >> sh) : (uint32_t)((int32_t)m >> 31); break;
+    default: *off = sh ? (m >> sh | m << (32 - sh)) : ((spsr >> 29 & 1) << 31 | m >> 1); break;      // ROR, RRX
+    }
+    return 1;
+}
+
+/* The bus as a board with the swapper would show it. Straight, a little-endian halfword load at an even address is the 68000's word (the byte at the even address in its
+   high half); a byte is written at address ^ 1, whose strobe the no-swapper GreenPAK image raises. `be` is the faulting code's data endianness (CPSR.E: the guest's code is
+   big-endian, the platform's C little-endian): a load returns what that code would have read from memory in the Amiga's byte order, a store writes what it meant. */
+static inline uint16_t bus_rd16(uint32_t a) { return *(volatile uint16_t *)(BUS_ALIAS | (a & 0xFFFFFEu)); }
+static inline void bus_wr16(uint32_t a, uint16_t v) { *(volatile uint16_t *)(BUS_ALIAS | (a & 0xFFFFFEu)) = v; }
+
+static uint32_t bus_load(uint32_t a, int size, int be)
+{
+    uint32_t v;
+
+    if (size == 1) { v = bus_rd16(a); return (a & 1) ? (v & 0xFF) : (v >> 8); }
+    v = size == 2 ? bus_rd16(a) : (uint32_t)bus_rd16(a) << 16 | bus_rd16(a + 2);              // a long is always two 16-bit accesses
+    if (!be) v = size == 2 ? __builtin_bswap16(v) : __builtin_bswap32(v);
+    return v;
+}
+
+static void bus_store(uint32_t a, uint32_t v, int size, int be)
+{
+    if (size == 1) { *(volatile uint8_t *)(BUS_ALIAS | ((a ^ 1u) & 0xFFFFFFu)) = (uint8_t)v; return; }
+    if (!be) v = size == 2 ? __builtin_bswap16(v) : __builtin_bswap32(v);
+    if (size == 2) bus_wr16(a, v);
+    else { bus_wr16(a, v >> 16); bus_wr16(a + 2, v); }
+}
+
+/// A store into bus RAM whose code was translated (a region with flag B) throws the translation away, as smc_store() does for host RAM.
+static void bus_store_seen(uint32_t a, uint32_t n)
+{
+    if ((smc_protected(a) || smc_protected(a + n - 1)) && smc_line_hit(a, n)) { buffee_smc_hits++; pjit_post_flush(); }
+}
+
+static int bus_section(uint32_t a) { uint32_t d = pagetable[a >> 20]; return (d & 3) && (d & DOMAIN_MASK) == BUS_DOMAIN; }
+
+/// LDM / STM (every direction, with or without write-back), word by word in ascending register order. The user-bank and PC forms are not guest accesses.
+static int bus_multi(uint32_t *f, uint32_t ins, int be, uint32_t dfar)
+{
+    uint32_t list = ins & 0xFFFF, vals[15], b, start, n = 0, k = 0;
+    unsigned rn = ins >> 16 & 15, r;
+    int up = ins >> 23 & 1, pre = ins >> 24 & 1, wb = ins >> 21 & 1, load = ins >> 20 & 1;
+
+    if ((ins & (1u << 22)) || rn == 15 || !list || (list & 0x8000)) return 0;
+    for (r = list; r; r &= r - 1) n++;
+    b = gr(f, rn);
+    start = up ? (pre ? b + 4 : b) : (pre ? b - 4 * n : b - 4 * n + 4);
+    if ((start & 1) || dfar - start >= 4 * n) return 0;
+    for (r = 0; r < 15; r++) {
+        if (!(list >> r & 1)) continue;
+        if (load) vals[r] = bus_load(start + 4 * k, 4, be);
+        else bus_store(start + 4 * k, gr(f, r), 4, be);
+        k++;
+    }
+    if (!load) bus_store_seen(start, 4 * n);
+    if (wb) sr(f, rn, up ? b + 4 * n : b - 4 * n);
+    if (load) for (r = 0; r < 15; r++) if (list >> r & 1) sr(f, r, vals[r]);
+    return 1;
+}
+
+/// The faulting load or store at f[15] - 8, performed on the bus. 1: done (resume after it), 0: not a form this knows, or an odd address (the 68000's address error).
+static int buffee_bus_emulate(uint32_t *f, uint32_t spsr, uint32_t dfar)
+{
+    uint32_t ins = *(volatile uint32_t *)(f[15] - 8), base, off, nb, a, v, v2;
+    unsigned rn = ins >> 16 & 15, rt = ins >> 12 & 15, sh, k, low;
+    int be = spsr >> 9 & 1, load = ins >> 20 & 1, pre = ins >> 24 & 1, up = ins >> 23 & 1, wb, size, sign = 0, pair = 0;
+
+    buffee_bus_traps++;
+    buffee_bus_traps_c++;
+    for (k = 0, low = 0; k < sizeof bus_c_forms / sizeof bus_c_forms[0]; k++) {
+        if (bus_c_forms[k].n && bus_c_forms[k].ins == ins && bus_c_forms[k].psr == (spsr & 0x21F)) break;
+        if (bus_c_forms[k].n < bus_c_forms[low].n) low = k;
+    }
+    if (k == sizeof bus_c_forms / sizeof bus_c_forms[0]) { k = low; bus_c_forms[k].ins = ins; bus_c_forms[k].psr = spsr & 0x21F; }
+    bus_c_forms[k].n++;
+    if (!cond_passed(ins, spsr)) return 1;
+    switch (ins >> 25 & 7) {
+    case 2:                                                                  // LDR / STR / LDRB / STRB, immediate offset
+        off = ins & 0xFFF;
+        size = (ins & (1u << 22)) ? 1 : 4;
+        break;
+    case 3:                                                                  // the same, register offset
+        if (!shifted_offset(f, ins, spsr, &off)) return 0;
+        size = (ins & (1u << 22)) ? 1 : 4;
+        break;
+    case 0:                                                                  // LDRH / STRH / LDRSB / LDRSH / LDRD / STRD
+        if ((ins & 0x90) != 0x90 || !(ins & 0x60)) return 0;
+        if (!(ins & (1u << 22)) && (ins & 15) == 15) return 0;
+        off = (ins & (1u << 22)) ? ((ins >> 4 & 0xF0) | (ins & 0xF)) : gr(f, ins & 15);
+        sh = ins >> 5 & 3;
+        if (load) { size = sh == 2 ? 1 : 2; sign = sh != 1; }
+        else if (sh == 1) size = 2;
+        else { size = 4; pair = 1; load = sh == 2; }                          // LDRD is SH = 10 with L = 0, STRD SH = 11
+        break;
+    case 4:
+        return bus_multi(f, ins, be, dfar);
+    default:
+        return 0;
+    }
+    if (rn == 15 || rt == 15 || (pair && ((rt & 1) || rt == 14))) return 0;
+    base = gr(f, rn);
+    nb = up ? base + off : base - off;
+    a = pre ? nb : base;
+    wb = !pre || (ins & (1u << 21));
+    if ((size > 1 && (a & 1)) || dfar - a >= (uint32_t)(pair ? 8 : size)) return 0;
+    if (pair && load) { v = bus_load(a, 4, be); v2 = bus_load(a + 4, 4, be); if (wb) sr(f, rn, nb); sr(f, rt, v); sr(f, rt + 1, v2); return 1; }
+    if (pair) { bus_store(a, gr(f, rt), 4, be); bus_store(a + 4, gr(f, rt + 1), 4, be); bus_store_seen(a, 8); }
+    else if (load) {
+        v = bus_load(a, size, be);
+        if (sign) v = size == 1 ? (uint32_t)(int8_t)v : (uint32_t)(int16_t)v;
+        if (wb) sr(f, rn, nb);
+        sr(f, rt, v);
+        return 1;
+    } else { bus_store(a, gr(f, rt), size, be); bus_store_seen(a, size); }
+    if (wb) sr(f, rn, nb);
+    return 1;
+}
+
+/// A guest long for the fatal-abort report, read without faulting again inside the abort handler.
+static uint32_t dump_rd32(uint32_t a)
+{
+    volatile uint16_t *q = (volatile uint16_t *)a;
+
+    if (buffee_noswap && bus_section(a)) return bus_load(a, 4, 1);
+    return (uint32_t)__builtin_bswap16(q[0]) << 16 | __builtin_bswap16(q[1]);
+}
+
 static int buffee_unaligned_inner(uint32_t *f, uint32_t spsr, uint32_t dfsr, uint32_t dfar)
 {
+    // a board without the byte swapper: a domain fault in the Amiga's address space, or an alignment fault there (it takes precedence over the domain)
+    if (buffee_noswap && bus_section(dfar) && ((dfsr & 0x40F) == 0x9 || (dfsr & 0x40F) == 0xB || (dfsr & 0x40F) == 1)) { buffee_bus_align += (dfsr & 0x40F) == 1; return buffee_bus_emulate(f, spsr, dfar); }
     { int r = buffee_smc_fault(f, dfsr, dfar); if (r) return r; }
     if ((dfsr & 0x40F) == 0xD || (dfsr & 0x40F) == 0xF) {         // a write to a read-only custom-chip section (buffee_trace_custom)
         uint32_t ins = *(volatile uint32_t *)(f[15] - 8);
@@ -700,20 +953,7 @@ static int buffee_unaligned_inner(uint32_t *f, uint32_t spsr, uint32_t dfsr, uin
     }
     if ((dfsr & 0x40F) != 1) return 0;                            // not an alignment fault
     uint32_t ins = *(volatile uint32_t *)(f[15] - 8);
-    static const uint8_t cc[16] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
-    (void)cc;
-    uint32_t n = spsr >> 31, z = spsr >> 30 & 1, c = spsr >> 29 & 1, v = spsr >> 28 & 1;
-    int ok;
-    switch (ins >> 28) {
-    case 0: ok = z; break;          case 1: ok = !z; break;
-    case 2: ok = c; break;          case 3: ok = !c; break;
-    case 4: ok = n; break;          case 5: ok = !n; break;
-    case 6: ok = v; break;          case 7: ok = !v; break;
-    case 8: ok = c && !z; break;    case 9: ok = !c || z; break;
-    case 10: ok = n == v; break;    case 11: ok = n != v; break;
-    case 12: ok = !z && n == v; break;  case 13: ok = z || n != v; break;
-    default: ok = 1; break;
-    }
+    int ok = cond_passed(ins, spsr);
     if (((ins >> 26) & 3) != 1 || (ins & (1u << 22))) return 0;   // not a word LDR / STR
     unsigned rn = ins >> 16 & 15, rt = ins >> 12 & 15;
     if (rn == 15 || rt == 15) return 0;
@@ -795,12 +1035,12 @@ void bbb_init(void)
     printf("[BUFFEE] up: SCTLR=%08X, IPL level %u\n", ({ uint32_t v; __asm__ volatile ("mrc p15, 0, %0, c1, c0, 0" : "=r"(v)); v; }), buffee_ipl());
 }
 
-void bbb_exit(uint32_t code)
+/// The ESC / exit report of a payload that ran a guest: what the guest and the Amiga were doing (a bare test payload has no guest state to report).
+static void buffee_report(void)
 {
-    printf("[BUFFEE] exit %u\n", (unsigned)code);
     buffee_smc_report();
     printf("LIVE: %u exceptions delivered in total, guest PC at the ESC interrupt %08X (host PC %08X)\n", (unsigned)pjit_dlog_count, (unsigned)guest_pc_of(buffee_irq_pc), (unsigned)buffee_irq_pc);
-    if (code) { printf("REGS:"); for (int i = 0; i < 8; i++) printf(" D%d=%08X", i, (unsigned)pjit_get_dn(i)); for (int i = 0; i < 8; i++) printf(" A%d=%08X", i, (unsigned)pjit_get_an(i)); printf("\n"); }   // (a bare payload that returned 0 never ran a guest: r5 is not the CPU base)
+    printf("REGS:"); for (int i = 0; i < 8; i++) printf(" D%d=%08X", i, (unsigned)__builtin_bswap32((&cpu_state.d0)[i])); for (int i = 0; i < 8; i++) printf(" A%d=%08X", i, (unsigned)__builtin_bswap32((&cpu_state.a0)[i])); printf("\n");   // (through the arena, not r5: a payload that never started a guest has not set r5, whatever it returns)
     printf("TRAPS (oldest first; vector@PC after the instruction, the words from PC-8 to PC+4):\n");
     for (int k = 16; k >= 1; k--) {
         uint32_t e = ((pjit_xlog_pos / 8 - k) & 15) * 2, pc = pjit_xlog[e + 1];
@@ -837,9 +1077,9 @@ void bbb_exit(uint32_t code)
     { extern uint32_t pjit_pace_wraps __attribute__((weak)), pjit_pace_dl[8] __attribute__((weak)), pjit_pace_k __attribute__((weak)), pjit_pace_gap[34] __attribute__((weak));
       printf("PACE: %u counter-wrap resyncs (the guest was away from the interpreter for more than 2.1 s); K %u ARM cycles per 68000 cycle; the virtual clock is %d ns ahead (+) / behind (-) of the counter now\n",
              (unsigned)__builtin_bswap32(pjit_pace_wraps), (unsigned)__builtin_bswap32(pjit_pace_k), (int)(__builtin_bswap32(pjit_pace_dl[0]) - bbb_pmu_cycles()));
-      printf("PACE lag: %u resyncs (more than 20 us behind the virtual 68000), %u us behind in total, the worst %u us at guest PC %X; %u of them over 1 ms\n", (unsigned)__builtin_bswap32(pjit_pace_dl[4]), (unsigned)__builtin_bswap32(pjit_pace_dl[3]), (unsigned)(__builtin_bswap32(pjit_pace_dl[5]) / 1000), (unsigned)__builtin_bswap32(pjit_pace_dl[6]), (unsigned)__builtin_bswap32(pjit_pace_dl[7]));
+      printf("PACE lag: %u times more than 20 us behind the virtual 68000 (a lag is never paid back: the clock moves to now), %u us in total, the worst %u us after guest PC %X; %u of them over 1 ms\n", (unsigned)__builtin_bswap32(pjit_pace_dl[4]), (unsigned)__builtin_bswap32(pjit_pace_dl[3]), (unsigned)(__builtin_bswap32(pjit_pace_dl[5]) / 1000), (unsigned)__builtin_bswap32(pjit_pace_dl[6]), (unsigned)__builtin_bswap32(pjit_pace_dl[7]));
       uint32_t n = __builtin_bswap32(pjit_pace_gap[0]);
-      printf("PACE gaps > 17 ms between two interpreted instructions: %u in all; the last %u, oldest first: gap ms @ guest PC of the instruction that took it:", (unsigned)n, (unsigned)(n > 16 ? 16 : n));
+      printf("PACE gaps > 134 ms between two interpreted instructions: %u in all; the last %u, oldest first: gap ms @ guest PC of the instruction that took it:", (unsigned)n, (unsigned)(n > 16 ? 16 : n));
       for (uint32_t j = n > 16 ? n - 15 : 1; j <= n; j++) { uint32_t e = (j & 15) * 2 + 2; printf(" %u.%03u@%X", (unsigned)(__builtin_bswap32(pjit_pace_gap[e]) / 1000000), (unsigned)(__builtin_bswap32(pjit_pace_gap[e]) / 1000 % 1000), (unsigned)__builtin_bswap32(pjit_pace_gap[e + 1])); }
       printf("\n"); }
 #endif
@@ -888,20 +1128,21 @@ void bbb_exit(uint32_t code)
         for (int i = 0; i < 320; i++) { if (i % 16 == 0) printf("\n   %06X:", (unsigned)(pc - 512 + 2 * i)); printf(" %04X", (unsigned)__builtin_bswap16(pjit_xmem[i])); }
         printf("\n");
     }
-    if (code) { printf("VECTORS (guest $00..$7E, chip RAM):"); for (uint32_t a = 0; a < 0x80; a += 2) { if (a % 32 == 0) printf("\n   %02X:", (unsigned)a); printf(" %04X", (unsigned)read_BE_word(a)); } printf("\n"); }
+    { printf("VECTORS (guest $00..$7E, chip RAM):"); for (uint32_t a = 0; a < 0x80; a += 2) { if (a % 32 == 0) printf("\n   %02X:", (unsigned)a); printf(" %04X", (unsigned)read_BE_word(a)); } printf("\n"); }
     { extern uint32_t pjit_vdbg[] __attribute__((weak)); if (pjit_vdbg) { printf("VECREAD (vector: first/second read, recorded when they differ or are 0xAAAAxxxx):"); for (int v = 0; v < 256; v++) { uint32_t a = __builtin_bswap32(pjit_vdbg[2 * v]), b = __builtin_bswap32(pjit_vdbg[2 * v + 1]); if (a || b) printf(" %X:%08X/%08X", v, (unsigned)a, (unsigned)b); } printf("\n"); } }
-    if (code) {                                                                  // exec's memory list: what the guest found (chip RAM, expansion boards, our region tag)
+    {                                                                            // exec's memory list: what the guest found (chip RAM, expansion boards, our region tag)
 #define RL(x) ((uint32_t)read_BE_word(x) << 16 | read_BE_word((x) + 2))
+#define PTR_OK(p) ((p) >= 0x400 && (p) < 0x1000000 && !((p) & 1))                  /* a pointer read from chip RAM worth following (a guest that died early leaves garbage) */
         uint32_t eb = RL(4); printf("MEMLIST (ExecBase %06X):", (unsigned)eb);
-        if (eb >= 0x400 && eb < 0x1000000 && !(eb & 1)) {
+        if (PTR_OK(eb)) {
             uint32_t n = RL(eb + 0x142);
-            for (int k = 0; k < 10 && n && n < 0x10000000 && RL(n); k++, n = RL(n)) printf(" [%06X-%06X attr %04X free %u KB pri %d]", (unsigned)RL(n + 20), (unsigned)RL(n + 24), (unsigned)read_BE_word(n + 14), (unsigned)(RL(n + 28) >> 10), (int)(int8_t)(read_BE_word(n + 8) >> 8));
+            for (int k = 0; k < 10 && n < 0x10000000 && !(n & 1) && n && RL(n); k++, n = RL(n)) printf(" [%06X-%06X attr %04X free %u KB pri %d]", (unsigned)RL(n + 20), (unsigned)RL(n + 24), (unsigned)read_BE_word(n + 14), (unsigned)(RL(n + 28) >> 10), (int)(int8_t)(read_BE_word(n + 8) >> 8));
         }
         printf("\n");
-        {   uint32_t q = RL(eb + 0x17A), xb = 0;                                // expansion.library's BoardList: the boards it found (ConfigDev: flags +14, ExpansionRom +16, BoardAddr +32, BoardSize +36)
-            for (int k = 0; k < 40 && q && RL(q); k++, q = RL(q)) { uint32_t nm = RL(q + 10); if (nm >= 0x400 && nm < 0x1000000 && RL(nm) == 0x65787061u) { xb = q; break; } }       // "expa"
+        {   uint32_t q = PTR_OK(eb) ? RL(eb + 0x17A) : 0, xb = 0;               // expansion.library's BoardList: the boards it found (ConfigDev: flags +14, ExpansionRom +16, BoardAddr +32, BoardSize +36)
+            for (int k = 0; k < 40 && PTR_OK(q) && RL(q); k++, q = RL(q)) { uint32_t nm = RL(q + 10); if (PTR_OK(nm) && RL(nm) == 0x65787061u) { xb = q; break; } }       // "expa"
             printf("EXPANSION.LIBRARY %06X:", (unsigned)xb);
-            if (xb) { uint32_t c = RL(xb + 0x3C); for (int k = 0; k < 8 && c && RL(c); k++, c = RL(c)) printf(" [ConfigDev %06X flags %02X type %02X prod %02X mfr %04X addr %06X size %06X]", (unsigned)c, (unsigned)(read_BE_word(c + 14) >> 8), (unsigned)(read_BE_word(c + 16) >> 8), (unsigned)(read_BE_word(c + 16) & 0xFF), (unsigned)read_BE_word(c + 20), (unsigned)RL(c + 32), (unsigned)RL(c + 36)); }
+            if (xb) { uint32_t c = RL(xb + 0x3C); for (int k = 0; k < 8 && PTR_OK(c) && RL(c); k++, c = RL(c)) printf(" [ConfigDev %06X flags %02X type %02X prod %02X mfr %04X addr %06X size %06X]", (unsigned)c, (unsigned)(read_BE_word(c + 14) >> 8), (unsigned)(read_BE_word(c + 16) >> 8), (unsigned)(read_BE_word(c + 16) & 0xFF), (unsigned)read_BE_word(c + 20), (unsigned)RL(c + 32), (unsigned)RL(c + 36)); }
             printf("\n"); }
         printf("AUTOCONFIG after the run, $E80000:"); for (uint32_t a = 0xE80000; a < 0xE80010; a += 2) printf(" %04X", read_BE_word(a));
         printf("; first word of $200000..$9FFFFF by megabyte (value, R = write / read-back works):"); for (uint32_t mb = 2; mb < 10; mb++) { uint32_t ad = mb * 0x100000 + 0x1000; uint16_t o = read_BE_word(ad), t; write_BE_word(ad, 0x5A5A); t = read_BE_word(ad); if (t == 0x5A5A) { write_BE_word(ad, 0xA5A5); t = read_BE_word(ad) == 0xA5A5 ? 1 : 0; } else t = 0; write_BE_word(ad, o); printf(" %04X%s", o, t ? "R" : ""); } printf("\n");
@@ -911,8 +1152,57 @@ void bbb_exit(uint32_t code)
     }
     printf("LASTEXC (oldest first):"); for (int k = 16; k >= 1; k--) { uint32_t e = ((pjit_dlog_pos / 8 - k) & 31) * 2; printf(" %X@%X", (unsigned)pjit_dlog[e], (unsigned)pjit_dlog[e + 1]); } printf("\n");
     printf("ABORTS: %u bus errors, %u address errors delivered to the guest; the last at guest PC %08X, address %08X\n", (unsigned)buffee_abort_bus, (unsigned)buffee_abort_addr, (unsigned)buffee_abort_last_pc, (unsigned)buffee_abort_last_addr);
+    if (sample_n) {
+        unsigned k;
+
+        printf("PROF: %u samples: pace governor %u, other host code %u, slot cache %u, blocks %u; guest megabytes (not blocks):", (unsigned)sample_n, (unsigned)prof_pace,
+               (unsigned)prof_other, (unsigned)prof_slot, (unsigned)prof_blk);
+        for (k = 0; k < 17; k++) if (prof_mb[k]) printf(" %X:%u", k, (unsigned)prof_mb[k]);
+        printf("; host PCs outside the caches:");
+        for (k = 0; k < 8; k++) if (prof_top[k].n) printf(" %08X x%u", (unsigned)prof_top[k].pc, (unsigned)prof_top[k].n);
+        printf("\n");
+    }
+#ifdef FREEZEWATCH
+    printf("FREEZE: %u stretches of over 200 ms without an exception delivered, %u missed IPL edges (the last at cycle %08X), %u ticks late (the worst %u ms); the last 8, oldest first:\n",
+           (unsigned)fw_n, (unsigned)fw_missed, (unsigned)fw_missed_c, (unsigned)fw_late, (unsigned)(fw_late_max / 1000000u));
+    for (uint32_t j = fw_n > 8 ? fw_n - 8 : 0; j < fw_n; j++) {
+        uint32_t k = j & 7;
+        printf("  cycles %08X..%08X (%u ms), %u ticks; first tick: host PC %08X, guest PC %06X, SR %04X, latched level %u, IPL pins %u, irq_flag %u, INTENAR %04X INTREQR %04X\n",
+               (unsigned)fw_log[k].c_begin, (unsigned)fw_log[k].c_end, fw_log[k].c_end ? (unsigned)((fw_log[k].c_end - fw_log[k].c_begin) / 1000000u) : 0u, (unsigned)fw_log[k].ticks,
+               (unsigned)fw_log[k].host, (unsigned)fw_log[k].guest, (unsigned)fw_log[k].sr, (unsigned)fw_log[k].latched, (unsigned)fw_log[k].pins, (unsigned)fw_log[k].flag,
+               (unsigned)fw_log[k].intena, (unsigned)fw_log[k].intreq);
+    }
+    printf("FREEZE host PCs while frozen:");
+    for (uint32_t k = 0; k < 8; k++) if (fw_top[k].n) printf(" %08X x%u", (unsigned)fw_top[k].pc, (unsigned)fw_top[k].n);
+    printf("\n");
+#endif
+#ifdef PJIT_TIER
+    {
+
+        printf("TIER: blocks translated %u, tier builds %u rebuilds %u, promotions refused for now %u, router %u, interpret-one %u\n", (unsigned)pjit_blk.n_translated,
+               (unsigned)pjit_blk.tier_builds, (unsigned)pjit_blk.tier_rebuilds, (unsigned)pjit_blk.tier_pause, (unsigned)pjit_blk.n_route, (unsigned)pjit_blk.n_one);
+    }
+#endif
+    if (buffee_noswap) {
+        unsigned j, k, best;
+
+        printf("BUS: no byte swapper; %u accesses to the Amiga's address space emulated, %u of them in C (%u alignment faults):", (unsigned)buffee_bus_traps, (unsigned)buffee_bus_traps_c, (unsigned)buffee_bus_align);
+        for (j = 0; j < 10; j++) {                                    // the ten most frequent
+            for (best = 0, k = 1; k < sizeof bus_c_forms / sizeof bus_c_forms[0]; k++) if (bus_c_forms[k].n > bus_c_forms[best].n) best = k;
+            if (!bus_c_forms[best].n) break;
+            printf(" %08X/%03X x%u", (unsigned)bus_c_forms[best].ins, (unsigned)bus_c_forms[best].psr, (unsigned)bus_c_forms[best].n);
+            bus_c_forms[best].n = 0;
+        }
+        printf("\n");
+    }
     printf("STATE: guest SR %04X, irq_level %u, irq_flag %u, flush_req %u, IPL pins %u; Amiga INTENAR %04X INTREQR %04X DMACONR %04X VPOSR %04X\n", (unsigned)__builtin_bswap16(cpu_state.sr), (unsigned)(cpu_state.irq_level & 0xFF), (unsigned)(cpu_state.irq_flag & 0xFF), (unsigned)(cpu_state.flush_req & 0xFF), buffee_ipl(),
            (unsigned)__builtin_bswap16(*(volatile uint16_t *)0xDFF01C), (unsigned)__builtin_bswap16(*(volatile uint16_t *)0xDFF01E), (unsigned)__builtin_bswap16(*(volatile uint16_t *)0xDFF002), (unsigned)__builtin_bswap16(*(volatile uint16_t *)0xDFF004));
+}
+
+void bbb_exit(uint32_t code)
+{
+    printf("[BUFFEE] exit %u\n", (unsigned)code);
+    if (pjit_dt == pjit_arena.dt) buffee_report();                                  // r5 is the dispatch table only once a guest was set up (pjit_cache_init)
     /* the PC sampler (INTC line 3, the PMU counter overflow) must not outlive the payload: the bootloader's IRQ handler does not know line 3 and would take it forever */
     __asm__ volatile("mcr p15, 0, %0, c9, c14, 2" :: "r"(0xFFFFFFFFu));              // PMINTENCLR: no counter raises an interrupt
     __asm__ volatile("mcr p15, 0, %0, c9, c12, 3" :: "r"(0xFFFFFFFFu));              // PMOVSR: clear the overflow flags

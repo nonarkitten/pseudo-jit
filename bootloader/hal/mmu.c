@@ -8,6 +8,7 @@
 #include <stdint.h>
 
 #include "mmu.h"
+#include "cp15.h"
 
 /* First-level section descriptors (1 MB each): bits 1:0 = 10 (a section), B = bit 2, C = bit 3, AP[1:0] = bits 11:10, TEX[2:0] = bits 14:12 */
 #define SEC_SECTION   0x002u

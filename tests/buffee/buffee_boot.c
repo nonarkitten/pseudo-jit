@@ -212,6 +212,12 @@ int main(void)
 #ifndef CLEAN
     sample_stop = SAMPLES; sample_verbose = SAMPV; buffee_sampler_start(500000000u);
 #endif                /* a line every 0.5 s: where is the guest */
+#ifdef FREEZEWATCH
+    buffee_sampler_start(FREEZEWATCH);              /* the freeze watch's tick (and the PROF tally) */
+#endif
+#ifdef PROFILE
+    buffee_sampler_start(PROFILE);                  /* a sample every PROFILE host cycles, tallied for the ESC report's PROF line */
+#endif
 #ifdef HANGWDT
     {   /* hang diagnosis: the SoC watchdog WDT1 resets the board HANGWDT seconds after the guest starts (never kicked); with -DCRUMBS the last translations / write faults are in the PRU shared RAM (buffee_crumbs prints them) */
         volatile uint32_t *cm = (volatile uint32_t *)0x44E004D4, *w = (volatile uint32_t *)0x44E35000;

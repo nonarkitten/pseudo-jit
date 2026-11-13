@@ -20,8 +20,8 @@ Here: TIMEPARAGRANULARITY off (10 ns units, fields max 31 = 310 ns), the freeze 
   tailsweep.py --run [--bundle B] [--out results.json] [--extra "RB5:AA,R94:90"]   needs the Buffee bootloader (build/firmware/bootloader.bin) in the flash
                                             and the UART free (Serial.app closed); every variant restores the
                                             baseline afterwards; a hung bus is recovered through the payload's
-                                            watchdog (the script waits passively 8 s, then ESC x3: never ESC
-                                            right after a reset).
+                                            watchdog (the script waits passively 8 s for the reset, then
+                                            ESC x3).
 Each variant runs the shotgun payload's read / write / CIA test; 'rcyc' is ns per read, 'wcyc' ns per (write +
 2 read-backs). 'done=1' also ends READS on DONE (D5q) like writes:
 LUT4_0 (0xA1 / 0xA2) = X | D5q | WRrel = 0xFFFA instead of 0xBBBA."""
@@ -237,7 +237,7 @@ def to_menu(limit=120):
 
 def load():
     to_menu()
-    s.write(b"L\r")
+    s.write(b"2\r")  # menu 2: run a bundle sent over XMODEM
     time.sleep(0.5)
     s.read(20000)
     data = open(a.bundle, "rb").read()

@@ -4,17 +4,16 @@ the SPI flash slots and resets the EEPROM config):
   restore_state.py [--bundle build/firmware/buffee_boot.lzt] [--region 0] [--check] [--verify]
   [--port P]
 The board must already be at the Buffee bootloader menu (run restore_bootloader.py first if it still runs the
-pseudo-jit_1 firmware; ESC x3 from a terminal if a guest is running,
-but never right after a reset: the first 30 ms are the emergency-erase window). This script never sends ESC.
+pseudo-jit_1 firmware; ESC x3 from a terminal if a guest is running). This script never sends ESC.
 Flash writes need Renee's go.
 What it does, in order, and nothing else (no sector 0, no bootloader, no GreenPAK):
-  1. menu F: a slot that is 'absent' or bad is filled -- PJIT <- --bundle (xmodem; the CRC the bootloader
-  reports must equal the file's, padded to 128 bytes with 0x1A like xmodem does),
-     ROM <- a copy of the Amiga's own Kickstart (menu F 5, base and size from the EEPROM config); a slot that
-     is 'ok' is left alone.
-  2. menu E 3: MapROM = the SPI flash image (G F), guest RAM regions = --region, autoload and autorun on (S E,
-  T E); E 2 saves, E 1 reloads and the config is printed and checked.
-     Pace, the POST flags and everything else are not touched.
+  1. menu 3 (Flash images): a slot that is 'absent' or bad is filled -- PJIT <- --bundle (xmodem; the CRC the
+  bootloader reports must equal the file's, padded to 128 bytes with 0x1A like xmodem does),
+     ROM <- a copy of the Amiga's own Kickstart (3, base and size from the settings); a slot that is 'ok' is
+     left alone.
+  2. menu 4 (Settings): MapROM = flash (1), Fast RAM = --region (4); leaving the page saves them in the EEPROM
+  (which is read back), then the page is shown again and checked.
+     Pace, the self-test settings and everything else are not touched.
 --check prints the slot status and the config and writes nothing.
 --verify then resets through the J-Link (tools/buffee/reset.sh), logs the boot for 30 s without sending
 anything, sends ESC x3 and prints the key lines of the payload's report
@@ -59,7 +58,7 @@ def until(marker, limit):  # reads until marker has been seen and the menu that 
         d = s.read(512)
         if d:
             out += d.decode("latin1").replace("\r", "")
-        if marker in out and "X. Exit" in out.split(marker)[-1]:
+        if marker in out and "0. Back" in out.split(marker)[-1]:
             break
     return out
 
@@ -78,12 +77,12 @@ if "Ready" not in o and "] " not in o:
     sys.exit("not at the bootloader menu (%r): see the docstring" % o[-160:])
 
 # 1. the flash slots
-s.write(b"F\r")
+s.write(b"3\r")
 o = rd(2.5)
 pj, rom = status(o, "PJIT"), status(o, "ROM")
 print("flash slots: PJIT %s, ROM %s" % (pj, rom))
 if not a.check:
-    if pj != "ok":
+    if not pj.startswith("ok"):
         data = open(a.bundle, "rb").read()
         padded = data + b"\x1a" * (-len(data) % 128)
         want = zlib.crc32(padded) & 0xFFFFFFFF
@@ -99,67 +98,64 @@ if not a.check:
         print(out)
         if "CRC %08X" % want not in out:
             sys.exit("the bootloader did not report CRC %08X" % want)
-    if rom != "ok":
+    if not rom.startswith("ok"):
         print("ROM <- a copy of the Amiga ROM", flush=True)
-        s.write(b"5\r")
+        s.write(b"3\r")
         out = until("Stored", 90)
         print(out)
         if "Verify failed" in out or "Stored" not in out:
             sys.exit("ROM store failed")
-s.write(b"X\r")
+s.write(b"0\r")
 rd(0.8)
 
-# 2. the EEPROM config
-s.write(b"E\r")
-rd(0.6)
-s.write(b"3\r")
-o = rd(1.5)
+# 2. the settings
+def region_key(text):
+    """A region list as a comparable value: '0' / 'none' -> (), '$200000/8bif' -> (('200000', '8', 'BFI'),)."""
+    out = []
+    for part in text.strip().upper().split(","):
+        if "/" not in part:
+            continue
+        base, rest = part.lstrip("$").split("/", 1)
+        out.append((base.lstrip("0") or "0", "".join(c for c in rest if c.isdigit()), "".join(sorted(c for c in rest if c in "BIF"))))
+    return tuple(out)
+
+
+def show_settings():
+    s.write(b"4\r")
+    o = rd(1.5)
+    s.write(b"0\r")
+    rd(0.6)
+    return o
+
+
 if not a.check:
-    for key, val in (("G", "F"), ("R", a.region), ("S", "E"), ("T", "E")):
-        s.write(key.encode() + b"\r")
+    s.write(b"4\r")
+    rd(1.5)
+    for item, val in (("1", "flash"), ("4", a.region)):
+        s.write(item.encode() + b"\r")
         rd(0.4)
         s.write(val.encode() + b"\r")
-        o = rd(1.2)
-s.write(b"X\r")
-rd(0.6)
+        rd(1.2)
+    s.write(b"0\r")
+    o = rd(0.8)
+    if "[y/N]" in o:
+        s.write(b"y\r")
+        o += rd(2.0)
+    sv = [l for l in o.split("\n") if "Settings" in l]
+    print(sv[-1] if sv else "settings unchanged")  # 'Settings saved (CRC ....)'
+    if "did not read back" in o:
+        sys.exit("the EEPROM did not read back what was written")
+o = show_settings()
+lines = [l for l in o.split("\n") if l[:3].strip().rstrip(".").isdigit()]
+for l in lines[:5]:
+    print(l[:72])
 if not a.check:
-    s.write(b"2\r")
-    sv = [l for l in rd(2.0).split("\n") if "Saving" in l]
-    print(sv[0] if sv else "no save message")  # 'Saving and verifying settings (CRC=....)'
-    s.write(b"1\r")
-    rd(1.5)
-    s.write(b"3\r")
-    o = rd(1.5)
-    s.write(b"X\r")
-    rd(0.6)
-for l in o.split("\n"):
-    if l[:2] in ("G.", "R.", "S.", "T.", "V.") or l.startswith("P."):
-        print(l[:60] + (" ... " + l[-24:] if len(l) > 60 else ""))
-if not a.check:
-    r = [l for l in o.split("\n") if l.startswith("R.")][0]
-
-    def region_ok(line, region):
-        """Does the R. line of the reloaded config show the region that was asked for?"""
-        if "," in region:  # a list of regions: shown as asked, not parsed here
-            return True
-        if "/" not in region:  # '0': no region
-            return line.rstrip().endswith("none")
-        base, rest = region.split("/", 1)
-        mb = "".join(ch for ch in rest if ch.isdigit())
-        flags = "".join(c for c in "BIF" if c in rest.upper())
-        return line.endswith(" %s/%sMB%s" % (base.upper().lstrip("0") or "0", mb, flags))
-
-    ok = (
-        "SPI flash image" in o
-        and "Autoload PJIT from the SPI flash: Enabled" in o
-        and "Autorun PJIT after loading: Enabled" in o
-        and region_ok(r, a.region)
-    )
-    print("config after the reload from the EEPROM:", "as asked" if ok else "NOT as asked (see above)")
+    mp = [l for l in lines if "MapROM " in l and l.lstrip().startswith("1.")]
+    ram = [l.split("Fast RAM", 1)[1].split()[0] for l in lines if "Fast RAM" in l]
+    ok = bool(mp) and mp[0].split("MapROM", 1)[1].split()[0] == "flash" and bool(ram) and region_key(ram[0]) == region_key(a.region)
+    print("settings:", "as asked" if ok else "NOT as asked (see above)")
     if not ok:
         sys.exit(1)
-s.write(b"X\r")
-rd(0.6)
 
 # 3. optional boot check
 if a.verify:
@@ -183,7 +179,7 @@ if a.verify:
             for l in buf.split("\n")
             if any(
                 k in l
-                for k in ("MapROM", "Unpacked", "Completed", "Starting PJIT", "[MEM]", "starting at", "ASn:")
+                for k in ("MapROM", "unpacked", "Boot took", "Starting PJIT", "[MEM]", "starting at", "ASn:")
             )
         )
     )

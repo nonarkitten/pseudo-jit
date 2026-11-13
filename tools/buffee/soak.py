@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Overnight soak of the stored (autoloaded) bundle across guest memory configurations, with whatever disk is in
-the Amiga's drive. For each configuration the region list is set through the bootloader's EEPROM
-menu (E, 3, R, X, 2, X), then N cycles of: J-Link reset, wait for the payload to start, wait WAIT seconds, ESC
+the Amiga's drive. For each configuration the region list is set through the bootloader's Settings
+page (4, 4, the value, 0, y: saved), then N cycles of: J-Link reset, wait for the payload to start, wait WAIT seconds, ESC
 x3, read the report and judge it. The original configuration is restored at the end.
   soak.py out_prefix [--cycles 100] [--wait 12] [--configs 8,4,2,1,0 (MB of host DRAM at $200000, or region strings such as 200000/8BIF)] [--final 0]
 Files: <out>.log (one line per cycle), <out>.flags.txt (full reports of every flagged cycle)."""
@@ -62,14 +62,13 @@ def set_regions(val):
         return False
     time.sleep(1.5)
     s.read(20000)
-    cmd("E")
-    cmd("3")
-    cmd("R", 1.0)
+    cmd("4")
+    cmd("4", 1.0)
     o = cmd(val, 1.5)
-    ok = "Guest RAM regions" in o
-    cmd("X")
-    o2 = cmd("2", 2.5)
-    cmd("X")
+    ok = "Fast RAM" in o and "rejected" not in o
+    o2 = cmd("0", 1.0)
+    if "[y/N]" in o2:
+        o2 = cmd("y", 2.5)
     out(
         "   config set to %r (%s): %s" % (val, "shown" if ok else "NOT SHOWN", re.sub(r"\s+", " ", o2)[-120:])
     )

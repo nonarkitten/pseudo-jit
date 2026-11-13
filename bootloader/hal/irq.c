@@ -90,14 +90,14 @@ void irq_dispatch(void) {
 }
 
 void IRQPoll(void) {
+    int held;
+
     if (!reset_pending) return;
     reset_pending = 0;
-    double t0 = ReadDMTimerSeconds();
-    while (!(R32(GPIO3 + G_DATAIN) & RESET_BIT) && ReadDMTimerSeconds() - t0 < 2.0) ;       /* the Amiga holds RESET for a while */
-    WaitMSDMTimer(50);                                      /* and Agnus needs a moment after it */
+    held = WaitResetReleased(RESET_SETTLE_MS, NULL);
     R32(GPIO3 + G_IRQSTATUS0) = RESET_BIT; R32(GPIO0 + G_IRQSTATUS0) = HALT_BIT;
     printf("\nAmiga reset (#%lu)\n", (unsigned long)irq_reset_events);
-    if (irq_reset_cb) irq_reset_cb();
+    if (held >= 0 && irq_reset_cb) irq_reset_cb();
 }
 
 void IRQResetMask(int on) {

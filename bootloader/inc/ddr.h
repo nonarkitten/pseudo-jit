@@ -4,6 +4,5 @@
 #include "main.h"
 
 extern void InitDDR(void);
-extern void DDRTest(void);
 
 #endif

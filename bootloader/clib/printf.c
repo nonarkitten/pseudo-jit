@@ -21,9 +21,12 @@ static const char* u_base_chars = "0123456789ABCDEF";
 
 extern void _putchar(uint8_t);
 
+static bool line_start = true;          /* the last character sent was a newline: the next printf gets the time stamp */
+
 static inline void printUART(int c) {
     if(c == '\n') _putchar('\r');
     _putchar(c);
+    line_start = (c == '\n');
 }
 
 static int emit_char(char **str, int c) {
@@ -82,8 +85,6 @@ static int printu(char **out, uint32_t x, uint32_t base, const char* base_chars,
         len += 1;
         x = q;
     } while(x);
-
-    int pad_char = (pad&PAD_ZERO)?'0':' ';
 
     if(pad & PAD_DECIMAL) {
         while (len < 9) *--b = '0', len++;
@@ -221,8 +222,8 @@ static int print(char **out, const char *format, va_list vl) {
     return pc;
 }
 
-volatile double printf_overhead = 0.0;
 bool printTimeStamp = false;
+bool console_verbose = true;
 
 
 static int printproxy(const char *format, ...) {
@@ -233,32 +234,40 @@ static int printproxy(const char *format, ...) {
     return r;
 }
 
-int printf(const char *format, ...) {
-    double t1 = ReadDMTimerSeconds();
-    if(printTimeStamp) {
+static void stamp(void) {
+    if(printTimeStamp && line_start) {
         static double lastTime = 0.0;
         double thisTime = ReadDMTimerSeconds();
         printproxy("%4.5f (+%4dms): ", thisTime, (int)((thisTime - lastTime) * 1000));
         lastTime = thisTime;
     }
+}
 
+int printf(const char *format, ...) {
+    stamp();
     va_list vl;
     va_start (vl, format);
     int r = print(0, format, vl);
     va_end (vl);
-    double t2 = ReadDMTimerSeconds();
-    printf_overhead += (t2 - t1);
+    return r;
+}
+
+/* A progress or status line: printed only when the boot report is verbose (errors use printf). */
+int info(const char *format, ...) {
+    if(!console_verbose) return 0;
+    stamp();
+    va_list vl;
+    va_start (vl, format);
+    int r = print(0, format, vl);
+    va_end (vl);
     return r;
 }
 
 int sprintf(char *out, const char *format, ...) {
-double t1 = ReadDMTimerSeconds();
     va_list vl;
     va_start (vl, format);
     int r = print(&out, format, vl);
     va_end (vl);
-    double t2 = ReadDMTimerSeconds();
-    printf_overhead += (t2 - t1);
     return r;
 }
 

@@ -26,7 +26,5 @@ extern int spi_bulk_div, spi_bulk_mode, spi_bulk_err;
 extern void WriteSPIBlock(uint32_t addr, const void* buffer, uint8_t len);
 
 extern void InitSPI(int bps);
-extern void SPITest(void);
-extern void SPIDump(void);
 
 #endif

@@ -1,7 +1,7 @@
 """Serial-port helpers shared by the board tools in this directory.
 
 The bootloader talks 115200 8N1 on the UART header (an FTDI USB-serial adapter); the AM335x boot ROM
-and the bootloader's `U` / `L` / `F` commands take files over XMODEM-CRC.  The tools find the adapter
+and the bootloader's menu (2: run a bundle, 3: the flash images) take files over XMODEM-CRC.  The tools find the adapter
 by themselves: `--port` (or the BUFFEE_PORT environment variable) wins, otherwise the only USB-serial
 adapter present is used.
 """

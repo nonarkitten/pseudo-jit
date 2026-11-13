@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Stores a PJIT bundle (.lzt) in the SPI flash slot the bootloader autoloads (menu F, 1), over a UART plugged
+"""Stores a PJIT bundle (.lzt) in the SPI flash slot the bootloader autoloads (menu 3 Flash images, 1), over a UART plugged
 straight into this machine:
   store_pjit.py [--port /dev/cu.usbserial-XXXX] [--wait 40] bundle.lzt
-ESC x3 until the menu ('Ready'), then F, 1 and an xmodem of the bundle; the header (length, CRC-32) is written
+ESC x3 until the menu ('Ready'), then 3, 1 and an xmodem of the bundle; the header (length, CRC-32) is written
 last, after a read-back check.
 """
 
@@ -26,7 +26,7 @@ if "Ready" not in buf:
     sys.exit("no menu")
 time.sleep(1.0)
 s.read(20000)
-s.write(b"F\r")
+s.write(b"3\r")
 time.sleep(1.0)
 print(s.read(4000).decode("latin1")[-400:])
 s.write(b"1\r")
@@ -48,8 +48,8 @@ while time.time() - t < 30:
     d = s.read(512)
     if d:
         out += d.decode("latin1")
-    if "X. Exit" in out[-200:] and time.time() - t > 2:
+    if "0. Back" in out[-200:] and time.time() - t > 2:
         break
 print(out[-700:])
-s.write(b"X\r")
+s.write(b"0\r")
 time.sleep(0.5)

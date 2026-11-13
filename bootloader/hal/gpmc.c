@@ -6,6 +6,7 @@
  */
 #include "main.h"
 #include "gpak.h"
+#include "amiga.h"
 #include "../greenpak/asn_regs.h"
 
 #include "am335x_regs.h"
@@ -15,6 +16,9 @@
 #define GPMC_SIZE_64M   0xC
 #define GPMC_SIZE_32M   0xE
 #define GPMC_SIZE_16M   0xF
+
+#define CIAA_PRA        0xBFE001u       /* CIA-A port A (OVL, the power LED) and its data direction register */
+#define CIAA_DDRA       0xBFE201u
 
 /* Pin mux for m68k bus module */
 static const pin_muxing_t m68k_pin_mux[] = {
@@ -427,13 +431,13 @@ void ASNCalibrate(void) {
        word of the data check would fail in BOTH phases. Wait until the overlay-off write sticks (read back), then score once. */
     for (double t0 = ReadDMTimerSeconds(); ; WaitMSDMTimer(5)) {
         DisableRomOverlay();
-        if ((*(volatile uint8_t*)0xBFE201 & 3) == 3 && (*(volatile uint8_t*)0xBFE001 & 3) == 0) break;
+        if ((AmigaRead8(CIAA_DDRA) & 3) == 3 && (AmigaRead8(CIAA_PRA) & 3) == 0) break;
         if (ReadDMTimerSeconds() - t0 > 1.0) break;              /* never: score anyway, the retries and the slow fallback follow */
     }
     do {
         if (tries) {
 #ifdef ASN_CAL_PULSE
-            AssertReset(); WaitMSDMTimer(100); ReleaseReset(); WaitMSDMTimer(100);       /* a retry with a RESET pulse (a 68000 sees its RESET once, at power-on): for experiments only */
+            AssertReset(); WaitMSDMTimer(100); ReleaseReset(); (void)WaitResetReleased(100, NULL);       /* a retry with a RESET pulse (a 68000 sees its RESET once, at power-on): for experiments only */
 #else
             WaitMSDMTimer(20);
 #endif
@@ -466,17 +470,18 @@ void ASNCalibrate(void) {
     if (clean) GPSetPhase(phase[chosen]);
     WaitUSDMTimer(50);
     EnableRomOverlay();                                          /* the machine boots with the overlay on */
-    if (clean) printf("ASn: GreenPAK drives ASn, clock phase %c%s\n", 'A' + chosen, tries > 1 ? " (after retries)" : "");
+    if (clean) info("ASn: GreenPAK drives ASn, clock phase %c%s\n", 'A' + chosen, tries > 1 ? " (after retries)" : "");
     else { GPSetPhase(ASN_PHASE_OFF); printf("ASn: no clean clock phase (data errors A %d, B %d) after %d tries, parity gate off\n", data[0], data[1], tries); }
 }
 
+/* CIA-A port A: bit 0 = OVL (the ROM overlay at $000000), bit 1 = the power LED (low = bright); both are outputs. */
 void EnableRomOverlay() {
-    *(uint8_t*)0xBFE201 |= 0x03; // Set low two bits for output.
-    *(uint8_t*)0xBFE001 |= 0x01; // Set boot ROM on
+    AmigaWrite8(CIAA_DDRA, AmigaRead8(CIAA_DDRA) | 0x03);
+    AmigaWrite8(CIAA_PRA, AmigaRead8(CIAA_PRA) | 0x01);
 }
 
 void DisableRomOverlay() {
-    *(uint8_t*)0xBFE201 |= 0x03; // Set low two bits for output.
-    *(uint8_t*)0xBFE001 &= 0xFC; // Set boot ROM off, power light.
+    AmigaWrite8(CIAA_DDRA, AmigaRead8(CIAA_DDRA) | 0x03);
+    AmigaWrite8(CIAA_PRA, AmigaRead8(CIAA_PRA) & 0xFC);
 }
 

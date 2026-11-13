@@ -6,16 +6,16 @@
 What it touches, in order (nothing else):
   1. looks at the menu: already the Buffee bootloader -> says so and stops; the pseudo-jit_1 menu ->
   continues; anything else -> stops.
-  2. pseudo-jit_1 menu 3, 'Quick-test SPI flash' (hal/flash.c SPITest): erases sector 0 (the FIRST 4 KB of the
+  2. pseudo-jit_1 menu 3, 'Quick-test SPI flash' (that firmware's SPITest): erases sector 0 (the FIRST 4 KB of the
   SPI flash, i.e. the boot header of the pseudo-jit_1 image) and writes
      16 bytes of test pattern / zeros there. It is NOT menu S/1 (a chip erase: it would also wipe the stored
      Kickstart bundle at 0x20000 and the ROM image at 0x100000).
   3. 'X' (reboot): the AM335x ROM finds no valid image in the SPI flash and asks for one over the UART
   (xmodem-CRC, 'CCC...').
   4. xmodem of bootloader.bin into internal RAM; it starts and shows its menu.
-  5. tools/buffee/update_boot.py: 'U' + xmodem of the same file; the bootloader programs it into the flash (4
+  5. tools/buffee/update_boot.py: menu 3, 6 + xmodem of the same file; the bootloader programs it into the flash (4
   KB sectors up to the image length, then verifies).
-Afterwards the EEPROM settings (config_t, CRC-checked) may need a look: menu E (the pseudo-jit_1 firmware used
+Afterwards the EEPROM settings (config_t, CRC-checked) may need a look: menu 4 (the pseudo-jit_1 firmware used
 another layout and may have reset it), and the GreenPAK RAM image is
 loaded by the Buffee bootloader at every boot (the NVM still holds the pseudo-jit_1 'straight through' design;
 it does not matter).
@@ -73,8 +73,8 @@ if "C" * 3 not in out:  # not at the ROM prompt: look at the menu (a bare CR is 
         out += read_for(1.0)
     s.write(b"H\r")
     out += read_for(1.5)
-    if "Load PJIT bundle" in out and "Update the bootloader" in out:
-        sys.exit("This is already the Buffee bootloader (menu has L and U). Nothing to do.")
+    if ("Load PJIT bundle" in out and "Update the bootloader" in out) or ("Boot PJIT from the flash" in out and "Flash images" in out):
+        sys.exit("This is already the Buffee bootloader. Nothing to do (update_boot.py replaces it with a newer one).")
     if "Quick-test SPI flash" not in out or "Manage SPI Flash" not in out:
         sys.exit("Unrecognised firmware (menu not seen). Last output: %r" % out[-300:])
     if not a.yes_erase_boot_sector:

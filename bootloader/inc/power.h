@@ -10,5 +10,6 @@ typedef enum {
 } PowerRail_t;
 
 extern int InitPower(PowerRail_t rail, double voltage);
+extern int DetectPMIC(void);        /* the PMIC answers and the last boot was good: the core voltage and settings.dpll_mul MHz are set (1); 300 MHz otherwise (0) */
 
 #endif

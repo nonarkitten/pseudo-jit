@@ -81,11 +81,11 @@ bbb-%: $(BBB)/%.bin
 	@ls -l $<
 
 # ---- Buffee payloads and bundles -------------------------------------------------------------------------------------------------
-# `make bundle-boot` -> $(BUNDLES)/buffee_boot.lzt: the LZTB bundle the bootloader's `L` command receives over xmodem (or its flash slot
+# `make bundle-boot` -> $(BUNDLES)/buffee_boot.lzt: the LZTB bundle the bootloader's menu 2 receives over xmodem (or its flash slot
 # stores; docs/buffee/BUFFEE_MAP.md).   `make buffee-hello` stops at the ELF.   Tests: tests/buffee/.
 BUFFEE_TESTS = buffee_chips buffee_floppy buffee_fc buffee_weight buffee_shotgun buffee_cia4 buffee_top buffee_endian buffee_hello \
 	buffee_boot buffee_fried buffee_blit buffee_bus buffee_reroll buffee_speed buffee_peekrom buffee_smc buffee_abort buffee_regtest \
-	buffee_blitdur buffee_chipfull buffee_crumbs buffee_kspeed
+	buffee_blitdur buffee_chipfull buffee_crumbs buffee_kspeed buffee_gpreset buffee_boardkind
 
 $(patsubst %,$(BBB)/%.elf,$(BUFFEE_TESTS)): $(BBB)/%.elf: $(BO)/tests/%.o $(BUFFEE_OBJS) platform/buffee/pjit_dram.ld
 	$(CC) $(BBB_CFLAGS) $(BBB_LDFLAGS) -T platform/buffee/pjit_dram.ld $(BUFFEE_OBJS) $< -o $@ -lgcc

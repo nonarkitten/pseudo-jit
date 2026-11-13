@@ -14,6 +14,5 @@ enum { STORE_OK = 0, STORE_ABSENT = -1, STORE_BAD_CRC = -2, STORE_TOO_BIG = -3, 
 uint32_t crc32_update(uint32_t crc, const void *buf, uint32_t len);
 int StoreWrite(uint32_t off, uint32_t max, uint32_t magic, const void *src, uint32_t len, uint32_t aux);
 int StoreLoad(uint32_t off, uint32_t max, uint32_t magic, void *dst, uint32_t *len, uint32_t *aux);   /* dst may be 0: check only */
-void ManageStore(void);                         /* menu F */
-extern int uart_break;                          /* set by the UART interrupt after three ESC in a row; cleared by whoever shows the menu */
+void StoreErase(uint32_t off);                  /* empties the slot at off */
 #endif
