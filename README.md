@@ -23,7 +23,7 @@ The board's schematics and Gerber files are in <https://github.com/nonarkitten/b
 
 * Boots **Kickstart 3.1 to Workbench** on an Amiga 500+ (PAL) from the stock ROM and a floppy. Code that runs from the board's own DRAM (the ROM copy and, if you add it, fast RAM) runs at about 300 MIPS in SysInfo (see the table below for the benchmarks that are part of this repository).
 * Every access to the Amiga's bus takes 6 CLK7 periods (a real 68000 needs 4), about 2.3 MB/s. Code that lives on the bus (chip RAM, a RAM board) is interpreted and paced to the speed of a 68000, never translated, so DMA masters cannot surprise it.
-* Is tested against Ted Fried's MC68000 test suite, against an independent 68000 oracle, and with a set of programs under QEMU and on a BeagleBone Black (see [docs/building.md](docs/building.md)).
+* Is tested against Ted Fried's MC68000 test suite, against an independent 68000 oracle, and with a set of programs under QEMU and on a BeagleBone Black (see [Building and Testing](https://github.com/nonarkitten/pseudo-jit/wiki/Building-and-Testing)).
 * Emulates the 68000 only: no 68010 and later, no FPU, no MMU.
 
 ## How fast
@@ -77,5 +77,5 @@ local/         your machine's files: ROM images, traces, known-good firmware (gi
 Everything the Buffee Project wrote is licensed under **Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International** ([LICENSE](LICENSE)): you may copy, change
 and share it with credit and under the same licence, **not for commercial purposes**. A few files are someone else's and keep their own terms: Ted Fried's MC68000 core and
 test suite (MIT), Texas Instruments' start-up and board set-up routines (BSD), libbbb's SPI, timer and I2C setup (Apache 2.0), Georges Menie's XMODEM receiver (BSD), and Weicker's
-Dhrystone 2.1 source. They are listed, with what is not here at all, in [docs/third-party.md](docs/third-party.md). **No Kickstart ROM or other Commodore/Cloanto material is
+Dhrystone 2.1 source. They are listed, with what is not here at all. **No Kickstart ROM or other Commodore/Cloanto material is
 distributed**: Buffee copies the ROM out of your own Amiga.
