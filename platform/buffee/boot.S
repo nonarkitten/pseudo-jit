@@ -1,6 +1,7 @@
 @ Buffee payload boot (a copy of platform/beaglebone/boot.S; main's return value is the exit code); BeagleBone boot: entered from U-Boot (`go 0x82000000`) in SVC mode, little-endian, IRQs off, MMU and caches in whatever state U-Boot left.
-@ Saves everything U-Boot needs back (callee-saved registers, sp, lr, CPSR and the CP15 state we are about to change), sets up our
+@ Saves everything U-Boot needs back (callee-saved registers, sp, lr, the other modes' stack pointers, CPSR and the CP15 state we are about to change), sets up our
 @ own vectors and stacks, and calls bbb_init() (MMU, caches, log, watchdog, cycle counter), then main(). bbb_return gives the CPU back.
+#include "buffee.h"
         .syntax unified
         .arm
         .section .text.boot
@@ -180,7 +181,7 @@ Abort_Handler:
 .Lhalf:
         LDR     r0, [sp, #20]
         BIC     r3, r0, #0xFF000000
-        ORR     r3, r3, #0x02000000             @ the window's own address (domain 0)
+        ORR     r3, r3, #BUFFEE_BUS_ALIAS       @ the bus alias (domain 0)
         TST     r2, #0x00100000
         BEQ     .Lst_half
         AND     r1, r2, #0x60                   @ SH: 01 LDRH, 10 LDRSB, 11 LDRSH
@@ -196,7 +197,7 @@ Abort_Handler:
 .Lst_half_go:
         LDR     r1, [sp, #20]
         BIC     r1, r1, #0xFF000000
-        ORR     r1, r1, #0x02000000
+        ORR     r1, r1, #BUFFEE_BUS_ALIAS
         STRH    r0, [r1]
         B       .Ldone
 .Lhalf_reg:                                    @ a register offset: only without write-back (the address is DFAR, the offset register is never needed)
@@ -221,7 +222,7 @@ Abort_Handler:
 .Lword_acc:
         LDR     r0, [sp, #20]
         BIC     r3, r0, #0xFF000000
-        ORR     r3, r3, #0x02000000
+        ORR     r3, r3, #BUFFEE_BUS_ALIAS
         TST     r2, #0x00100000
         BEQ     .Lst_word
         TST     r2, #0x00400000                 @ B
@@ -245,7 +246,7 @@ Abort_Handler:
 .Lst_word_go:
         LDR     r1, [sp, #20]
         BIC     r1, r1, #0xFF000000
-        ORR     r1, r1, #0x02000000
+        ORR     r1, r1, #BUFFEE_BUS_ALIAS
         TST     r2, #0x00400000
         BNE     .Lst_byte
         LSR     r3, r0, #16
@@ -335,9 +336,16 @@ Fault_Common:
         B       .
 
 _start:
-        @ ---- save U-Boot's state ------------------------------------------------------------------------------------------
+        @ ---- save the bootloader's state, at the physical address the bootloader called ------------------------------------------------
+        @ The image is linked at BUFFEE_DDR() of where it runs (buffee.h): until the bridge table is on, an address from the literal pool is made physical first
+        @ (r11 = physical - virtual). Only r0-r3 and r12 are touched before the bootloader's registers are saved.
+0:      ADR     r0, 0b
+        LDR     r1, =0b
+        SUB     r0, r0, r1                      @ physical - virtual
         LDR     r12, =uboot_ctx
+        ADD     r12, r12, r0
         STMIA   r12!, {r4-r11, sp, lr}          @ 10 words
+        MOV     r11, r0
         MRS     r0, cpsr
         MRC     p15, 0, r1, c1, c0, 0           @ SCTLR
         MRC     p15, 0, r2, c1, c0, 1           @ ACTLR
@@ -346,6 +354,83 @@ _start:
         MRC     p15, 0, r5, c3, c0, 0           @ DACR
         MRC     p15, 0, r6, c12, c0, 0          @ VBAR
         STMIA   r12, {r0-r6}
+
+        @ ---- the bridge table: the DDR where it is (where this code runs) and where it is linked, and the peripherals at their virtual addresses ---------
+        LDR     r10, =bridge
+        ADD     r10, r10, r11                   @ its physical address (16 KB aligned)
+        MOV     r0, r10
+        MOV     r1, #0
+        ADD     r2, r10, #0x4000
+1:      STR     r1, [r0], #4
+        CMP     r0, r2
+        BLO     1b
+        MOVW    r1, #0x1C0E                     @ SEC_DDR: write-back cached, executable
+        MOV     r0, #0x800                      @ the DDR, identity
+2:      ORR     r2, r1, r0, lsl #20
+        STR     r2, [r10, r0, lsl #2]
+        ADD     r0, r0, #1
+        CMP     r0, #0xA00
+        BLO     2b
+        MOV     r0, #BUFFEE_BRIDGE_DDR          @ the DDR, linked
+3:      ADD     r2, r0, #(BUFFEE_DDR_SHIFT >> 20)
+        ORR     r2, r1, r2, lsl #20
+        STR     r2, [r10, r0, lsl #2]
+        ADD     r0, r0, #1
+        CMP     r0, #0x200
+        BLO     3b
+        LDR     r3, =io_sections                @ the peripherals (BUFFEE_IO)
+        ADD     r3, r3, r11
+        MOV     r0, #(BUFFEE_IO_VA >> 20)
+        MOVW    r1, #0x0C16                     @ device, execute-never
+4:      LDRH    r2, [r3], #2
+        CMP     r2, #0
+        BEQ     5f
+        ORR     r2, r1, r2, lsl #20
+        STR     r2, [r10, r0, lsl #2]
+        ADD     r0, r0, #1
+        B       4b
+5:      MOV     r0, r10                         @ out to the memory the table walk reads
+        ADD     r2, r10, #0x4000
+6:      MCR     p15, 0, r0, c7, c10, 1          @ DCCMVAC
+        ADD     r0, r0, #64
+        CMP     r0, r2
+        BLO     6b
+        DSB
+        MRC     p15, 0, r3, c2, c0, 0           @ the bootloader's walk attributes
+        AND     r3, r3, #0x7F
+        ORR     r3, r3, r10
+        MCR     p15, 0, r3, c2, c0, 0           @ TTBR0 = the bridge
+        MOV     r0, #0
+        MCR     p15, 0, r0, c2, c0, 2           @ TTBCR: TTBR0 for the whole space
+        MVN     r0, #0xAA000000                 @ DACR: every domain client (0x55555555)
+        BIC     r0, r0, #0x00AA0000
+        BIC     r0, r0, #0x0000AA00
+        BIC     r0, r0, #0x000000AA
+        MCR     p15, 0, r0, c3, c0, 0
+        MOV     r0, #0
+        MCR     p15, 0, r0, c8, c7, 0           @ TLBIALL
+        MCR     p15, 0, r0, c7, c5, 6           @ BPIALL
+        DSB
+        ISB
+        MRC     p15, 0, r0, c1, c0, 0
+        ORR     r0, r0, #1                      @ the MMU on (the bootloader leaves it on)
+        MCR     p15, 0, r0, c1, c0, 0
+        ISB
+        LDR     pc, =7f                         @ on at the linked address
+7:
+        @ ---- the stack pointers of the other modes, which the bootloader's handlers use again after the return (ours are not mapped in its table; r3: FIQ banks r8-r12)
+        LDR     r3, =uboot_ctx + 68
+        MSR     cpsr_c, #MODE_UND | I_F_BIT
+        STR     sp, [r3, #0]
+        MSR     cpsr_c, #MODE_ABT | I_F_BIT
+        STR     sp, [r3, #4]
+        MSR     cpsr_c, #MODE_FIQ | I_F_BIT
+        STR     sp, [r3, #8]
+        MSR     cpsr_c, #MODE_IRQ | I_F_BIT
+        STR     sp, [r3, #12]
+        MSR     cpsr_c, #MODE_SYS | I_F_BIT
+        STR     sp, [r3, #16]
+        MSR     cpsr_c, #MODE_SVC | I_F_BIT
 
         @ ---- our vectors, stacks ---------------------------------------------------------------------------------------------
         LDR     r0, =Entry
@@ -384,7 +469,28 @@ _start:
 bbb_return:
         MSR     cpsr_c, #MODE_SVC | I_F_BIT
         SETEND  LE
+        @ back onto the bridge table, then to the physical address: the bootloader's own table does not map the linked one
         LDR     r12, =uboot_ctx
+        LDR     r1, [r12, #52]                  @ the bootloader's TTBR0 (for its walk attributes)
+        AND     r1, r1, #0x7F
+        LDR     r2, =bridge
+        ADD     r2, r2, #BUFFEE_DDR_SHIFT
+        ORR     r1, r1, r2
+        MVN     r2, #0xAA000000                 @ DACR: every domain client (PJIT's may bar domain 1)
+        BIC     r2, r2, #0x00AA0000
+        BIC     r2, r2, #0x0000AA00
+        BIC     r2, r2, #0x000000AA
+        MCR     p15, 0, r2, c3, c0, 0
+        MCR     p15, 0, r1, c2, c0, 0           @ TTBR0 = the bridge
+        MOV     r2, #0
+        MCR     p15, 0, r2, c8, c7, 0           @ TLBIALL
+        MCR     p15, 0, r2, c7, c5, 6           @ BPIALL
+        DSB
+        ISB
+        ADR     r2, 1f
+        ADD     r2, r2, #BUFFEE_DDR_SHIFT
+        BX      r2
+1:      ADD     r12, r12, #BUFFEE_DDR_SHIFT     @ uboot_ctx, physical
         ADD     r12, r12, #40
         LDMIA   r12, {r1-r7}                    @ r1 cpsr, r2 sctlr, r3 actlr, r4 ttbr0, r5 ttbcr, r6 dacr, r7 vbar
         @ MMU and caches off while the tables change
@@ -407,16 +513,36 @@ bbb_return:
         ISB
         MCR     p15, 0, r2, c1, c0, 0           @ SCTLR: U-Boot's MMU and caches back
         ISB
+        LDR     r3, =uboot_ctx + 68
+        ADD     r3, r3, #BUFFEE_DDR_SHIFT
+        MSR     cpsr_c, #MODE_UND | I_F_BIT     @ the other modes' stack pointers
+        LDR     sp, [r3, #0]
+        MSR     cpsr_c, #MODE_ABT | I_F_BIT
+        LDR     sp, [r3, #4]
+        MSR     cpsr_c, #MODE_FIQ | I_F_BIT
+        LDR     sp, [r3, #8]
+        MSR     cpsr_c, #MODE_IRQ | I_F_BIT
+        LDR     sp, [r3, #12]
+        MSR     cpsr_c, #MODE_SYS | I_F_BIT
+        LDR     sp, [r3, #16]
+        MSR     cpsr_c, #MODE_SVC | I_F_BIT
         MSR     cpsr_fsxc, r1                   @ U-Boot's mode, flags, interrupt masks, E = 0
         LDR     r12, =uboot_ctx
+        ADD     r12, r12, #BUFFEE_DDR_SHIFT
         LDMIA   r12, {r4-r11, sp, lr}
         BX      lr                              @ r0 = the exit code: `go` returns
 
         .ltorg
+io_sections:    .hword  BUFFEE_IO_SECTIONS, 0
+        .align  2
 
         .section .data
         .align 3
-uboot_ctx:      .space 80
+uboot_ctx:      .space 96              @ r4-r11, sp, lr; CPSR, SCTLR, ACTLR, TTBR0, TTBCR, DACR, VBAR; the UND, ABT, FIQ, IRQ and SYS stack pointers
+
+        .section .bridge, "aw", %nobits
+        .align 14
+bridge:         .space 16384            @ the bridge table (boot.S builds it at each entry; the exit uses it again)
 
         .section .bss
         .align 3

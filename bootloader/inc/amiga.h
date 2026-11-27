@@ -18,6 +18,11 @@ uint16_t AmigaRead16(uint32_t a);                           /* the word at an ev
 void     AmigaWrite16(uint32_t a, uint16_t v);
 uint8_t  AmigaRead8(uint32_t a);
 void     AmigaWrite8(uint32_t a, uint8_t v);
+#define ROM_COPY_TRIES 4
+int      AmigaBusTest(void);                                    /* every line to the Amiga connected, not stuck, not shorted (hal/bustest.c): 0, or -1 with the faults printed */
 void     AmigaCopy(void* dst, uint32_t src, uint32_t bytes);   /* bytes (even) from the Amiga's bus into RAM, in the Amiga's byte order */
+int      KickstartSumOK(const void* image, uint32_t bytes);   /* 0 for a Kickstart (first word 1111 or 1114) whose checksum is wrong, else 1 */
+uint32_t AmigaCompare(const void* copy, uint32_t src, uint32_t bytes);  /* reads the bus again: the words that differ from the copy */
+int      AmigaCopyROM(void* dst, uint32_t src, uint32_t bytes);        /* a copy read twice the same (and a right Kickstart checksum): 0, else -1 (-2: ESC) */
 
 #endif

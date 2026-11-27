@@ -43,6 +43,15 @@ static int WriteImage(const uint32_t* src, uint32_t len) {
     return 0;
 }
 
+int BootloaderInFlash(const void* image, uint32_t len) {
+    const uint32_t* p = (const uint32_t*)image;
+    uint32_t pos;
+
+    if (ReadWord(0) != len || ReadWord(4) != LOAD_ADDRESS) return 0;
+    for (pos = 8; pos < 8 + len; pos += 4) if (ReadWord(pos) != *p++) return 0;
+    return 1;
+}
+
 int UpdateBootloader(const void* image, uint32_t len) {
     uint32_t first = *(const uint32_t*)image;
 

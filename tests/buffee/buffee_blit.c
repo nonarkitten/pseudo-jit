@@ -20,7 +20,7 @@
 #ifndef HUNGDIAG
 #define HUNGDIAG 0
 #endif
-#define COUNT ((volatile uint32_t *)0x9F5FFFD0u)
+#define COUNT ((volatile uint32_t *)BUFFEE_DDR(0x9F5FFFD0u))
 int main(void)
 {
     uint32_t round = 0;
@@ -59,7 +59,7 @@ int main(void)
     *(volatile uint8_t *)0xBFE001 |= 1;
 #if RESETS
     if (round + 1 < RESETS) {
-        volatile uint32_t *g3oe = (volatile uint32_t *)0x481AE134u, *g3do = (volatile uint32_t *)0x481AE13Cu, *g0oe = (volatile uint32_t *)0x44E07134u, *g0do = (volatile uint32_t *)0x44E0713Cu;
+        volatile uint32_t *g3oe = (volatile uint32_t *)BUFFEE_IO(0x481AE134u), *g3do = (volatile uint32_t *)BUFFEE_IO(0x481AE13Cu), *g0oe = (volatile uint32_t *)BUFFEE_IO(0x44E07134u), *g0do = (volatile uint32_t *)BUFFEE_IO(0x44E0713Cu);
         *g0do &= ~(1u << 13); *g0oe &= ~(1u << 13); *g3do &= ~(1u << 16); *g3oe &= ~(1u << 16);                  /* RESET and HALT low */
         for (uint32_t c0 = bbb_pmu_cycles(); bbb_pmu_cycles() - c0 < 20u * 1000000u; ) ;                              /* ~20 ms at 1 GHz */
         *g0oe |= 1u << 13; *g3oe |= 1u << 16;                                                                         /* released */

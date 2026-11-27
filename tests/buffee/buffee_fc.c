@@ -14,7 +14,7 @@ extern void emit_opcode_table(void);
 #define GUEST_STACK  0x08100000u
 #define GUEST_DATA   0x08020000u
 #define GUEST_VEC    0x08010000u
-#define GPIO2        0x481AC000u
+#define GPIO2        BUFFEE_IO(0x481AC000u)
 #define DATAOUT      (GPIO2 + 0x13C)
 #define DATAIN       (GPIO2 + 0x138)
 

@@ -1,14 +1,15 @@
 # Tests
 
-Three families, by where they run. Every test is a bare-metal program built from the translator's own objects;
+Four families, by where they run. Every test in the first three is a bare-metal program built from the translator's own objects;
 its source file starts with a comment that says what it checks. Build output goes to `build/<variant>/` (see
 [../docs/building.md](../docs/building.md)).
 
 | directory | runs on | how | what |
 |---|---|---|---|
-| [`qemu/`](qemu) | `qemu-system-arm` (Cortex-A15 "virt"; A8 model for `make a8-test`) | `make test` | correctness: 73 programs, 58 of them in `make test` |
+| [`qemu/`](qemu) | `qemu-system-arm` (Cortex-A15 "virt"; A8 model for `make a8-test`) | `make test` | correctness: 78 programs, 61 of them in `make test` |
 | [`bbb/`](bbb) | a BeagleBone Black (Cortex-A8, 1 GHz) | `make bbb-<name>`, `tools/bbb/run.py` | cycle counts, mispredicts, latency: the performance lab |
 | [`buffee/`](buffee) | a Buffee in an Amiga | `make bundle-<name>`, `tools/buffee/run_local.py` | the bus, the chipset, Kickstart: the board's tests |
+| [`amiga/`](amiga) | the host (the golden 68000 core) | `make amiga-test` | the `buffee` command against PJIT's control page on a simulated board; the floppy writer |
 | `include/`, `data/`, `kcmp/` | — | — | shared headers; checked-in generated data (`tools/data/`); C kernels compiled for the 68000 |
 | `run.sh`, `run_a8.sh` | — | called by `make` | run the built QEMU tests in parallel and print a report |
 
@@ -25,7 +26,7 @@ through the cache (`_dr`; the `_dr` file is three lines that define `PJIT_TEST_D
 * **the generated tables** — `smoke_tables`, `smoke_ot`, `smoke_ext_audit*`;
 * **the caches** — `smoke_links`, `smoke_rts`, `smoke_defer`, `smoke_fuse`, `smoke_bsrb`, `smoke_loops`, `smoke_bcache`, `smoke_blkfast_empty`, `smoke_evict_stress`, `smoke_fill_spill`, `smoke_fill_pad`, `smoke_lzt`, `smoke_xlazy`;
 * **whole programs** — `smoke_tinybasic` (a BASIC interpreter, `test_progs/tinybasic.c`, runs a program), `smoke_kernels` (C kernels), and, when their data is present, `smoke_kcmp` (the same C compiled for the 68000 and run natively on the ARM, compared), `smoke_corpus`, `smoke_doynax`;
-* **not in `make test`**: `smoke_dhrystone*`, `smoke_bogomips*`, `smoke_native_bogomips` (the programs the benchmarks build on), `smoke_dhrystone_trace`, `trace_tinybasic`, `hist_tinybasic` (write instruction traces and opcode histograms for `tools/study/`), `amiga_diff` + `amiga_hook` (the differential harness, `tools/amiga/`).
+* **not in `make test`**: `smoke_dhrystone*`, `smoke_bogomips*`, `smoke_native_bogomips` (the programs the benchmarks build on), `smoke_dhrystone_trace`, `trace_tinybasic`, `hist_tinybasic` (write instruction traces and opcode histograms for `tools/study/`), `smoke_tiers` (one small program through every tier, for `tools/study/tiers.py`), `amiga_diff` + `amiga_hook` (the differential harness, `tools/amiga/`).
 
 Beyond `make test`: `make check-gen` (the generator against a 68000 oracle), `make golden` (Ted Fried's MC68000 suite), `make a8-test`
 (20 of these tests on the Cortex-A8 model).
@@ -63,10 +64,21 @@ with the board in it; most print one summary line and a `PASS`/`FAIL`.
 | `buffee_fried` | Ted Fried's MC68000 suite on the board |
 | `buffee_endian`, `buffee_abort`, `buffee_smc`, `buffee_fc`, `buffee_regtest` | lane/endianness sanity; data aborts become address/bus errors; self-modifying code; the function-code GPIOs; a guest RAM region behaves as RAM |
 | `buffee_chipfull` | **all of chip RAM** — marches, display DMA on, weights, random frames; run it after any bus-timing change |
+| `buffee_busdma` | checked chip RAM accesses in the forms guest code makes them, with no DMA, beside planes, copper and the blitter (normal and nasty), and after idle times; `ROUNDS=n` repeats it with the bus clock's drift, `GAPS=1` sweeps the time between accesses, `MARK=1` marks every wrong access on the bus for a logic analyser |
 | `buffee_top`, `buffee_weight`, `buffee_cia4`, `buffee_blit` | regression kernels from the bus bring-up: top-of-RAM writes, write errors vs the number of high address lines, CIA read-back, blitter health |
 | `buffee_chips`, `buffee_floppy`, `buffee_peekrom` | bring-up probes: chip IDs and register stability, the floppy path without Kickstart, ROM words through the window |
 | `buffee_speed`, `buffee_kspeed`, `buffee_bus` | throughput by access type; guest loops on the bus vs in host DRAM; a bus-cycle generator for logic-analyser captures |
 | `buffee_shotgun` | the payload of `tools/buffee/shotgun.py`: GreenPAK and GPMC edits applied live while a read/write test runs |
 | `buffee_gpreset` | whether the board can power-cycle its GreenPAK through ball M1 (a v0.8 can, a v0.6 cannot): registers against the NVM after M1 pulses |
 | `buffee_boardkind` | writes the bootloader's board-kind record in the EEPROM (`-DKIND=0` swapper, `1` straight), to test how a wrong record is caught |
+| `buffee_minimigcfg` | configures a MiniMig whose FPGA was loaded over JTAG (its ARM never does): the ARM's OSD command bytes through the core's CPU command register at `$DFF1F0`, then the boot ROM's "done" |
+| `buffee_mouse` | which game port the mouse moves: JOY0DAT, JOY1DAT, the fire buttons and POTGOR whenever one changes, for 15 s |
+| `buffee_ide` | a Gayle IDE port without Kickstart: the Gayle ID, IDENTIFY, sectors read singly (twice each) and as multi-sector commands, a checksum per sector to compare with the image |
 | `buffee_blitdur`, `buffee_crumbs`, `buffee_reroll` | blit duration under CPU polling; the post-mortem ring that survives a watchdog reset; which board-side piece holds per-boot state |
+
+## tests/amiga — `make amiga-test`
+
+The Amiga programs of [`amiga/`](../amiga), checked on the Mac. `amiga_host.c` runs an AmigaDOS executable on the golden 68000 core (`golden/mcl68k.c`) with the exec.library
+and dos.library calls it makes simulated, and serves the control page at `$F7F000` with the payload's own `platform/buffee/control.c` and the bootloader's store, EEPROM and
+settings code over a simulated flash and EEPROM (`mock_board.c`). `test_buffee.py` runs the `buffee` command once per command line and checks what it printed, its return
+code and what the flash and EEPROM hold afterwards; `test_adf.py` reads back a floppy written by `tools/amiga/adf.py` block by block.

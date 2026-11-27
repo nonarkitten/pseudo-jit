@@ -20,28 +20,39 @@ static const char* const post_state[] = { "passed", "FAILED", "stopped" };      
 
 /* The entries that use the Amiga's bus need it running (main.c starts it only with the GreenPAK). */
 static int NeedBus(void) {
-    if (!boot.bus) printf("The Amiga's bus is not running (no GreenPAK, or the boot was stopped while the host held RESET)\n");
+    if (!boot.bus) printf("The Amiga's bus is not running (no GreenPAK, no bus clock, or the boot was stopped while the host held RESET)\n");
     return boot.bus;
 }
 
 /* ---- the images in the flash ---------------------------------------------------------------------------------------------------------- */
 
-static void SlotStatus(const char* name, uint32_t off, uint32_t max, uint32_t magic) {
-    uint32_t n = 0;
-    int rc = StoreLoad(off, max, magic, 0, &n, 0);
+static void SlotStatus(const char* name, uint32_t off, uint32_t max, uint32_t magic, const char* what) {
+    uint32_t n = 0, seq = 0;
+    int rc = StoreHeader(off, max, magic, 0, 0);
 
-    if (rc == STORE_OK) printf("  %s: ok, %lu bytes\n", name, (unsigned long)n);
-    else printf("  %s: %s\n", name, rc == STORE_BAD_CRC ? "damaged (CRC)" : "absent");
+    if (rc != STORE_MARKED_BAD) rc = StoreLoad(off, max, magic, 0, &n, &seq);
+    if (rc == STORE_OK) printf("  %s: ok, %lu bytes", name, (unsigned long)n);
+    else printf("  %s: %s", name, rc == STORE_BAD_CRC ? "damaged (CRC)" : rc == STORE_MARKED_BAD ? "marked bad" : "absent");
+    if (rc == STORE_OK && magic == STORE_MAGIC_PJIT) printf(", #%lu", (unsigned long)seq);
+    printf("%s\n", what);
+}
+
+void FlashStatus(void) {
+    PJITScanSlots();
+    SlotStatus("PJIT  ", STORE_PJIT_OFF, STORE_PJIT_MAX, STORE_MAGIC_PJIT, "  (the backup: written over the UART or JTAG)");
+    SlotStatus("Update", STORE_PJIT_UPD, STORE_PJIT_MAX, STORE_MAGIC_PJIT, "  (written from the Amiga)");
+    SlotStatus("ROM   ", STORE_ROM_OFF, STORE_ROM_MAX, STORE_MAGIC_ROM, "");
+    if (pjit_slots.booted != SLOT_NONE) printf("  This boot started the %s slot's bundle\n", PJITSlotName(pjit_slots.booted));
 }
 
 /* The Amiga's own ROM (the MapROM address and size of the settings) read through the bus, as an image for the ROM slot. */
-static void StoreAmigaROM(void) {
+int StoreAmigaROM(void) {
     uint32_t base = (uint32_t)settings.maprom_base_64k << 16, size = 1u << settings.maprom_size_log2;
 
-    if (!NeedBus()) return;
+    if (!NeedBus()) return -1;
     printf("Reading %lu KB at %06lX\n", (unsigned long)(size >> 10), (unsigned long)base);
-    AmigaCopy((void*)RX_BUF, base, size);
-    StoreWrite(STORE_ROM_OFF, STORE_ROM_MAX, STORE_MAGIC_ROM, (void*)RX_BUF, size, 0);
+    if (AmigaCopyROM((void*)RX_BUF, base, size)) { printf("Nothing stored\n"); return -1; }
+    return StoreWrite(STORE_ROM_OFF, STORE_ROM_MAX, STORE_MAGIC_ROM, (void*)RX_BUF, size, 0);
 }
 
 static void FlashMenu(void) {
@@ -49,23 +60,24 @@ static void FlashMenu(void) {
 
     for (;;) {
         printf("\nFLASH IMAGES\n");
-        SlotStatus("PJIT", STORE_PJIT_OFF, STORE_PJIT_MAX, STORE_MAGIC_PJIT);
-        SlotStatus("ROM ", STORE_ROM_OFF, STORE_ROM_MAX, STORE_MAGIC_ROM);
+        FlashStatus();
         printf(" 1. Store a PJIT bundle (XMODEM)\n"
                " 2. Store a ROM image (XMODEM)\n"
                " 3. Store a copy of the Amiga's ROM\n"
-               " 4. Erase the PJIT bundle\n"
+               " 4. Erase the PJIT bundle (the backup)\n"
                " 5. Erase the ROM image\n"
                " 6. Update the bootloader (XMODEM)\n"
+               " 7. Erase the update (the backup boots)\n"
                " 0. Back\n");
         switch (MenuChoice()) {
         case 0: return;
-        case 1: if ((n = LoadXMODEM(RX_BUF))) StoreWrite(STORE_PJIT_OFF, STORE_PJIT_MAX, STORE_MAGIC_PJIT, (void*)RX_BUF, n, 0); break;
+        case 1: if ((n = LoadXMODEM(RX_BUF))) PJITStore(0, (void*)RX_BUF, n); break;
         case 2: if ((n = LoadXMODEM(RX_BUF))) StoreWrite(STORE_ROM_OFF, STORE_ROM_MAX, STORE_MAGIC_ROM, (void*)RX_BUF, n, 0); break;
         case 3: StoreAmigaROM(); break;
-        case 4: if (Confirm("Erase the PJIT bundle")) StoreErase(STORE_PJIT_OFF); break;
+        case 4: if (Confirm("Erase the PJIT bundle (the backup)")) PJITEraseSlot(0); break;
         case 5: if (Confirm("Erase the ROM image")) StoreErase(STORE_ROM_OFF); break;
         case 6: if ((n = LoadXMODEM(RX_BUF))) UpdateBootloader((void*)RX_BUF, n); break;
+        case 7: if (Confirm("Erase the update")) PJITEraseSlot(1); break;
         default: break;
         }
     }
@@ -130,6 +142,7 @@ static void DiagnosticsMenu(void) {
                " 4. Read memory (hex dump)\n"
                " 5. Write a 32-bit word\n"
                " 6. Find the board kind again (the GreenPAK supply test, stored)\n"
+               " 7. Test the lines to the Amiga (address, data, strobes, interrupts)\n"
                " 0. Back\n");
         switch (MenuChoice()) {
         case 0: return;
@@ -141,6 +154,7 @@ static void DiagnosticsMenu(void) {
         case 6: if (AmigaRetestLanes() < 0) printf("The supply test cannot tell (no GreenPAK, or its registers hold what its NVM holds)\n");
                 else printf("Board kind: %s\n", AmigaLanesName());
                 break;
+        case 7: if (NeedBus()) { int v = console_verbose; console_verbose = 1; if (AmigaBusTest() == 0) printf("No fault found\n"); console_verbose = v; } break;
         default: break;
         }
     }

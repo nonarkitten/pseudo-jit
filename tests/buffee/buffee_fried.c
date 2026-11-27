@@ -27,16 +27,10 @@
 /// overflow test patterns, e.g. `movea.l #$80000000,a0`, never meant to
 /// be dereferenced), which isn't reliably decidable from the bytes alone.
 ///
-/// So the image is not relocated. QEMU's "virt" machine has no usable RAM at
-/// low addresses (real RAM starts at 0x40000000; see platform/qemu_virt/
-/// virt.ld), but this program turns the ARM MMU on (the TTBR0, domain, TLB
-/// and enable helpers of platform/cp15.S) and builds a
-/// full 4GB identity map with a single 1MB section redirected: virtual
-/// 0x00000000-0x000FFFFF -> test_mem's own physical 1MB-aligned buffer.
-/// Every other address, including this program's own code/stack/cache
-/// pool, keeps mapping to itself. The suite's image then loads completely
-/// unmodified at its native addresses -- no relocation, no patch list, no
-/// risk of misclassifying an instruction.
+/// So the image is not relocated: bbb_map_low() puts 1 MB of the DDR under
+/// the guest's section 0 (and its 24-bit repeat at 0x01000000), and the
+/// suite's image loads completely unmodified at its native addresses -- no
+/// relocation, no patch list, no risk of misclassifying an instruction.
 ///
 /// Pass/fail detection is a single-word TRAP #n patched directly over each of
 /// ALL_DONE and the suite's 9 `*_FAIL` self-loops (each a 1-word
@@ -69,10 +63,10 @@ extern void emit_opcode_table(void);
 // pjit_side.c's ram_pool, entirely separate from test_mem below (which
 // only holds the 68K test image itself).
 
-// 1MB-aligned: its own physical address doubles as the redirect target
-// for the MMU's virtual section 0, so a 68K address X inside the image
-// lands at ARM address test_mem+X with zero arithmetic needed.
-#define test_mem ((uint8_t *)0x90000000u)          /* Buffee: 1 MB of the DDR, mapped over guest section 0 by bbb_map_low() */
+// 1 MB of the DDR at physical 0x90000000 is the guest's section 0 (bbb_map_low()), so a 68K address X inside the image lands at
+// test_mem+X: the ARM writes it through the same section's 24-bit repeat at 0x01000000 (address 0 itself is a null pointer to the compiler).
+#define TEST_MEM_PHYS 0x90000000u
+#define test_mem ((uint8_t *)0x01000000u)
 
 
 // ARMv7 short-descriptor section format, 1MB granularity: base | type=
@@ -81,7 +75,7 @@ extern void emit_opcode_table(void);
 // 0x55555555 already marks every domain "client").
 #define SECTION_DESC(pa) (((pa) & 0xFFF00000u) | 0xC0Eu)
 
-static void mmu_identity_map_with_redirect(void) { bbb_map_low(0x90000000u); }
+static void mmu_identity_map_with_redirect(void) { bbb_map_low(TEST_MEM_PHYS); }
 
 // Names for the 9 *_FAIL self-check labels, indexed the same way
 // fail_addrs[] below is, and the same way each site's patched TRAP

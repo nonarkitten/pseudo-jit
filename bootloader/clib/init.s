@@ -87,6 +87,8 @@ Entry:
         B .                             /* 0x14 Reserved */
         LDR     pc, =IRQ_Handler        /* 0x18 IRQ (Regular IRQ)*/
         LDR     pc, =FIQ_Handler        /* 0x18 FIQ (Fast IRQ) */
+        .word   0x474F4C42              /* 0x20 'BLOG' and the address of the console log (src/request.h), for a debugger */
+        .word   console_log
 
 @ Each of these will remain in SRAM and can be overridden by the
 @ main application at a latter date and serve as stubs until then
@@ -117,6 +119,11 @@ Default_Handler:
 @ main function. 
 
 Reset_Handler:
+@
+@ How the bootloader was started: r0 = JTAG_MAGIC and r1 from a debugger (src/request.h), r0 = the boot parameters from the ROM
+@
+        LDR   r2, =jtag_entry
+        STMIA r2, {r0, r1}
 @
 @ Set up the Vector Base Address Regsiter
 @
@@ -161,6 +168,12 @@ Reset_Handler:
 @      
         MSR   cpsr_c, #MODE_SYS|I_F_BIT       @ change to system mode
         MOV   sp,r0                           @ write the stack pointer
+@
+@ Invalidate the caches (every level) before they are switched on: a reset clears them, but a debugger that loads this image after
+@ something else ran leaves that program's lines in them, at the same addresses
+@
+        BL      CP15ICacheFlush
+        BL      CP15DCacheFlush
 @
 @ Invalidate and Enable Branch Prediction  
 @ Invalidate cache and Enable Branch Prediction 

@@ -166,7 +166,7 @@ int main(void)
     cia_probe("before 7");
     /* 7: the Kickstart's own ROM checksum loop (F800D8..F800F0) on the mapped ROM, against the same sum computed here */
     {
-        const uint8_t *rom = (const uint8_t *)(BUFFEE_MAPROM_PHYS + 0x80000u);
+        const uint8_t *rom = (const uint8_t *)(BUFFEE_MAPROM + 0x80000u);
         uint32_t d5 = 0; uint32_t off = 0; int d1 = -1, d2 = 1;
         for (;;) {
             uint32_t v = (uint32_t)rom[off] << 24 | rom[off + 1] << 16 | rom[off + 2] << 8 | rom[off + 3]; off += 4;
@@ -490,7 +490,7 @@ int main(void)
 
     /* 5: a RESET: the guest raises the RESET interrupt itself (GPIO3 IRQSTATUSRAW_0, bit 16: a big-endian store of 0x00000100) and spins; pjit_run() must return 0x100 */
     at(0);
-    w(0x23FC); wl(0x00000100); wl(0x481AE024);                                  /* MOVE.L #$100,$481AE024 */
+    w(0x23FC); wl(0x00000100); wl(BUFFEE_IO(0x481AE024u));                                  /* MOVE.L #$100,GPIO3_IRQSTATUS_SET_0 (the platform's address of it) */
     w(0x60FE);                                                                  /* BRA.S * */
     uint32_t r = run(GUEST_CODE);
     (void)r;

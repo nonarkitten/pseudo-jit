@@ -12,19 +12,19 @@
 #include "buffee.h"
 
 #define R32(a)          (*(volatile uint32_t *)(a))
-#define I2C(off)        R32(0x44E0B000u + (off))
+#define I2C(off)        R32(BUFFEE_IO(0x44E0B000u) + (off))
 #define I2C_AL_NACK     3u
 #define I2C_ARDY        (1u << 2)
 #define I2C_RRDY        (1u << 3)
 #define I2C_XRDY        (1u << 4)
 #define I2C_BF          (1u << 8)
 #define I2C_BB          (1u << 12)
-#define GPIO2           0x481AC000u
+#define GPIO2           BUFFEE_IO(0x481AC000u)
 #define G_OE            0x134
 #define G_DATAIN        0x138
 #define G_CLEARDATAOUT  0x190
 #define G_SETDATAOUT    0x194
-#define CONF_ADVN_ALE   0x44E10890u     /* ball M1's pad control */
+#define CONF_ADVN_ALE   BUFFEE_IO(0x44E10890u)     /* ball M1's pad control */
 #define PAD_GPIO_OUT    0x2Fu           /* mode 7 (GPIO2_2), pull disabled, input buffer on (DATAIN reads the pad) */
 #define M1_BIT          (1u << 2)
 #define TIMEOUT         2000000u        /* cycles (2 ms): an I2C transfer that takes longer is abandoned */

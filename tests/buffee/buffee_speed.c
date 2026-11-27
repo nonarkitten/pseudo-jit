@@ -44,9 +44,9 @@ int main(void)
         { "wrcyc10", 0x00131302, 0x000C101C, 0x10000000 },
     };
     for (unsigned v = 0; v < sizeof V / sizeof V[0]; v++) {
-        R32(0x500000C0 + 4 * 6) = 0; for (volatile int w = 0; w < 20000; w++) ;
-        R32(0x500000C0 + 4 * 1) = V[v].c2; R32(0x500000C0 + 4 * 4) = V[v].c5; R32(0x500000C0 + 4 * 5) = V[v].c6;
-        R32(0x500000C0 + 4 * 6) = 0x00000F42; for (volatile int w = 0; w < 20000; w++) ;
+        R32(BUFFEE_IO(0x500000C0u) + 4 * 6) = 0; for (volatile int w = 0; w < 20000; w++) ;
+        R32(BUFFEE_IO(0x500000C0u) + 4 * 1) = V[v].c2; R32(BUFFEE_IO(0x500000C0u) + 4 * 4) = V[v].c5; R32(BUFFEE_IO(0x500000C0u) + 4 * 5) = V[v].c6;
+        R32(BUFFEE_IO(0x500000C0u) + 4 * 6) = 0x00000F42; for (volatile int w = 0; w < 20000; w++) ;
         uint32_t t0, bad, c;
         for (uint32_t i = 0; i < N; i++) write_BE_word(0x30000 + 2 * i, 0);
         t0 = bbb_pmu_cycles(); for (uint32_t p = 0; p < PASSES; p++) for (uint32_t i = 0; i < N; i += 8) { volatile uint16_t *q = (volatile uint16_t *)(0x30000 + 2 * i); q[0] = i; q[1] = i + 1; q[2] = i + 2; q[3] = i + 3; q[4] = i + 4; q[5] = i + 5; q[6] = i + 6; q[7] = i + 7; }

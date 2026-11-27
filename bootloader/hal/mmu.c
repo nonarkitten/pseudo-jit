@@ -16,7 +16,9 @@
 #define SEC_C         0x008u
 #define SEC_AP_FULL   0xC00u                                         /* AP[1:0] = 11: read and write at every privilege level */
 #define SEC_TEX(n)    ((uint32_t)(n) << 12)
-#define SEC_DEVICE    (SEC_SECTION | SEC_B | SEC_AP_FULL)            /* 0x0c06: TEX 000 C 0 B 1, shareable device; without B (0x0c02) strongly ordered */
+#define SEC_XN        0x010u                                         /* execute never: ARMv7 may fetch instructions speculatively from Device memory without it,
+                                                                        and such a read of the Amiga's bus where nothing answers never ends */
+#define SEC_DEVICE    (SEC_SECTION | SEC_B | SEC_AP_FULL | SEC_XN)   /* 0x0c16: TEX 000 C 0 B 1, shareable device, execute never; without B strongly ordered */
 #define SEC_NORMAL_WB (SEC_SECTION | SEC_B | SEC_C | SEC_AP_FULL | SEC_TEX(1))   /* 0x1c0e: TEX 001 C 1 B 1, normal memory, write-back, write-allocate */
 
 #ifndef GPMC_ATTR

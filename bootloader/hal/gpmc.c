@@ -153,27 +153,28 @@ void GPMCConfig(const uint32_t config[6], uint32_t cs, uint32_t base, uint32_t s
 }
 
 /**
-                     REAL   CYCLE  EFFECTIVE MAIN CLOCK  FINAL  
-    SYSTEM           CLOCK  TIME*   CLOCK     ADJUSTMENT  CLOCK  PRECISION
-    ---------------- -----  ------  --------- ----------  -----  ---------
-    Atari AdSPEED    16.04  12.00   16.67     96.3%       16.05  1.0005
-    Amiga AdSPEED    14.32  13.00   15.38     93.1%       14.32  1.0003
-    Amiga AdSPEED    14.19  14.00   14.29     99.3%       14.19  0.9999
-    NEOGEO           12.00  16.00   12.50     96.0%       12.00  1.0000
-    X68000           10.00  20.00   10.00     100.0%      10.00  1.0000
-    Atari STe (NTSC) 8.05   24.00   8.33      96.6%       8.05   0.9995
-    Atari (PAL)      8.02   24.00   8.33      96.3%       8.03   1.0005
-    Atari ST (NTSC)  8.01   24.00   8.33      96.1%       8.01   0.9997
-    Apple Mac        7.83   25.00   8.00      97.9%       7.83   0.9998
-    SEGA Genesis     7.67   26.00   7.69      99.7%       7.67   0.9999
-    SEGA Mega Drive  7.60   26.00   7.69      98.8%       7.60   1.0000
-    Amiga (NTSC)     7.16   27.00   7.41      96.6%       7.16   0.9995
-    Amiga (PAL)      7.09   28.00   7.14      99.3%       7.09   0.9999
-    Apple Lisa       5.00   31.00   6.45      77.5%       5.00   1.0000
+    The GPMC's cycle stands for the 68000's 4 clocks. Its CYCLETIME is counted in units of 4 L3F cycles; L3F is the ROM's 200 MHz (main.c), so a unit is 20 ns and
+    the bootloader takes as many as fit in the host's 4 clocks (GPMCUnits): the GPMC's cycle may end early, never late. A core PLL set so that the units last the
+    host's 4 clocks to a few hundred ppm (CorePLLFor, built with -DCORE_PLL_HOST) would choose these, for the nominal clocks; it made the A500+ hang (main.c):
 
-    * This is the basic "window" that we need to use for the whole 68000
-      bus cycle and encompases four natural bus clocks and the eight
-      internal states. Cycle times of less than 16 may be imprecise.
+    SYSTEM               CLOCK   UNITS  M / N      L3F MHz   CORE MHz   PPM FAST
+    -------------------- ------- -----  ---------  -------   --------   --------
+    Atari AdSPEED         16.040  12     1163 / 29  192.497    962.483    +86
+    Amiga AdSPEED (NTSC)  14.318  13     1241 / 32  186.150    930.750    +73
+    Amiga AdSPEED (PAL)   14.188  14      538 / 13  198.646    993.231   +101
+    NEOGEO                12.000  16     1281 / 32  192.150    960.750   +781
+    X68000                10.000  19     1148 / 29  190.014    950.069    +73
+    Atari STe (NTSC)       8.054  24      443 / 11  193.309    966.545    +80
+    Atari (PAL)            8.011  24      721 / 18  192.267    961.333    +64
+    Atari ST (NTSC)        8.000  24     1281 / 32  192.150    960.750   +781
+    Apple Mac              7.834  25     1265 / 31  195.871    979.355   +158
+    SEGA Genesis           7.670  26      831 / 20  199.440    997.200    +35
+    SEGA Mega Drive        7.600  26     1194 / 29  197.628    988.138   +113
+    Amiga (NTSC)           7.159  27      443 / 11  193.309    966.545    +71
+    Amiga (PAL)            7.094  28      538 / 13  198.646    993.231   +101
+    Apple Lisa             5.000  31      549 / 17  155.012    775.059    +76
+
+    The units are the "window" of the whole 68000 bus cycle: four bus clocks and the eight states. Fewer than 16 units place the states coarsely.
 
     Each state centre (when we want to ideally transition a signal) is:
 
@@ -356,8 +357,27 @@ static void SetGPMCTiming(Timing_t *t) {
 }
 
 
+/* The GPMC units (4 L3F cycles each, 20 ns at L3F = 200 MHz) that stand for 4 bus clocks: as many as fit with PLL_MARGIN_PPM (init.h) to spare, and at
+   most 31 (CYCLETIME's width). */
+int GPMCUnits(double bus_khz) {
+#ifdef CORE_M4                                                /* L3F is 2000 / CORE_M4 MHz: as many units as fit with CORE_M4_MARGIN_PPM to spare (main.c) */
+#ifndef CORE_M4_MARGIN_PPM
+#define CORE_M4_MARGIN_PPM 5000
+#endif
+    int m = (int)(CoreM4kHz() / bus_khz * (1.0 - CORE_M4_MARGIN_PPM * 1e-6));
+    return m > 31 ? 31 : m;
+#endif
+#ifdef CORE_PLL_UNITS                                         /* -DCORE_PLL_UNITS=27: a fixed count, for comparing the bus timing (with -DCORE_PLL_M/N in main.c) */
+    (void)bus_khz;
+    return CORE_PLL_UNITS;
+#endif
+    int u = (int)(200000.0 / (bus_khz * (1.0 + PLL_MARGIN_PPM * 1e-6)));
+
+    return u > 31 ? 31 : u;
+}
+
 void InitGPMC(float bus_clock) {
-    int cycle_time = 200.0f / bus_clock; // + 0.5f;
+    int cycle_time = GPMCUnits((double)bus_clock * 1000.0);
 
     // Total Cycle Time
     default_timing.CYCLETIME  = cycle_time;
@@ -397,8 +417,6 @@ void InitGPMC(float bus_clock) {
    chip RAM read says yes, in the wrong one almost all say no: GPPhaseClass, 256 reads), (2) a pattern written to 512 words of chip RAM and read back (a few percent errors in the wrong phase).
    Score = flop 'no' count + data errors; the lower wins (A on a tie); if even the best is not clean the gate is switched off and the delay made long (slow, but right).
    (With the PRU loop that echoed ~70 ns late the flop alone was enough; a tight echo that is not inverted moves ASn half a clock early and the flop says 'right' in both phases: see pru/main_gp4.c.) */
-void EnableRomOverlay();
-void DisableRomOverlay();
 #define CAL_WORDS 512
 #ifndef CAL_FLOP
 #define CAL_FLOP 32                                       /* class-flop samples per phase: each is an I2C read (0.42 ms); the wrong phase says "no" on ~98% of them, 256 cost 107 ms per phase */
@@ -475,12 +493,12 @@ void ASNCalibrate(void) {
 }
 
 /* CIA-A port A: bit 0 = OVL (the ROM overlay at $000000), bit 1 = the power LED (low = bright); both are outputs. */
-void EnableRomOverlay() {
+void EnableRomOverlay(void) {
     AmigaWrite8(CIAA_DDRA, AmigaRead8(CIAA_DDRA) | 0x03);
     AmigaWrite8(CIAA_PRA, AmigaRead8(CIAA_PRA) | 0x01);
 }
 
-void DisableRomOverlay() {
+void DisableRomOverlay(void) {
     AmigaWrite8(CIAA_DDRA, AmigaRead8(CIAA_DDRA) | 0x03);
     AmigaWrite8(CIAA_PRA, AmigaRead8(CIAA_PRA) & 0xFC);
 }

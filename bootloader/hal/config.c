@@ -35,9 +35,9 @@ void config_set_defaults(config_t *c) {
     c->maprom_page = 0xFF;
     c->maprom_base_64k = 0xF8;              /* $F80000 */
     c->maprom_size_log2 = 19;               /* 512 KB */
-    c->maprom_src = MAPROM_RAM;             /* copy the Amiga's own Kickstart into DRAM (works with nothing in the flash) */
+    c->maprom_src = MAPROM_OFF;             /* the Amiga's own ROM, read on its bus: the board starts as a plain 68000 */
     c->ram_mode = RAM_128M;
-    c->pace = 100;                          /* interpreted code (chip RAM) runs at an MC68000's pace; fast RAM and the MapROM megabyte are translated at full speed */
+    c->pace = 100;                          /* interpreted code (chip RAM, the ROM on the bus) runs at an MC68000's pace; fast RAM and a MapROM image are translated at full speed */
     c->kHz = 8000;
     c->is_dirty = 1;
 }
@@ -131,6 +131,33 @@ int LoadBoardKind(void) {
     if (!I2C0Probe(EEPROM_I2C) || !I2C0ReadCmd(EEPROM_I2C, a, 2, (uint8_t*)&r, sizeof r)) return -1;
     if (r.magic != BOARD_REC_MAGIC || r.check != (uint8_t)~r.kind || r.kind > 1) return -1;
     return r.kind;
+}
+
+int WipeEEPROM(void) {
+    static const uint8_t ff[8] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
+    static uint8_t back[64];
+    uint8_t a[2];
+    uint32_t off, i;
+
+    if (!I2C0Probe(EEPROM_I2C)) { printf("No EEPROM answers\n"); return -1; }
+    printf("Erasing the EEPROM (%u bytes)", (unsigned)EEPROM_WIPE_BYTES);
+    for (off = 0; off < EEPROM_WIPE_BYTES; off += 8) {                     /* aligned 8-byte page writes, as SaveConfigEEPROM */
+        a[0] = (uint8_t)(off >> 8);
+        a[1] = (uint8_t)off;
+        I2C0SendCmd(EEPROM_I2C, a, 2, ff, 8);
+        WaitMSDMTimer(10);
+        if ((off & 0x3FF) == 0) printf(".");
+    }
+    for (off = 0; off < EEPROM_WIPE_BYTES; off += sizeof back) {
+        a[0] = (uint8_t)(off >> 8);
+        a[1] = (uint8_t)off;
+        if (!I2C0ReadCmd(EEPROM_I2C, a, 2, back, sizeof back)) { printf("\nThe EEPROM did not answer a read at %04lX\n", (unsigned long)off); return -1; }
+        for (i = 0; i < sizeof back; i++)
+            if (back[i] != 0xFF) { printf("\nThe EEPROM is not blank at %04lX: %02X\n", (unsigned long)(off + i), back[i]); return -1; }
+    }
+    printf(" blank\n");
+    config_set_defaults(&settings);
+    return 0;
 }
 
 int SaveBoardKind(int kind) {

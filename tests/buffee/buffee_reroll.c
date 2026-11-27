@@ -18,7 +18,7 @@
 #endif
 static const uint8_t actions[] = { 0, 1, 2, 4, 7 };
 #define NACT ((uint32_t)(sizeof actions / sizeof actions[0]))
-#define COUNT ((volatile uint32_t *)0x9F5FFFD0u)
+#define COUNT ((volatile uint32_t *)BUFFEE_DDR(0x9F5FFFD0u))
 int main(void)
 {
     uint32_t round = (*BUFFEE_MAILBOX == 1) ? *COUNT + 1 : 0;

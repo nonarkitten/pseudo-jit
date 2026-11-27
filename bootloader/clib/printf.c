@@ -116,19 +116,25 @@ static int printd(char **out, double num, int width, int pad, int decimals, int 
     int l1=0, l2=0, pow10=0;
     int32_t whole=0;
     uint32_t frac=0;
+    int neg = exp != 'g' && exp != 'G' && num < 0.0;     /* the digits are made from the magnitude, the sign put in front */
 
+    if(neg) num = -num;
     switch(exp) {
     case 'e': case 'E':
         while(num >= 10.0) num /= 10.0, pow10++;
-        while(num < 0.1) num *= 10.0, pow10--;
+        while(num != 0.0 && num < 1.0) num *= 10.0, pow10--;
         *expptr++ = exp;
         printi(&expptr, pow10, 10, u_base_chars, 0, PAD_SIGN);
+        *expptr = 0;
         // fallthru
     default:
     case 'f': case 'F':
+        { double half = 0.5; int d; for(d = 0; d < decimals && d < 9; d++) half /= 10.0; num += half; }   /* rounded to the digits shown */
         whole = (int32_t)num;
         frac = (uint32_t)(1000000000.0 * (num - (double)whole));
-        printi(&b1, (int)num, 10, u_base_chars, 0, pad & PAD_SIGN);
+        if(neg) *b1++ = '-';
+        else if(pad & PAD_SIGN) *b1++ = '+';
+        printu(&b1, (uint32_t)whole, 10, u_base_chars, 0, 0);
         if(decimals) {
             *b1++ = '.';
             printu(&b1, frac, 10, u_base_chars, decimals, PAD_DECIMAL);

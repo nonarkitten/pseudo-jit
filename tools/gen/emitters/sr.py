@@ -66,7 +66,8 @@ class SrMixin:
 
     def _fc_sync(self, r):
         """FC2 follows the new S bit (the flags of the `tst` of the SR image in r are still live: NE =
-        supervisor). GPIO2 CLEARDATAOUT / SETDATAOUT (0x481AC190 / 194) take a 1 bit
+        supervisor). GPIO2 CLEARDATAOUT / SETDATAOUT (at 0x1C6AC190 / 194, where the platform maps GPIO2: BUFFEE_IO(0x481AC000) in
+        platform/buffee/buffee.h, PJIT_GPIO2 in mk/pjit.mk) take a 1 bit
         to act on (the BE store of 0x40000 is the LE word 0x400 = GPIO2_10); r3 is the address, x the value (r
         and r0 are not touched: r0 may hold a PC); the dsb orders the pin
         change before the next access to the Amiga window."""
@@ -75,7 +76,7 @@ class SrMixin:
         x = 1 if r != 1 else 2
         return [
             movw(3, 0xC190),
-            movt(3, 0x481A),
+            movt(3, 0x1C6A),
             mov(x, ("imm", 0x40000)),
             str_(x, 3, 4, cond="ne"),
             str_(x, 3, 0, cond="eq"),
@@ -205,4 +206,5 @@ class SrMixin:
         return self._load_sr(2) + self._is_svc() + self._save_sr(1, False) + [svc(0x100), bx("lr")]
 
     def emit_RESET(self, op):
-        return self._priv_keep_flags() + [bx("lr")]
+        # the runtime decides what a reset is (PJIT_VEC_RESET): on a board with a bus, the end of the run and a pulse on its RESET line
+        return self._priv_keep_flags() + [svc(0x108), bx("lr")]

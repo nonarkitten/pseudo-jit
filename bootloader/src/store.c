@@ -18,7 +18,9 @@
 #define HDR_SIZE  0x100u                /* the header page in front of a slot's data */
 #define CRC_POLY  0xEDB88320u
 
-typedef struct { uint32_t magic, len, crc, aux; } hdr_t;
+#define BAD_WORD  0x10u                 /* after the header: erased (0xFFFFFFFF) while the slot is good */
+
+typedef struct { uint32_t magic, len, crc, seq; } hdr_t;       /* seq: 0 in slots written before there were two PJIT slots */
 
 /* CRC-32 (reflected), slicing by 4: one word load and four table lookups per 4 bytes (about 10x fewer instructions than a bytewise loop). The 4 KB table is built on first use. */
 static uint32_t crc_t[4][256];
@@ -47,7 +49,7 @@ uint32_t crc32_update(uint32_t crc, const void *buf, uint32_t len) {
     return crc;
 }
 
-int StoreWrite(uint32_t off, uint32_t max, uint32_t magic, const void *src, uint32_t len, uint32_t aux) {
+int StoreWrite(uint32_t off, uint32_t max, uint32_t magic, const void *src, uint32_t len, uint32_t seq) {
     const uint8_t *s = (const uint8_t *)src;
     uint32_t crc, end, a, i, n, back = 0xFFFFFFFFu;
     uint8_t b[CHUNK];
@@ -64,7 +66,7 @@ int StoreWrite(uint32_t off, uint32_t max, uint32_t magic, const void *src, uint
     }
     for (i = 0; i < len; i += CHUNK) { n = (len - i < CHUNK) ? len - i : CHUNK; ReadSPIBlock(off + HDR_SIZE + i, b, n); back = crc32_update(back, b, n); }
     if (~back != crc) { printf("\nVerify failed\n"); return STORE_VERIFY; }
-    h.magic = magic; h.len = len; h.crc = crc; h.aux = aux;
+    h.magic = magic; h.len = len; h.crc = crc; h.seq = seq;
     WriteSPIBlock(off, &h, sizeof h);
     printf("\nStored %lu bytes, CRC %08lX\n", (unsigned long)len, (unsigned long)crc);
     return STORE_OK;
@@ -72,7 +74,28 @@ int StoreWrite(uint32_t off, uint32_t max, uint32_t magic, const void *src, uint
 
 /* Reads the stored image through ReadSPIBulk (32-bit words, 48 MHz, fast read: 0.5 -> ~5 MB/s) straight into dst (or into a scratch buffer when only the check is wanted); the CRC
    in the header decides. A mismatch at 48 MHz is retried once at 24 MHz (a flash or a board that cannot take the fast clock): spi_bulk_div stays at 1 after that. */
-int StoreLoad(uint32_t off, uint32_t max, uint32_t magic, void *dst, uint32_t *len, uint32_t *aux) {
+int StoreInfo(uint32_t off, uint32_t max, uint32_t magic, uint32_t *len, uint32_t *crc, uint32_t *seq) {
+    uint32_t bad;
+    hdr_t h;
+
+    ReadSPIBlock(off, &h, sizeof h);
+    if (h.magic != magic || h.len == 0 || h.len > max - HDR_SIZE) return STORE_ABSENT;
+    if (len) *len = h.len;
+    if (crc) *crc = h.crc;
+    if (seq) *seq = h.seq;
+    ReadSPIBlock(off + BAD_WORD, &bad, sizeof bad);
+    return bad == 0xFFFFFFFFu ? STORE_OK : STORE_MARKED_BAD;
+}
+
+int StoreHeader(uint32_t off, uint32_t max, uint32_t magic, uint32_t *len, uint32_t *seq) { return StoreInfo(off, max, magic, len, 0, seq); }
+
+void StoreMarkBad(uint32_t off) {
+    uint32_t zero = 0;
+
+    WriteSPIBlock(off + BAD_WORD, &zero, sizeof zero);
+}
+
+int StoreLoad(uint32_t off, uint32_t max, uint32_t magic, void *dst, uint32_t *len, uint32_t *seq) {
     uint8_t *d = (uint8_t *)dst, *p;
     uint32_t crc, i, n, n4;
     int attempt, err;
@@ -99,8 +122,25 @@ int StoreLoad(uint32_t off, uint32_t max, uint32_t magic, void *dst, uint32_t *l
         return STORE_BAD_CRC;
     }
     if (len) *len = h.len;
-    if (aux) *aux = h.aux;
+    if (seq) *seq = h.seq;
     return STORE_OK;
 }
 
 void StoreErase(uint32_t off) { EraseSPI(off, ERASE_64K); }       /* the header page goes with the first 64 KB: the slot is empty */
+
+int StoreWipe(void *scratch, uint32_t scratch_len) {
+    const uint32_t *w = (const uint32_t *)scratch;
+    uint32_t off, i, n = scratch_len & ~3u;
+
+    printf("Erasing the whole flash");
+    EraseSPI(0, ERASE_ALL);
+    printf(", reading it back");
+    for (off = 0; off < STORE_CHECK_SPAN; off += n) {
+        ReadSPIBulk(off, scratch, n);
+        for (i = 0; i < n / 4; i++)
+            if (w[i] != 0xFFFFFFFFu) { printf("\nThe flash is not blank at %06lX: %08lX\n", (unsigned long)(off + 4 * i), (unsigned long)w[i]); return STORE_VERIFY; }
+        if ((off & 0xFFFFF) == 0) printf(".");
+    }
+    printf(" blank\n");
+    return STORE_OK;
+}

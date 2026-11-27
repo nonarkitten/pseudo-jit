@@ -41,6 +41,7 @@ typedef struct {
         unsigned boot_verbose  : 1; /* the boot report at every boot */
         unsigned post_checkclk : 1; /* measure the Amiga's bus clock (or check it against the stored host) at every boot; 0: kHz as set */
         unsigned first_boot    : 1; /* set with the defaults: the next boot is a first boot */
+        unsigned post_nobus    : 1; /* skip the test of the lines to the Amiga (hal/bustest.c); 0, the default, runs it at every boot */
     };
 
     uint16_t dpll_mul;              /* the ARM's clock in MHz when the PMIC is there and the last boot was good (300 MHz otherwise) */
@@ -80,5 +81,7 @@ extern int  LoadConfigEEPROM(void);         /* the settings from the EEPROM, or 
 extern int  SaveConfigEEPROM(void);         /* writes and reads back: 0 = verified */
 extern int  LoadBoardKind(void);            /* the board kind from its own EEPROM record: LANES_SWAPPER / LANES_STRAIGHT (amiga.h), -1 = none */
 extern int  SaveBoardKind(int kind);        /* writes the record and reads it back: 0 = verified */
+extern int  WipeEEPROM(void);               /* 0xFF over EEPROM_WIPE_BYTES (the settings and the board kind with them), read back: 0 = blank */
+#define EEPROM_WIPE_BYTES 0x1000u          /* the smallest part with two address bytes (24C32); the bootloader uses the first 0x108 */
 
 #endif

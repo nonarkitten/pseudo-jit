@@ -45,8 +45,13 @@ extern char _image_start, _image_end;       /* from linker.lds */
 
 extern uint32_t LoadXMODEM(uint32_t start);                 /* xmodem.c: the bytes received (a multiple of 128), 0 on failure */
 extern int UpdateBootloader(const void* image, uint32_t len);   /* writeimage.c: 0 when written and verified */
+extern int BootloaderInFlash(const void* image, uint32_t len);  /* writeimage.c: 1 when the flash holds this image already */
 extern void Menu(void);                                     /* menu.c */
 extern void SettingsMenu(void);                             /* settings.c */
+extern void SettingsShow(void);                             /* settings.c: the settings page */
+extern int  SettingsApply(const char* spec);                /* settings_set.c: "item=value;...": the number changed, -1 if a part did not parse */
+extern void FlashStatus(void);                              /* menu.c: the flash slots */
+extern int  StoreAmigaROM(void);                            /* menu.c: the Amiga's ROM into the ROM slot: STORE_OK or an error */
 
 #ifndef _DEBUG
 #define printf(...)

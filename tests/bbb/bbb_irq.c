@@ -10,7 +10,7 @@
 #include "mem_be.h"
 
 extern void emit_opcode_table(void);
-#define INTC 0x48200000u
+#define INTC BBB_IO(0x48200000u)
 #define R32(a) (*(volatile uint32_t *)(a))
 #ifndef PERIOD
 #define PERIOD 100000u                                   /* cycles between interrupts: 100 us (-DPERIOD=1000000 for a 1 ms tick) */

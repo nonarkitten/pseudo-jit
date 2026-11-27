@@ -11,21 +11,23 @@
 #include "buffee.h"
 #include "mem_be.h"
 #define R32(a) (*(volatile uint32_t *)(a))
-#define I2C(off) R32(0x44E0B000u + (off))
+#define I2C(off) R32(BUFFEE_IO(0x44E0B000u) + (off))
+static uint32_t gp_sa = 1u << 3;   /* the GreenPAK's register block: its control code (0-7, set by the chip's NVM) << 3; gp_find looks for it as the bootloader does */
+static int gp_nak;                 /* the last transfer was refused (NACK) or lost arbitration */
 static int gp_xfer(const uint8_t *cmd, int ncmd, uint8_t *data, int n, int rd)
 {
-    I2C(0xAC) = 1u << 3; I2C(0x98) = rd ? ncmd : ncmd + n; I2C(0x28) = 0x7FFF; I2C(0xA4) = 0x8600;
+    I2C(0xAC) = gp_sa; gp_nak = 0; I2C(0x98) = rd ? ncmd : ncmd + n; I2C(0x28) = 0x7FFF; I2C(0xA4) = 0x8600;
     while (I2C(0x24) & (1u << 12)) ;
     I2C(0xA4) |= 1;
     int c = ncmd, d = 0;
     while (c || (!rd && d < n)) {
         uint32_t s = I2C(0x24);
-        if (s & 3) break;
+        if (s & 3) { gp_nak = 1; break; }
         if (s & (1u << 4)) { I2C(0x9C) = c ? cmd[ncmd - c--] : data[d++]; I2C(0x28) = 1u << 4; if (!c && (rd || d == n)) { while (!(I2C(0x24) & 4)) ; I2C(0x28) = 4; } }
     }
     if (rd) {
         I2C(0x98) = n; I2C(0xA4) = (I2C(0xA4) | 3) & ~(1u << 9);
-        for (int k = 0; k < n; ) { uint32_t s = I2C(0x24); if (s & 3) break; if (s & 8) { data[k++] = (uint8_t)I2C(0x9C); I2C(0x28) = 8; if (k == n) { while (!(I2C(0x24) & 4)) ; I2C(0x28) = 4; } } }
+        for (int k = 0; k < n; ) { uint32_t s = I2C(0x24); if (s & 3) { gp_nak = 1; break; } if (s & 8) { data[k++] = (uint8_t)I2C(0x9C); I2C(0x28) = 8; if (k == n) { while (!(I2C(0x24) & 4)) ; I2C(0x28) = 4; } } }
     } else I2C(0xA4) |= 2;
     while (!(I2C(0x24) & (1u << 8))) ;
     I2C(0x94) |= (1u << 14) | (1u << 6); I2C(0x28) = 0x7FFF; I2C(0x98) = 0;
@@ -33,6 +35,11 @@ static int gp_xfer(const uint8_t *cmd, int ncmd, uint8_t *data, int n, int rd)
 }
 static void gp_write(uint8_t reg, uint8_t v) { gp_xfer(&reg, 1, &v, 1, 0); }
 static uint8_t gp_read(uint8_t reg) { uint8_t v = 0; gp_xfer(&reg, 1, &v, 1, 1); return v; }
+static int gp_find(void)
+{
+    for (uint32_t i = 0; i < 8; i++) { gp_sa = (i << 3) | 2; (void)gp_read(0); if (!gp_nak) { gp_sa = i << 3; return (int)i; } }   /* probed at the NVM block (2): $00 is also the general call */
+    gp_sa = 1u << 3; return -1;
+}
 static void set_matrix(int out, int src)                          // matrix output `out` <- input `src`: 6 bits at bit 6*out
 {
     for (int k = 0; k < 6; k++) {
@@ -41,12 +48,12 @@ static void set_matrix(int out, int src)                          // matrix outp
     }
 }
 // ---- watchdog -------------------------------------------------------------------------------------------------------------------
-#define WDT(off) R32(0x44E35000u + (off))
+#define WDT(off) R32(BUFFEE_IO(0x44E35000u) + (off))
 static void wdt_wait(void) { for (uint32_t s = 0; WDT(0x34) && s < 1000000; s++) ; }
 static void wdt_kick(void) { static uint32_t n; WDT(0x30) = ++n; wdt_wait(); }
 static void wdt_arm(uint32_t seconds)
 {
-    R32(0x44E004D4) = 2; for (uint32_t s = 0; ((R32(0x44E004D4) >> 16) & 3) && s < 1000000; s++) ;     // CM_WKUP_WDT1_CLKCTRL: module enabled
+    R32(BUFFEE_IO(0x44E004D4u)) = 2; for (uint32_t s = 0; ((R32(BUFFEE_IO(0x44E004D4u)) >> 16) & 3) && s < 1000000; s++) ;     // CM_WKUP_WDT1_CLKCTRL: module enabled
     wdt_wait(); WDT(0x24) = 0; wdt_wait();                                                              // no prescaler: the 32.768 kHz clock
     WDT(0x2C) = 0xFFFFFFFFu - 32768u * seconds + 1; wdt_wait();
     WDT(0x30) = 1; wdt_wait();                                                                          // load the counter
@@ -54,14 +61,14 @@ static void wdt_arm(uint32_t seconds)
 }
 static void wdt_disarm(void) { WDT(0x48) = 0xAAAA; wdt_wait(); WDT(0x48) = 0x5555; wdt_wait(); }
 // ---- UART (polled; the IRQ is masked in a bare-metal payload) ---------------------------------------------------------------------
-#define UART_RX_READY (R32(0x44E09014) & 1)
+#define UART_RX_READY (R32(BUFFEE_IO(0x44E09014u)) & 1)
 static int getline_(char *b, int n)                              // returns the length, or -1 after ESC x3
 {
     int len = 0, esc = 0;
     for (;;) {
         wdt_kick();
         if (!UART_RX_READY) continue;
-        uint8_t c = (uint8_t)R32(0x44E09000);
+        uint8_t c = (uint8_t)R32(BUFFEE_IO(0x44E09000u));
         esc = c == 0x1B ? esc + 1 : 0;
         if (esc >= 3) return -1;
         if (c == '\n' || c == '\r') { if (len) { b[len] = 0; return len; } continue; }
@@ -77,7 +84,7 @@ static uint32_t rnd(void) { static uint32_t x = 20261031; x = x * 1664525u + 101
 #define NR 60000
 #endif
 static uint8_t base_regs[0xC8];
-#define GPMC(off) R32(0x50000000u + (off))
+#define GPMC(off) R32(BUFFEE_IO(0x50000000u) + (off))
 static uint32_t gpmc_base[8];                                     // CONFIG1..7 of CS2 (0xB0..0xD8 step 0x20 is CS1; CS2 is 0xC0 + ...): saved at start, restored after each command
 static int sample_in(int input, int n) { int hi = 0; for (int k = 0; k < n; k++) hi += (gp_read((uint8_t)(0x74 + input / 8)) >> (input & 7)) & 1; return hi; }
 static unsigned hexv(const char *s) { unsigned v = 0; while (*s) { char c = *s++; v = v * 16 + (c <= '9' ? c - '0' : (c | 32) - 'a' + 10); } return v; }
@@ -85,6 +92,8 @@ static int decv(const char *s) { int v = 0; while (*s >= '0' && *s <= '9') v = v
 int main(void)
 {
     printf("=== GreenPAK shotgun ===\n");
+    if (gp_find() < 0) { printf("SGFAIL no GreenPAK answers on I2C0\n"); return 1; }
+    printf("SGGP GreenPAK at $%02X\n", (unsigned)gp_sa);
     *(volatile uint8_t *)0xBFE201 |= 3; *(volatile uint8_t *)0xBFE001 &= 0xFC;
     write_BE_word(0xDFF096, 0x7FFF);
     write_BE_word(ZW, 0);
@@ -115,11 +124,11 @@ int main(void)
             else if (*p == 'N') nr = decv(p + 1);
             else if (*p == 'L') {                                         // L<mult>:<div>: relock the Core DPLL (DCO = 24 * mult / div MHz; boot value 1000:24 = GPMC unit 20.000 ns); 869:21 trims 28 units to 4 PAL CLK7
                 char *c = p; while (*c && *c != ':') c++; unsigned mult = decv(p + 1), div = decv(c + 1);
-                R32(0x44E00490u) = (R32(0x44E00490u) & ~7u) | 4;          // CM_CLKMODE_DPLL_CORE: MN bypass
-                while (!(R32(0x44E0045Cu) & 0x100) || (R32(0x44E0045Cu) & 1)) ;
-                R32(0x44E00468u) = (R32(0x44E00468u) & ~0x7FF7Fu) | (mult << 8) | (div - 1);
-                R32(0x44E00490u) = (R32(0x44E00490u) & ~7u) | 7;          // lock
-                while ((R32(0x44E0045Cu) & 0x100) || !(R32(0x44E0045Cu) & 1)) ;
+                R32(BUFFEE_IO(0x44E00490u)) = (R32(BUFFEE_IO(0x44E00490u)) & ~7u) | 4;          // CM_CLKMODE_DPLL_CORE: MN bypass
+                while (!(R32(BUFFEE_IO(0x44E0045Cu)) & 0x100) || (R32(BUFFEE_IO(0x44E0045Cu)) & 1)) ;
+                R32(BUFFEE_IO(0x44E00468u)) = (R32(BUFFEE_IO(0x44E00468u)) & ~0x7FF7Fu) | (mult << 8) | (div - 1);
+                R32(BUFFEE_IO(0x44E00490u)) = (R32(BUFFEE_IO(0x44E00490u)) & ~7u) | 7;          // lock
+                while ((R32(BUFFEE_IO(0x44E0045Cu)) & 0x100) || !(R32(BUFFEE_IO(0x44E0045Cu)) & 1)) ;
             }
             else if (*p == 'T') phases = decv(p + 1);                    // 1: reads only, 2: chip RAM writes only, 3: both (for Logic captures of one phase)                        // loop length (for a Logic capture: millions)
             *e = saved; p = saved ? e + 1 : e;

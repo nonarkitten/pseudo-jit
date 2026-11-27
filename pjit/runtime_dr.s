@@ -7,7 +7,7 @@
 @     host = cache_data + ((guest & (2^19 - 1)) << 3)
 @ and each CL has a 16-bit tag (guest >> 19). A cleared CL is all `bl pjit_fill`: the first time
 @ execution enters a slot, pjit_fill translates the
-@ guest code from that slot to the end of its 64-byte cache-line entry (CLE) --
+@ guest code from that slot to the end of its 128-byte cache-line entry (CLE, 8 slots) --
 @ an instruction that starts in the CLE finishes even if it spills into the next
 @ one -- by writing, per guest instruction:
 @     [extension-word prefix: r1 (source) / r2 (destination)] [leader] [bl body]
@@ -70,7 +70,7 @@
 	.equ	S_FZ4,   CPU_SPILL + 112
 	.equ	S_FZ5,   CPU_SPILL + 116                @ (also the in-slot MOVEM expansion's scratch)
 	.ifndef	PJIT_TIER_T
-	.set	PJIT_TIER_T, 64                 @ tiered build: taken-transfer events at one target before it is promoted to a block (1..128; 0 = never)
+	.set	PJIT_TIER_T, 64                 @ tiered build: taken-transfer events at one target before it is promoted to a block (1..64: a backward branch counts in a byte; 0 = never)
 	.endif
 	.set	PJIT_TIER_TB, 1                  @ the count's trigger bit: the smallest TB with 2^TB >= PJIT_TIER_T (7 for 128); the 'promoted before' mark is the bit above it
 	.rept	10
@@ -205,7 +205,7 @@ pjit_goto:
 	add	r1, r1, r3, lsl #3              @ the host address of the target's first slot word
 	.if	PJIT_TIER_ON
 	@ tiered build: a slot hit is counted. The table pjit_tier_cnt (1024 x {target, count}, big-endian words, direct-mapped) holds, per index, the last target seen there and
-	@ the number of times it was; a different target restarts at K. The count reaches 128 (bit 7) after PJIT_TIER_T events: the target is promoted to a block (pjit_goto_promote).
+	@ the number of times it was; a different target restarts at K. The count sets bit TB after PJIT_TIER_T events: the target is promoted to a block (pjit_goto_promote).
 	@ Flag-free. Hit: the 32 words below run; miss: `add pc` skips them.
 	add	pc, pc, r2, lsl #7
 	nop
@@ -368,6 +368,7 @@ pjit_goto_promote:                      @ (E=BE, flags live) r0 = target, lr = i
 	ubfx	r1, r2, #(PJIT_TIER_TB + 1), #1 @ promoted before?
 	mov	r2, #PJIT_TIER_MARK
 	str	r2, [lr, #4]
+pjit_goto_promote_r1:                   @ r0 = target, r1 = 1 when it had a block before (its count is already restarted)
 	add	r1, r1, r1                      @ blk.s: BLK_STUB_PROMOTE -- a forced translation, nothing to link: 8, or 12 for a target that had a block before (a rebuild, for the thrash guard)
 	add	r1, r1, r1
 	add	r1, r1, #8
@@ -960,32 +961,14 @@ fill_b_plain:
 	b	fill_b_done
 fill_b_back:                            @ backward: through the loop core, which is an interrupt
 	.if	PJIT_TIER_ON
+	@ A tiered build: `bl<cc> pjit_d_bcount ; b<cc> target ; mov r0, #count`, the rest NOPs (fill_adv). The bl is taken exactly when the branch is; the core counts the
+	@ loop in the low byte of the third word, which is harmless when the branch falls through (r0 is scratch, no flags). One count per branch, no table, no tag.
 	sub	r3, r4, #2
 	cmp	r3, #1
 	bls	fill_prefix                     @ HI and LS: the router
 	movw	r3, #:lower16:fill_cctab
 	movt	r3, #:upper16:fill_cctab
 	ldrb	r4, [r3, r4]                    @ the ARM condition
-	str	lr, [r5, #S_FZ0]                @ (the displacement field of the second word; the `b<cc>` ends up in the fourth: field - 2)
-	ldr	r3, [r5, #S_T]
-	add	r3, r3, r2
-	sub	r3, r3, #2                      @ the guest target
-	lsl	lr, r3, #20
-	lsr	lr, lr, #20                     @ imm12
-	and	r1, r3, #0xF000
-	orr	r1, lr, r1, lsl #4              @ imm4 << 16 | imm12
-	orr	r1, r1, #0xE3000000
-	orr	r1, r1, #0x00001000
-	str	r1, [r0], #4                    @ movw r1, #lo
-	lsr	r3, r3, #16
-	lsl	lr, r3, #20
-	lsr	lr, lr, #20
-	and	r1, r3, #0xF000
-	orr	r1, lr, r1, lsl #4
-	orr	r1, r1, #0xE3000000
-	orr	r1, r1, #0x00400000
-	orr	r1, r1, #0x00001000
-	str	r1, [r0], #4                    @ movt r1, #hi
 	movw	r1, #:lower16:pjit_d_bcount
 	movt	r1, #:upper16:pjit_d_bcount
 	sub	r1, r1, r0
@@ -995,12 +978,12 @@ fill_b_back:                            @ backward: through the loop core, which
 	orr	r1, r1, r4, lsl #28
 	orr	r1, r1, #0x0B000000
 	str	r1, [r0], #4                    @ bl<cc> pjit_d_bcount
-	ldr	lr, [r5, #S_FZ0]
-	sub	lr, lr, #2
-	bic	lr, lr, #0xFF000000
 	orr	lr, lr, r4, lsl #28
 	orr	lr, lr, #0x0A000000
 	str	lr, [r0], #4                    @ b<cc> target
+	movw	r1, #(PJIT_TIER_K - 1)
+	movt	r1, #0xE3A0
+	str	r1, [r0], #4                    @ mov r0, #count: the loop's count, K - 1, so the TIER_T-th taken edge sets bit TB
 	b	fill_b_done
 	.endif
 	ldr	r3, [r5, #CPU_IRQ_WINDOWS]
@@ -1079,6 +1062,33 @@ fill_dbf:
 	.ifdef	PJIT_PIN_D0
 	cmp	r3, #0
 	bne	1f
+	.if	PJIT_TIER_ON
+	@ DBF D0 in a tiered build: `bl pjit_d_dbf0 ; b target`, the loop's count and five NOPs. The core decrements r4's low half; while the loop goes on it counts it and
+	@ returns to the `b target`, when it is over it returns past the eight words.
+	movw	r3, #:lower16:pjit_d_dbf0
+	movt	r3, #:upper16:pjit_d_dbf0
+	sub	r3, r3, r0
+	sub	r3, r3, #8
+	asr	r3, r3, #2
+	bic	r3, r3, #0xFF000000
+	orr	r3, r3, #0xEB000000
+	str	r3, [r0], #4                    @ bl pjit_d_dbf0
+	sub	r3, lr, r0
+	sub	r3, r3, #8
+	asr	r3, r3, #2
+	bic	r3, r3, #0xFF000000
+	orr	r3, r3, #0xEA000000
+	str	r3, [r0], #4                    @ b target
+	mov	r3, #((PJIT_TIER_K - 1) << 24)
+	str	r3, [r0], #4                    @ the loop's count (never executed), as in the tail below
+	movw	r3, #0xF000
+	movt	r3, #0xE320
+	.rept	5
+	str	r3, [r0], #4                    @ nop
+	.endr
+	add	r2, r2, #2                      @ the extension word
+	b	fill_adv
+	.endif
 	@ DBF D0: the counter is r4 itself. Eight words: the decremented value, the 'was zero' flag from the old low half (clz of 0 is 32), the low half written back, then the same
 	@ `add pc` / nop / `b target` tail as below (no flags touched).
 	movw	r3, #0x0001
@@ -1118,22 +1128,34 @@ fill_dbf:
 	movt	r3, #0xE1A0
 	str	r3, [r0], #4                    @ lsr r1, r0, #31      (1 when the counter went from 0 to -1: the loop is over)
 fill_dbf_tail:
+	.if	PJIT_TIER_ON && defined_pin
+	@ A tiered build: the word after the `add pc` is the loop's count, the taken edge `bl pjit_d_dbf_count ; b target`, so "done" skips two words more (lsl #3).
+	movw	r3, #0xF181
+	movt	r3, #0xE08F
+	str	r3, [r0], #4                    @ add pc, pc, r1, lsl #3: skips the counting tail when the loop is over
+	mov	r3, #((PJIT_TIER_K - 1) << 24)
+	str	r3, [r0], #4                    @ the loop's count (never executed: `add pc` skips it), read big-endian: K - 1, so the TIER_T-th taken edge sets bit TB
+	movw	r3, #:lower16:pjit_d_dbf_count
+	movt	r3, #:upper16:pjit_d_dbf_count
+	sub	r3, r3, r0
+	sub	r3, r3, #8
+	asr	r3, r3, #2
+	bic	r3, r3, #0xFF000000
+	orr	r3, r3, #0xEB000000
+	str	r3, [r0], #4                    @ bl pjit_d_dbf_count: counts the loop (a hot one is promoted to a block) and returns
+	sub	r3, lr, r0
+	sub	r3, r3, #8
+	asr	r3, r3, #2
+	bic	r3, r3, #0xFF000000
+	orr	r3, r3, #0xEA000000
+	str	r3, [r0], #4                    @ b target: the last word
+	.else
 	movw	r3, #0xF101
 	movt	r3, #0xE08F
 	str	r3, [r0], #4                    @ add pc, pc, r1, lsl #2: skips the `b` when the loop is over
 	movw	r3, #0xF000
 	movt	r3, #0xE320
 	str	r3, [r0], #4                    @ nop (the slot pc + 8 skips)
-	.if	PJIT_TIER_ON && defined_pin
-	movw	r3, #:lower16:pjit_d_dbf_taken
-	movt	r3, #:upper16:pjit_d_dbf_taken
-	sub	r3, r3, r0
-	sub	r3, r3, #8
-	asr	r3, r3, #2
-	bic	r3, r3, #0xFF000000
-	orr	r3, r3, #0xEB000000
-	str	r3, [r0], #4                    @ bl pjit_d_dbf_taken: the taken edge goes through the router (which counts the target: a hot DBF loop is promoted to a block)
-	.else
 	sub	r3, lr, r0
 	sub	r3, r3, #8
 	asr	r3, r3, #2
@@ -1514,8 +1536,8 @@ fill_adv:                               @ pad to the end of the span, then on to
 	.endif
 	b	fill_next
 
-@ Pads with nops from r0 up to r1 (a nop or two is cheaper than a branch; more than two words get a branch over
-@ the rest). Clobbers r3, r4; r0 advances. fill_pad_last pads so that the next word written is the last of the
+@ Pads with nops from r0 up to r1 (with PJIT_PAD_B = n, padding of n words or more starts with a `b` over the rest:
+@ NOPs never mispredict, a branch that misses the BTB does). Clobbers r3, r4; r0 advances. fill_pad_last pads so that the next word written is the last of the
 @ instruction's span (a `bl` to a shared body must be: lr is then the start of the next slot, which is how the
 @ exception and branch cores find the guest PC). Clobbers r1, r3, r4, lr.
 @ Folds a constant displacement into the leader. In: r1 = the role (1: the source, whose offset register is r1; 2: the destination, r2), r4 = that
@@ -2668,14 +2690,19 @@ fill_pad_last:
 	bl	fill_pad
 	ldr	lr, [r5, #S_LKR]
 	bx	lr
+	.ifndef	PJIT_PAD_B
+	.set	PJIT_PAD_B, 0                   @ 0: padding is all NOPs (they never mispredict); n: padding of n words or more starts with a `b` over the rest
+	.endif
 fill_pad:
+	.if	PJIT_PAD_B
 	sub	r3, r1, r0
 	asr	r3, r3, #2                      @ words to write
-	cmp	r3, #3
+	cmp	r3, #PJIT_PAD_B
 	blo	2f
 	sub	r4, r3, #2
 	orr	r4, r4, #0xEA000000             @ b over the rest
 	str	r4, [r0], #4
+	.endif
 2:	movw	r4, #0xF000
 	movt	r4, #0xE320                     @ the architectural NOP hint: `mov r0,r0` would wait on r0
 3:	cmp	r0, r1
@@ -2944,19 +2971,56 @@ pjit_d_bra:                             @ taken Bcc/BRA: the displacement (-2 fo
 	add	r0, r0, r1
 	b	pjit_goto
 
+	.macro	BRANCH_TARGET                    @ r0 = the guest target of the `b target` word at lr (instruction words are little-endian: E=BE reads them swapped)
+	ldr	r0, [lr]
+	rev	r0, r0
+	lsl	r0, r0, #8
+	add	r0, lr, r0, asr #6
+	add	r0, r0, #8                      @ the host target
+	HOST2GUEST_BE r0, r2, r3
+	.endm
+
 	.if	PJIT_TIER_ON && defined_pin
-@ A taken DBF in a tiered build with the pinned D0 (fill_dbf): the inline form's last word is `bl pjit_d_dbf_taken`; the loop is counted like any other transfer (no loop compaction
-@ with the pin). lr = the word after the `bl`; the target is the DBF's displacement word, read from guest memory. Flags untouched.
-	.global	pjit_d_dbf_taken
-pjit_d_dbf_taken:
-	sub	r0, lr, #4
-	add	r0, r0, #15
-	bic	r0, r0, #15                     @ the next slot: the guest instruction after the DBF (its span is whole slots; the bl is in the last)
-	HOST2GUEST_BE r0, r2, r3                @ r0 = the address after the DBF's displacement word
-	ldrsh	r1, [r0, #-2]
-	add	r0, r0, r1
-	sub	r0, r0, #2
-	b	pjit_goto
+@ A taken DBF in a tiered build with the pinned D0 (fill_dbf): its slots end `<count> ; bl pjit_d_dbf_count ; b target`, so lr = the `b target` word and the loop's own
+@ count is the word at lr - 8 (written by the fill, never executed): one counter per DBF, no table, no tag. The TIER_T-th taken edge promotes the loop (pjit_goto_promote,
+@ which takes the count's address - 4 in lr); otherwise the core returns to the branch. No interrupt poll: a DBF loop is bounded. Flags untouched.
+	.balign	64
+	.global	pjit_d_dbf_count
+pjit_d_dbf_count:
+	ldr	r0, [lr, #-8]
+	add	r0, r0, #1
+	str	r0, [lr, #-8]
+	ubfx	r0, r0, #PJIT_TIER_TB, #1
+	add	pc, pc, r0, lsl #2
+	nop
+	bx	lr
+	BRANCH_TARGET
+	sub	lr, lr, #12                     @ the count's address - 4
+	b	pjit_goto_promote
+
+@ A DBF D0 in a tiered build: `bl pjit_d_dbf0 ; b target ; <count> ; five NOPs`. The low half of r4 (D0) is decremented; while it has not gone from 0 to -1 the loop is
+@ counted (the count is at lr + 4) and the core returns to the `b target`, otherwise it returns past the DBF's eight words (lr + 28). Flags untouched.
+	.balign	64
+	.global	pjit_d_dbf0
+pjit_d_dbf0:
+	uxth	r1, r4
+	sub	r0, r4, #1
+	bfi	r4, r0, #0, #16
+	clz	r1, r1
+	lsr	r1, r1, #5                      @ 1 when the counter went from 0 to -1: the loop is over
+	add	pc, pc, r1, lsl #2
+	nop
+	b	1f
+	add	pc, lr, #28
+1:	ldr	r0, [lr, #4]
+	add	r0, r0, #1
+	str	r0, [lr, #4]
+	ubfx	r0, r0, #PJIT_TIER_TB, #1
+	add	pc, pc, r0, lsl #2
+	nop
+	bx	lr
+	BRANCH_TARGET
+	b	pjit_goto_promote               @ (lr = the count's address - 4 already)
 	.endif
 
 @ A backward branch inside the line (see pjit_fill): `bl<cc> pjit_d_loop` then, in the
@@ -2971,27 +3035,18 @@ pjit_d_loop:
 
 	.ifdef	PJIT_TIER
 	.if	PJIT_TIER_ON
-@ A backward branch in a tiered build, while its target is cold: `movw r1 ; movt r1 ; bl<cc> pjit_d_bcount ; b<cc> target` (the bl is taken exactly when the branch is). r1 = the guest
-@ target, lr = the `b<cc> target` word. Counts the target (the slot router's table, flag-free); the 128th event promotes it (pjit_goto_promote), a posted interrupt level sends the
-@ transfer to the router's slow path, which polls and delivers. Otherwise it returns to the branch.
+@ A backward branch in a tiered build (fill_b_back): `bl<cc> pjit_d_bcount ; b<cc> target ; mov r0, #count`, so lr = the `b<cc> target` word and the branch's own count
+@ is the byte at lr + 4 (the immediate of the `mov`, which runs harmlessly when the branch falls through). The TIER_T-th taken edge promotes the target; a posted
+@ interrupt level sends the transfer to the router's slow path, which polls and delivers. Otherwise the core returns to the branch. Flags untouched.
+	.if	PJIT_TIER_TB > 6
+	.error	"a backward branch counts in a byte: PJIT_TIER_T must be 64 or less"
+	.endif
 	.balign	64
 	.global	pjit_d_bcount
 pjit_d_bcount:
-	movw	r3, #:lower16:pjit_tier_cnt
-	movt	r3, #:upper16:pjit_tier_cnt
-	ubfx	r2, r1, #1, #10
-	add	r3, r3, r2, lsl #3
-	ldr	r2, [r3]
-	ldr	r0, [r3, #4]
-	eor	r2, r2, r1
-	clz	r2, r2
-	lsr	r2, r2, #5
-	rsb	r2, r2, #0
-	sub	r0, r0, #(PJIT_TIER_K - 1)
-	and	r0, r0, r2
-	add	r0, r0, #PJIT_TIER_K
-	str	r1, [r3]
-	str	r0, [r3, #4]
+	ldrb	r0, [lr, #4]
+	add	r0, r0, #1
+	strb	r0, [lr, #4]
 	ubfx	r0, r0, #PJIT_TIER_TB, #1
 	ldrb	r2, [r5, #CPU_IRQ_FLAG]
 	orr	r0, r0, r2, lsl #1
@@ -3001,10 +3056,13 @@ pjit_d_bcount:
 	b	1f                              @ promote
 	b	2f                              @ a posted interrupt level
 	b	2f
-1:	mov	r0, r1
-	mov	lr, r3                          @ pjit_goto_promote wants the counter entry in lr
-	b	pjit_goto_promote
-2:	mov	r0, r1
+1:	ldrb	r1, [lr, #4]
+	ubfx	r1, r1, #(PJIT_TIER_TB + 1), #1 @ promoted before?
+	mov	r2, #PJIT_TIER_MARK
+	strb	r2, [lr, #4]                    @ the count restarts, marked
+	BRANCH_TARGET
+	b	pjit_goto_promote_r1
+2:	BRANCH_TARGET
 	b	pjit_goto_slow
 	.endif
 	.endif

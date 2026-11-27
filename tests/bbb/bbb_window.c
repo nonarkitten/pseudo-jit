@@ -7,7 +7,15 @@
 #include "pjit.h"
 #include "bbb.h"
 
-#define INTC 0x48200000u
+#define INTC BBB_IO(0x48200000u)
+#ifdef ON_BUFFEE                                        /* the same address for the assembler, which takes no conditional expressions */
+#define INTC_ASM 0x1C700000
+#else
+#define INTC_ASM 0x48200000
+#endif
+_Static_assert(INTC_ASM == INTC, "INTC_ASM is not BBB_IO(the INTC)");
+#define STR_(x) #x
+#define STR(x) STR_(x)
 #define R32(a) (*(volatile uint32_t *)(a))
 
 // ---- part 1: cost ----
@@ -40,7 +48,7 @@ static void run(const char *name, uint32_t (*f)(uint32_t, const uint8_t *))
 // ---- part 2: is a pending IRQ taken in the window? ----
 volatile uint32_t irq_pc, irq_count;
 #define TRIAL(name, win)                                                                                               \
-    __asm__(".text\n.arm\n.balign 64\n.global " #name "\n" #name ":\n  push {r4, lr}\n  ldr r4, =0x48200000\n  mov r3, #1\n"   \
+    __asm__(".text\n.arm\n.balign 64\n.global " #name "\n" #name ":\n  push {r4, lr}\n  ldr r4, =" STR(INTC_ASM) "\n  mov r3, #1\n"   \
             "  str r3, [r4, #0x90]\n  dsb\n  .rept 40\n  nop\n  .endr\n"                                                      \
             ".global " #name "_w\n" #name "_w:\n" win "\n.global " #name "_e\n" #name "_e:\n  nop\n  nop\n  nop\n"            \
             "  str r3, [r4, #0x94]\n  dsb\n  pop {r4, pc}\n  .ltorg\n")
@@ -56,7 +64,7 @@ extern void Entry(void);
 __asm__(".text\n.arm\n.balign 32\n.global my_vectors\nmy_vectors:\n  b Entry\n  b Entry+4\n  b Entry+8\n  b Entry+12\n  b Entry+16\n  b Entry+20\n"
         "  b my_irq\n  b Entry+28\n"
         "my_irq:\n  sub lr, lr, #4\n  push {r0, r1}\n  ldr r0, =irq_pc\n  str lr, [r0]\n  ldr r0, =irq_count\n  ldr r1, [r0]\n  add r1, r1, #1\n  str r1, [r0]\n"
-        "  ldr r0, =0x48200000\n  mov r1, #1\n  str r1, [r0, #0x94]\n  str r1, [r0, #0x48]\n  dsb\n  pop {r0, r1}\n  movs pc, lr\n  .ltorg\n");
+        "  ldr r0, =" STR(INTC_ASM) "\n  mov r1, #1\n  str r1, [r0, #0x94]\n  str r1, [r0, #0x48]\n  dsb\n  pop {r0, r1}\n  movs pc, lr\n  .ltorg\n");
 extern char my_vectors[];
 
 static void trials(const char *name, void (*f)(void), char *w, char *e)

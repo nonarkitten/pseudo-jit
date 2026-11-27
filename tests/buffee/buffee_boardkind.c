@@ -11,7 +11,7 @@
 #define KIND 0
 #endif
 #define R32(a)      (*(volatile uint32_t *)(a))
-#define I2C(off)    R32(0x44E0B000u + (off))
+#define I2C(off)    R32(BUFFEE_IO(0x44E0B000u) + (off))
 #define EEPROM_I2C  0x50
 #define TIMEOUT     2000000u            /* cycles (2 ms) */
 

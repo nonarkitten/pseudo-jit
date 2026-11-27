@@ -65,7 +65,8 @@ static uint32_t hA[65536];
 
 static uint8_t  ram_pool[12 * 1024 * 1024] __attribute__((aligned(4096)));
 #ifdef ON_BUFFEE
-#define low_mem ((uint8_t *)0x90000000u)      // on Buffee the guest's low megabyte is the DDR megabyte that bbb_map_low() is given (tests/buffee/buffee_fried.c)
+#define LOW_MEM_PHYS 0x90000000u              // on Buffee the guest's low megabyte is this DDR megabyte (bbb_map_low()); the ARM writes it through the guest's
+#define low_mem ((uint8_t *)0x01000000u)      // 24-bit repeat of it at 0x01000000 (tests/buffee/buffee_fried.c)
 #else
 static uint8_t  low_mem[1024 * 1024] __attribute__((aligned(1024 * 1024)));      // what guest addresses 0..0xFFFFF are
 #endif
@@ -81,6 +82,8 @@ static void map_low(void)       // the identity map, except that the first megab
     mmu_pagetable[0] = ((uint32_t)low_mem & 0xFFF00000u) | 0xC0Eu;
     CP15TtbCtlTtb0Config(); CP15Ttb0Set((uint32_t)mmu_pagetable); CP15DomainAccessClientSet(); CP15TlbInvalidate(); CP15MMUEnable();
 }
+#elif defined(ON_BUFFEE)
+static void map_low(void) { bbb_map_low(LOW_MEM_PHYS); }
 #else
 static void map_low(void) { bbb_map_low((uint32_t)low_mem); }
 #endif

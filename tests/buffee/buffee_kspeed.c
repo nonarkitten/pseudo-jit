@@ -217,7 +217,7 @@ static void shapes(uint32_t where)
 
 int main(void)
 {
-    const volatile uint8_t *bi = (const volatile uint8_t *)0x9F5FFF00u;
+    const volatile uint8_t *bi = BUFFEE_BOOTINFO;
     printf("=== kspeed: Kipper RAM, chip RAM, guest code by place ===\n");
     printf("KSPEED regions from the bootloader:");
     if (*(const volatile uint32_t *)bi == 0x544F4F42u) for (int k = 0; k < 4; k++) { unsigned mb = bi[16 + 4 * k] | bi[17 + 4 * k] << 8; if (bi[18 + 4 * k]) printf(" %X/%uMB flags %u;", mb << 20, 1u << (bi[18 + 4 * k] - 20), bi[19 + 4 * k]); }

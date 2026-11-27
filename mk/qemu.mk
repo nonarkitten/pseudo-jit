@@ -62,7 +62,7 @@ TEST_NAMES = smoke_tables smoke_div smoke_call_exec smoke_branch_exec smoke_loop
 	smoke_control_dr smoke_irq_interp smoke_irq_dr smoke_alias_interp smoke_alias_dr smoke_kernels smoke_movem_sp smoke_movem_sp_dr \
 	smoke_links smoke_rts smoke_index smoke_index_dr smoke_xlazy smoke_fuse smoke_bsrb smoke_tinybasic smoke_movem_ea smoke_movem_ea_dr \
 	smoke_defer smoke_loops smoke_bcache smoke_ext_audit smoke_ext_audit_interp smoke_lzt smoke_fill_spill smoke_evict_stress \
-	smoke_fill_pad smoke_blkfast_empty
+	smoke_fill_pad smoke_blkfast_empty smoke_printf smoke_probe_interp smoke_probe_dr
 # these depend on the QEMU timer's real-time behaviour: run alone, after the others (an oversubscribed host makes them flaky)
 TIMING_TESTS = smoke_timer smoke_irq_interp smoke_irq_dr
 QEMU_ELFS = $(patsubst %,$(QEMUDIR)/%.elf,$(TEST_NAMES))

@@ -28,13 +28,32 @@ extern void emit_opcode_table(void);
 
 uint32_t pjit_trace[0x80000 / 4] __attribute__((aligned(16))); uint32_t pjit_trace_pos; uint32_t pjit_trace_frz; uint16_t pjit_xmem[320]; uint32_t pjit_vdbg[512];
 #ifdef PACE
-/* PACE=n: the interpreter runs against a virtual MC68000 clock at n percent of 7.09 MHz (100 = a real 68000's pace). pjit/runtime.s (PJIT_PACE) reads these big-endian: the table of estimated cycles per
+/* PACE=n: the interpreter runs against a virtual MC68000 clock at n percent of the host's bus clock (100 = a real 68000's pace; the bootloader measured the clock). pjit/runtime.s (PJIT_PACE) reads these big-endian: the table of estimated cycles per
    opcode word (platform/buffee/pace_tab.h, tools/data/gen_pace_tab.py), the ARM cycles per 68000 cycle and the virtual clock (a PMU cycle count). Interpreted code only: build with -DDRT=0xFFFFFFFFu. */
 #include "pace_tab.h"
-#ifndef PACE_MHZ
-#define PACE_MHZ 1000u                                                /* the CPU clock the K scaling assumes (the EEPROM's dpll_mul: 1000 = 1 GHz) */
-#endif
 uint32_t pjit_pace_k, pjit_pace_dl[8], pjit_pace_wraps, pjit_pace_gap[2 + 32];
+static unsigned pace_pct;
+/* K = ARM cycles per 68000 cycle: the ARM's clock (as the PLL is set now) over the bus clock, scaled by the percent, rounded. 0 = off: the prefetch hook the payload had.
+   Set at the start and again by the control page (PACE=, and after CLOCK=: buffee_clock_changed). */
+int ctl_pace(int percent)
+{
+    extern void pjit_prefetch_pace(void);
+    static uint32_t plain;                                              /* the hook the payload runs without the pace (the interrupt poll of this build) */
+    const volatile uint8_t *bi = BUFFEE_BOOTINFO;
+    uint32_t hz = *(const volatile uint32_t *)bi == 0x544F4F42u ? *(const volatile uint32_t *)(bi + 32) : 0;   /* bootinfo byte 32 = the bus clock in Hz (older bootloaders: none) */
+
+    if (percent < 0) return (int)pace_pct;
+    if (!plain) plain = cpu->prefetch_hook != (uint32_t)pjit_prefetch_pace ? cpu->prefetch_hook : 0;
+    if (percent > 1000) percent = 1000;
+    if (hz < 4000000u || hz > 17000000u) hz = 7093790u;                                                          /* a PAL Amiga's */
+    pace_pct = (unsigned)percent;
+    if (pace_pct) {
+        pjit_pace_k = __builtin_bswap32((uint32_t)(((uint64_t)buffee_cpu_mhz() * 100000000u / pace_pct + hz / 2) / hz));
+        cpu->prefetch_hook = (uint32_t)pjit_prefetch_pace;
+    } else if (plain) cpu->prefetch_hook = plain;
+    return (int)pace_pct;
+}
+void buffee_clock_changed(void) { ctl_pace((int)pace_pct); }
 #endif
 #ifdef VBLLOG
 uint8_t pjit_vbl_ring[0x40000] __attribute__((aligned(16))); uint32_t pjit_vbl_pos;
@@ -135,10 +154,18 @@ int main(void)
 #endif
     uint32_t t0 = bbb_pmu_cycles();
     uint32_t sum = buffee_maprom(0x80000);
-    const uint8_t *rom = (const uint8_t *)(BUFFEE_MAPROM_PHYS + 0x80000u);
+    const uint8_t *rom = (const uint8_t *)(BUFFEE_MAPROM + 0x80000u);
     uint32_t ssp = __builtin_bswap32(*(const uint32_t *)rom), pc = __builtin_bswap32(*(const uint32_t *)(rom + 4));
-    printf("ROM copied (%u ms, word sum %08X); version words %02X%02X %02X%02X; reset vectors SSP %08X PC %08X\n", (bbb_pmu_cycles() - t0) / 1000000, sum,
-           rom[12], rom[13], rom[14], rom[15], ssp, pc);
+    extern int buffee_rom_on_bus;
+    if (buffee_rom_on_bus) printf("MapROM off: nothing copied, the ROM area is the host's bus\n");
+    else printf("ROM copied (%u ms, word sum %08X); version words %02X%02X %02X%02X; reset vectors SSP %08X PC %08X\n", (bbb_pmu_cycles() - t0) / 1000000, sum,
+                rom[12], rom[13], rom[14], rom[15], ssp, pc);
+    /* A 68000 takes its reset vectors from $0 and $4 on the bus. In an Amiga the overlay puts the ROM's there (the image's, above). A host that boots its CPU from a
+       program in RAM (a MiniMig in its boot phase: the vectors point into chip RAM) gets that program run, and its vectors are left alone; when it is done, the host
+       resets the CPU, the payload starts again, and the bus shows the ROM's vectors. */
+    { uint32_t bssp = (uint32_t)read_BE_word(0) << 16 | read_BE_word(2), bpc = (uint32_t)read_BE_word(4) << 16 | read_BE_word(6);
+      if (!(bpc & 1) && bpc >= 8 && bpc < 0x200000) { ssp = bssp; pc = bpc; printf("the host's reset vectors point into chip RAM (its boot program): SSP %08X PC %08X\n", (unsigned)ssp, (unsigned)pc); }
+      else if (buffee_rom_on_bus) { ssp = bssp; pc = bpc; printf("MapROM off: the host's ROM, reset vectors SSP %08X PC %08X\n", (unsigned)ssp, (unsigned)pc); } }
     for (int i = 0; i < 8; i++) { pjit_set_dn(i, 0); pjit_set_an(i, 0); }
     pjit_set_an(7, ssp);
     cpu->ssp = cpu->usp = __builtin_bswap32(ssp);
@@ -160,7 +187,7 @@ int main(void)
 #else
     static const uint32_t bps[] = { 0xF8293E, 0xFBD3F6, 0xF86B4C, 0xFBD400, 0xF835FE, 0xF80404, 0xF80408, 0 };
 #endif
-    uint8_t *romp = (uint8_t *)(BUFFEE_MAPROM_PHYS + 0x80000u);
+    uint8_t *romp = (uint8_t *)(BUFFEE_MAPROM + 0x80000u);
     static uint16_t saved[8];
     for (int i = 0; bps[i]; i++) { uint8_t *bp = romp + (bps[i] - 0xF80000); saved[i] = bp[0] << 8 | bp[1]; bp[0] = 0x4E; bp[1] = 0x4F; }
     { uint32_t sum = 0; for (uint32_t o = 0; o < 0x80000; o += 4) sum = ec_add(sum, rd32(romp + o));
@@ -174,14 +201,9 @@ int main(void)
     buffee_trace_custom();
 #endif
 #ifdef PACE
-    { const volatile uint8_t *bi = (const volatile uint8_t *)0x9F5FFF00u;
+    { const volatile uint8_t *bi = BUFFEE_BOOTINFO;
       unsigned pace = *(const volatile uint32_t *)bi == 0x544F4F42u ? bi[11] : PACE;     /* bootinfo byte 11 = the EEPROM's pace percent (0 = off); without bootinfo the build's PACE */
-      extern void pjit_prefetch_pace(void);
-      if (pace > 1000) pace = 1000;
-      if (pace) {                                                       /* K = ARM cycles per 68000 cycle: 141.04 ns at 7.09 MHz x the CPU clock in MHz / 1000, scaled by the percent */
-          pjit_pace_k = __builtin_bswap32(14104u * (PACE_MHZ) / 1000u / pace);
-          cpu->prefetch_hook = (uint32_t)pjit_prefetch_pace;
-          printf("[PACE] interpreted code (chip RAM, the Amiga window) paced to %u%% of an MC68000 at 7.09 MHz (CPU %u MHz)\n", pace, (unsigned)(PACE_MHZ)); }
+      if (ctl_pace((int)pace)) printf("[PACE] interpreted code (chip RAM, the Amiga window) paced to %u%% of an MC68000 (CPU %u MHz)\n", pace_pct, buffee_cpu_mhz());
       else printf("[PACE] off\n"); }
 #endif
 #ifdef WTRACE
@@ -191,23 +213,6 @@ int main(void)
     cpu->prefetch_hook = (uint32_t)pjit_prefetch_trace;
 #endif      /* ring of (PC, opcode) of the interpreter */
     printf("autoconfig space $E80000:"); for (uint32_t a = 0xE80000; a < 0xE80020; a += 2) printf(" %04X", read_BE_word(a)); printf("\n                  $E90000:"); for (uint32_t a = 0xE90000; a < 0xE90008; a += 2) printf(" %04X", read_BE_word(a)); printf("\n");
-#ifdef SCRUB_EXEC
-    /* test aid: a J-Link reset leaves the Amiga's chip RAM as it was, so Kickstart sees the previous boot's ExecBase and warm-starts with that boot's memory list; clear the ExecBase pointer at $4 so
-       every boot is a cold start, as after a power cycle (overlay off for the write, back on before the guest starts: the reset vectors come from the ROM) */
-    *(volatile uint8_t *)0xBFE201 |= 3; *(volatile uint8_t *)0xBFE001 &= 0xFC;
-    for (uint32_t a = 0; a < 0x200000; a += 2) write_BE_word(a, 0);                       /* all of chip RAM (2 MB window: a 1 MB machine mirrors it): 0.9 s */
-    *(volatile uint8_t *)0xBFE001 |= 1;
-#endif
-#ifndef KEEP_EXEC
-    /* a reset of Buffee (J-Link, ESC x3 and run again) leaves the Amiga's chip RAM as it was, so Kickstart would find the old ExecBase and warm-start with its memory list (and a region that
-       was added last time). Make that ExecBase invalid, as a power cycle does: ChkBase (+$26) is checked against ~ExecBase, and $4 is cleared (overlay off for the writes, back on before the guest
-       starts: the reset vectors come from the ROM). Cheap: three writes, no scrub. */
-    *(volatile uint8_t *)0xBFE201 |= 3; *(volatile uint8_t *)0xBFE001 &= 0xFC;
-    { uint32_t eb = read_BE_word(4) << 16 | read_BE_word(6);
-      if (!(eb & 1) && eb >= 0x400 && eb < 0x200000 - 0x40) { write_BE_word(eb + 0x26, 0); write_BE_word(eb + 0x28, 0); printf("old ExecBase $%06X invalidated\n", (unsigned)eb); }
-      write_BE_word(4, 0); write_BE_word(6, 0); }
-    *(volatile uint8_t *)0xBFE001 |= 1;
-#endif
     printf("starting at $%08X\n", pc);
 #ifndef CLEAN
     sample_stop = SAMPLES; sample_verbose = SAMPV; buffee_sampler_start(500000000u);
@@ -220,11 +225,11 @@ int main(void)
 #endif
 #ifdef HANGWDT
     {   /* hang diagnosis: the SoC watchdog WDT1 resets the board HANGWDT seconds after the guest starts (never kicked); with -DCRUMBS the last translations / write faults are in the PRU shared RAM (buffee_crumbs prints them) */
-        volatile uint32_t *cm = (volatile uint32_t *)0x44E004D4, *w = (volatile uint32_t *)0x44E35000;
+        volatile uint32_t *cm = (volatile uint32_t *)BUFFEE_IO(0x44E004D4u), *w = (volatile uint32_t *)BUFFEE_IO(0x44E35000u);
         *cm = 2; for (uint32_t t = 0; ((*cm >> 16) & 3) && t < 1000000; t++) ;
 #define WW() for (uint32_t t = 0; w[0x34 / 4] && t < 1000000; t++) ;
         WW(); w[0x24 / 4] = 0; WW(); w[0x2C / 4] = 0xFFFFFFFFu - 32768u * HANGWDT + 1; WW(); w[0x30 / 4] = 1; WW(); w[0x48 / 4] = 0xBBBB; WW(); w[0x48 / 4] = 0x4444; WW();
-        volatile uint32_t *cr = (volatile uint32_t *)0x9F5FFC00u; for (int i = 0; i < 80; i++) cr[i] = 0; __asm__ volatile ("mcr p15, 0, %0, c7, c10, 1\n dsb sy" :: "r"(cr) : "memory");
+        volatile uint32_t *cr = (volatile uint32_t *)BUFFEE_DDR(0x9F5FFC00u); for (int i = 0; i < 80; i++) cr[i] = 0; __asm__ volatile ("mcr p15, 0, %0, c7, c10, 1\n dsb sy" :: "r"(cr) : "memory");
     }
 #endif
     uint32_t r;
@@ -237,6 +242,26 @@ int main(void)
         if (hit == 0xF86B4C) { printf("  VHPOSR:"); for (int j = 0; j < 6; j++) { printf(" %04X", read_BE_word(0xDFF006)); for (volatile int k = 0; k < 20000; k++) ; } printf("; DMACONR over time:"); for (int j = 0; j < 5; j++) { printf(" %04X", read_BE_word(0xDFF002)); for (volatile int k = 0; k < 2000000; k++) ; } printf("\n"); }
         printf("[BP %06X] D0=%08X D1=%08X A0=%08X A6=%08X A7=%08X stack:", (unsigned)hit, pjit_get_dn(0), pjit_get_dn(1), pjit_get_an(0), pjit_get_an(6), pjit_get_an(7)); for (uint32_t a = pjit_get_an(7); a < pjit_get_an(7) + 24; a += 4) printf(" %08X", (unsigned)(read_BE_word(a) << 16 | read_BE_word(a + 2))); printf("\n");
         uint8_t *bp = romp + (hit - 0xF80000); int ki = hit == 0xF8293E ? 0 : hit == 0xFBD3F6 ? 1 : 2; bp[0] = saved[ki] >> 8; bp[1] = saved[ki]; CP15DCacheCleanFlushBuff((uint32_t)bp, 2); pjit_cache_flush(); pc = hit;
+    }
+    if (r == PJIT_VEC_HALT) {                       /* a double fault: a bus or address error whose handler address is odd. A 68000 halts until the Amiga is reset, and so does this */
+        printf("HALT at $%06X: a double fault (the %s error's handler is at $%08X, an odd address); waiting for the Amiga's reset (ESC x3: the menu)\n",
+               (unsigned)((uint32_t)cpu->pc - 2), cpu->r1 == 2 ? "bus" : "address", (unsigned)cpu->r0);
+        printf("exceptions delivered (vector@PC, last 16):"); for (int j = 16; j >= 1; j--) { uint32_t e = ((pjit_dlog_pos / 8 - j) & 31) * 2; printf(" %u@%08X", (unsigned)pjit_dlog[e], (unsigned)pjit_dlog[e + 1]); } printf("\n");
+        for (int i = 0; i < 8; i++) printf(" D%d=%08X", i, pjit_get_dn(i));
+        printf("\n");
+        for (int i = 0; i < 8; i++) printf(" A%d=%08X", i, pjit_get_an(i));
+        printf("\n SR=%04X stack:", pjit_get_sr()); for (uint32_t a = pjit_get_an(7); a < pjit_get_an(7) + 32; a += 2) printf(" %04X", buffee_peek16(a)); printf("\n");
+        { extern uint32_t pjit_oddvec[9]; printf(" odd handler addresses: %u; the first: vector %u (entry $%06X) read $%08X at guest PC $%06X\n", (unsigned)pjit_oddvec[4], (unsigned)pjit_oddvec[0],
+                                                (unsigned)pjit_oddvec[1], (unsigned)pjit_oddvec[2], (unsigned)pjit_oddvec[3]); }
+        printf(" vectors 0-15:"); for (uint32_t a = 0; a < 0x40; a += 4) printf(" %04X%04X", buffee_peek16(a), buffee_peek16(a + 2)); printf("\n");
+        __asm__ volatile("cpsie i");                /* the Amiga's RESET line and the UART interrupt (ESC x3) end the wait */
+        while (!buffee_reset_pending) __asm__ volatile("wfi");
+        return BUFFEE_RESET_EXIT;
+    }
+    if (r == PJIT_VEC_RESET) {                      /* the guest's RESET (exec's ColdReboot): the Amiga's chips and boards are reset as by a 68000, and the bootloader restarts the machine from the reset vectors */
+        buffee_pulse_reset();
+        printf("RESET at $%06X: the Amiga is reset\n", (unsigned)((uint32_t)cpu->pc - 2));
+        return BUFFEE_RESET_EXIT;
     }
     if (buffee_sample_stopped) {
         printf("sampler stop: last PC host %08X r4 %08X\n", (unsigned)buffee_last_pc, (unsigned)buffee_last_r4);
@@ -272,9 +297,9 @@ int main(void)
     printf("\n");
     for (int i = 0; i < 8; i++) printf(" A%d=%08X", i, pjit_get_an(i));
     printf("\n stack:");
-    for (uint32_t a = pjit_get_an(7); a < pjit_get_an(7) + 48; a += 4) printf(" %08X", (unsigned)(read_BE_word(a) << 16 | read_BE_word(a + 2)));
+    for (uint32_t a = pjit_get_an(7); a < pjit_get_an(7) + 48; a += 4) printf(" %08X", (unsigned)(buffee_peek16(a) << 16 | buffee_peek16(a + 2)));
     printf("\nlow memory:");
-    for (uint32_t a = 0x100; a < 0x110; a += 4) printf(" %08X", (unsigned)(read_BE_word(a) << 16 | read_BE_word(a + 2))); printf("  ["); for (uint32_t a = 0; a < 0x20; a += 4) printf(" %08X", (unsigned)(read_BE_word(a) << 16 | read_BE_word(a + 2)));
+    for (uint32_t a = 0x100; a < 0x110; a += 4) printf(" %08X", (unsigned)(buffee_peek16(a) << 16 | buffee_peek16(a + 2))); printf("  ["); for (uint32_t a = 0; a < 0x20; a += 4) printf(" %08X", (unsigned)(buffee_peek16(a) << 16 | buffee_peek16(a + 2)));
     printf("\n");
     return r == BUFFEE_RESET_EXIT ? BUFFEE_RESET_EXIT : 1;
 }

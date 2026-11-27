@@ -6,6 +6,13 @@
 #include <stdint.h>
 
 // ---- memory map -------------------------------------------------------------------------------------------------------------
+// A peripheral register's address as the program sees it: the physical one here; on Buffee (ON_BUFFEE) the platform maps the peripherals elsewhere (buffee.h).
+#ifdef ON_BUFFEE
+#include "buffee.h"
+#define BBB_IO(pa)        BUFFEE_IO(pa)
+#else
+#define BBB_IO(pa)        (pa)
+#endif
 #define BBB_DDR_BASE      0x80000000u     // 512 MB of DDR3
 #define BBB_IMAGE_BASE    0x82000000u     // U-Boot's default load address ($loadaddr); `go 0x82000000`
 #define BBB_LOG_BASE      0x87F00000u     // the RAM log (a 1 MB section the page table leaves uncached); inside the 96 MB below U-Boot's FDT

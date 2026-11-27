@@ -38,9 +38,10 @@ TIER_ASM = -Wa,--defsym,PJIT_TIER=1 -Wa,--defsym,PJIT_LATCH=1 -Wa,--defsym,PJIT_
 PIN_ASM  = -Wa,--defsym,PJIT_PIN_D0=1
 CORE_ASM = -Wa,--defsym,PJIT_COMPACT=$(COMPACT) $(if $(filter 1,$(PIN_D0)),$(PIN_ASM)) \
            $(if $(filter 1,$(BLK)),$(BLK_ASM)) $(if $(filter 1,$(TIER)),$(TIER_ASM))
-# Buffee payloads (FC=1): the function-code GPIO, the IPL GPIO the interrupt path re-reads, the exception log
+# Buffee payloads (FC=1): the function-code GPIO, the IPL GPIO the interrupt path re-reads, the exception log, and RESET ending the run (the platform pulses the line)
+# GPIO2 at the address the platform maps it to (BUFFEE_IO(0x481AC000), platform/buffee/buffee.h; tools/gen/emitters/sr.py has it too); its DATAIN register holds IPL2-0
 # (a comma inside $(if ...) would split its arguments: the switches live in a variable)
-FC_ASM   = -Wa,--defsym,PJIT_IPL_GPIO=0x481AC138 -Wa,--defsym,PJIT_DLOG=1 -Wa,--defsym,PJIT_FC=1
+FC_ASM   = -Wa,--defsym,PJIT_GPIO2=0x1C6AC000 -Wa,--defsym,PJIT_IPL_GPIO=0x1C6AC138 -Wa,--defsym,PJIT_DLOG=1 -Wa,--defsym,PJIT_FC=1 -Wa,--defsym,PJIT_RESET_EXIT=1
 BUFFEE_ASM = $(if $(filter 1,$(FC_KNOB)),$(FC_ASM))
 
 LDFLAGS = -nostdlib -Wl,--build-id=none

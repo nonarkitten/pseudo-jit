@@ -11,9 +11,11 @@
 #include "pjit.h"
 #include "mem_be.h"
 #include "blk.h"
+#include "control.h"
+#include "buffee_cmd.h"
 
 #define REG32(a)        (*(volatile uint32_t *)(a))
-#define UART0_BASE      0x44E09000u
+#define UART0_BASE      BUFFEE_IO(0x44E09000u)
 #define UART0_THR       REG32(UART0_BASE + 0x00)
 #define UART0_SSR       REG32(UART0_BASE + 0x44)        // bit 0: TX FIFO full
 
@@ -51,23 +53,28 @@ uint32_t bbb_pmu_event(int n)
 }
 
 // ---- MMU: 1 MB sections ---------------------------------------------------------------------------------------------------------
-// virtual 0x00000000-0x01FFFFFF   the Amiga's 16 MB address space (and its mirror): the GPMC window at 0x02000000, device memory (a halfword-wide bus: 16-bit accesses only)
-// virtual 0x02000000-0x02FFFFFF   the GPMC window itself, identity (device); the rest of 0x02000000-0x07FFFFFF is unmapped
+// The guest's address is the ARM's virtual address: the guest's code loads and stores through it directly.
+// virtual 0x00000000-0x00FFFFFF   the Amiga's 16 MB address space: the GPMC window (physical 0x02000000), device memory (a halfword-wide bus: 16-bit accesses only), execute-never
 // guest RAM regions (EEPROM: up to four, 1 MB aligned, power-of-two sizes; default 128 MB at $08000000 where Kickstart 3.1 looks for fast RAM): sections backed by consecutive megabytes of the
-//                                 DDR from physical 0x80000000, cached; code in them is translated (smc_xlat); see smc_regions_init(). Everything not listed here faults.
-// virtual 0x10000000-0x7FFFFFFF   only the sections the platform touches, identity (device): boot ROM / OCRAM 0x400-0x403, L4_WKUP 0x44E (clocks, control, UART0, GPIO0, I2C0, timers, WDT),
-//                                 L4_PER 0x480-0x482 (SPI, timers, GPIO1-3, INTC), GPMC registers 0x500; everything else is unmapped, so a wild guest access is a bus error
-//                                 (buffee_guest_abort), not a write into a peripheral. A new peripheral section goes in the list in mmu_init().
-// virtual 0x80000000-0x9FFFFFFF   the DDR itself, identity, cached (PJIT's image, tables and cache live at the top: docs/buffee/BUFFEE_MAP.md)
-// virtual 0xA0000000-0xFFFFFFFF   nothing: faults
+//                                 DDR from physical 0x80000000, cached, execute-never; code in them is translated (smc_xlat); see smc_regions_init(). With 24 address lines (always) every
+//                                 further 16 MB repeats the first, as on a 68000.
+// virtual 0x1B000000-0x1FFFFFFF   the platform's own megabytes (buffee.h): the bus alias, the peripherals, the custom-chip alias, the write-detection tables and the top of the DDR; only
+//                                 the PJIT image, its bss and the slot cache are executable. The only holes in the repetition.
+// boot.S enters through a bridge table (the bootloader's mapping plus the platform's megabytes) and leaves through it; mmu_init() replaces it with this one.
 static uint32_t pagetable[4096] __attribute__((aligned(16384)));
 #define SEC_DEVICE   0x0C06u            // AP=11, B=1
+#define SEC_XN       0x0010u            // execute never: no instruction fetch, not even a speculative one (ARMv7 may fetch speculatively from Device memory without it),
+                                        // so the core never starts a read of the Amiga's bus that the program did not ask for
 #define SEC_DDR      0x1C0Eu            // TEX=001 C=1 B=1 (write-back, write-allocate)
+#define SEC_GUEST    (SEC_DDR | SEC_XN) // DDR the guest sees: its code is 68K code, never run by the ARM
+#define PAGE_GUEST   0x7Fu              // the same as a small page: TEX 1, C, B, AP 3, XN
 #define BOOT_NOSWAP  8u                 // bootinfo boot_flags (bootloader/inc/config.h): the board has no byte swapper
 #define BUS_DOMAIN   (1u << 5)          // section descriptor domain 1: the Amiga's address space on a board without the byte swapper
 #define DOMAIN_MASK  0x1E0u
 #define DACR_NOSWAP  0x00000001u        // domain 0 client, every other domain no access: an access in domain 1 is a domain fault
-#define BUS_ALIAS    0x02000000u        // the GPMC window, identity, domain 0: how the emulation of a trapped access reaches the bus
+#define BUS_ALIAS    BUFFEE_BUS_ALIAS   // the GPMC window in domain 0: how the emulation of a trapped access reaches the bus
+extern char Entry[], _stack_top[], __bss_start[], __bss_end[];
+_Static_assert(BUFFEE_IO(0x481AC000u) == 0x1C6AC000u, "GPIO2's address is also written in mk/pjit.mk (PJIT_GPIO2, PJIT_IPL_GPIO) and tools/gen/emitters/sr.py (_fc_sync)");   // the linker script: the image and its bss (all executable: the block ring is in the bss)
 
 // A board without the byte-swapper board meets the Amiga's data lines straight (bootloader/hal/amiga.c). Its sections of the Amiga's address space are then in domain 1,
 // where every access faults and buffee_bus_emulate() performs it with the bytes in the Amiga's order.
@@ -75,44 +82,72 @@ int buffee_noswap;
 uint32_t buffee_bus_traps, buffee_bus_traps_c;     // accesses emulated: all of them (the fast path in boot.S counts too), and those buffee_bus_emulate() did
 static struct { uint32_t ins, psr, n; } bus_c_forms[32];   // the instruction words that came to buffee_bus_emulate() (with SPSR's E and mode bits): when full, a new one replaces the rarest
 uint32_t buffee_bus_align;                                  // of them, alignment faults (a word or long at an address the ARM does not allow)
-static uint32_t sec_bus = SEC_DEVICE;   // the descriptor bits of a section of the Amiga's address space
+static uint32_t sec_bus = SEC_DEVICE | SEC_XN;   // the descriptor bits of a section of the Amiga's address space
+#define WL_VA        0x1D000000u        // WTRACE's ring (below): 12 MB between the write-detection tables and the DDR mapping
+static uint32_t ddr_lo, trk_pa, trk_mb;          // the lowest megabyte of the DDR mapping; the write-detection tables' physical address and megabytes
+
+// An image whose bss lies below the top 17 MB (bench_dram.ld) maps the DDR from the bridge table's lowest megabyte: the benchmarks run translated code on made-up register
+// contents, and their stray stores through pointers made of their own bytes (0x1D1D1D00) land in the DDR, as they did when the whole DDR was mapped one to one.
+static inline uint32_t ddr_low(void) { return (uint32_t)__bss_start < BUFFEE_DDR_VA ? (uint32_t)BUFFEE_BRIDGE_DDR << 20 : BUFFEE_DDR_VA; }
+uint32_t buffee_pa(const volatile void *p)
+{
+    uint32_t va = (uint32_t)p;
+    if (va >= ddr_low() && va < 0x20000000u) return va + BUFFEE_DDR_SHIFT;
+    if (va >= BUFFEE_TRK_VA && va - BUFFEE_TRK_VA < (trk_mb << 20)) return trk_pa + (va - BUFFEE_TRK_VA);
+    return 0;
+}
+static uint32_t *trk_va(uint32_t pa) { return (uint32_t *)(BUFFEE_TRK_VA + (pa - trk_pa)); }
+static int code_section(uint32_t s)              // a megabyte of the platform's DDR mapping that holds ARM code: the image, its bss, the slot cache
+{
+    uint32_t c = (BUFFEE_CACHE_TOP - DR_CACHE_BYTES) >> 20;
+    return (s >= (uint32_t)Entry >> 20 && s <= ((uint32_t)_stack_top - 1) >> 20) || (s >= (uint32_t)__bss_start >> 20 && s <= ((uint32_t)__bss_end - 1) >> 20)
+        || (s >= c && s < BUFFEE_CACHE_TOP >> 20);
+}
 
 static void smc_regions_init(void);
+static void smc_clear(void);
 static void smc_xlat_rom(int on);
 static void smc_xlat_low(int on);
 static void mmu_init(void)
 {
-    const volatile uint8_t *bi = (const volatile uint8_t *)0x9F5FFF00u;
+    const volatile uint8_t *bi = BUFFEE_BOOTINFO;
 
     buffee_noswap = *(const volatile uint32_t *)bi == 0x544F4F42u && (bi[9] & BOOT_NOSWAP);
-    if (buffee_noswap) sec_bus = SEC_DEVICE | BUS_DOMAIN;
+    if (buffee_noswap) sec_bus = SEC_DEVICE | SEC_XN | BUS_DOMAIN;
     for (uint32_t i = 0; i < 4096; i++) pagetable[i] = 0;
     for (uint32_t i = 0x000; i < 0x020; i++) pagetable[i] = (((i & 0xF) | 0x020) << 20) | sec_bus;   // 0x01000000-0x01FFFFFF wraps onto the first 16 MB: a 68000 has 24 address lines
-    for (uint32_t i = 0x020; i < 0x030; i++) pagetable[i] = (i << 20) | SEC_DEVICE;
-    static const uint16_t periph[] = { 0x400, 0x401, 0x402, 0x403, 0x44E, 0x480, 0x481, 0x482, 0x500 };
-    for (unsigned k = 0; k < sizeof periph / sizeof periph[0]; k++) pagetable[periph[k]] = ((uint32_t)periph[k] << 20) | SEC_DEVICE;
-    for (uint32_t i = 0x800; i < 0xA00; i++) pagetable[i] = (i << 20) | SEC_DDR;                    // the DDR itself, identity
+    for (uint32_t i = 0; i < 16; i++) pagetable[(BUS_ALIAS >> 20) + i] = ((0x020 + i) << 20) | SEC_DEVICE | SEC_XN;
+    static const uint16_t io[] = { BUFFEE_IO_SECTIONS };
+    for (unsigned k = 0; k < sizeof io / sizeof io[0]; k++) pagetable[(BUFFEE_IO_VA >> 20) + k] = ((uint32_t)io[k] << 20) | SEC_DEVICE | SEC_XN;
+    ddr_lo = ddr_low() >> 20;
+    for (uint32_t s = ddr_lo; s < 0x200; s++) pagetable[s] = ((s << 20) + BUFFEE_DDR_SHIFT) | SEC_DDR | (code_section(s) ? 0 : SEC_XN);
+    pagetable[BUFFEE_STAGE_VA >> 20] = BUFFEE_STAGE_PHYS | SEC_DDR | SEC_XN;           // where an image sent through the control page waits (control.c)
+#ifdef WTRACE
+    for (uint32_t k = 0; k < 12; k++) pagetable[(WL_VA >> 20) + k] = (0x92000000u + (k << 20)) | SEC_DDR | SEC_XN;
+#endif
     smc_regions_init();                                                   // the guest RAM regions (EEPROM via the bootloader), the translate map and the code-tracking tables
+    // The switch, with the MMU on: the bridge table that boot.S entered through maps the platform's megabytes as this one does, so the code and the stack stay where they are.
     CP15DCacheCleanFlush();
-    CP15DCacheDisable();
-    CP15MMUDisable();
-    CP15ICacheFlush();
-    CP15BranchPredictorInvalidate();
-    CP15Ttb0Set((uint32_t)pagetable);
+    CP15Ttb0Set(buffee_pa(pagetable));
     CP15TtbCtlTtb0Config();
     CP15DomainAccessClientSet();
     if (buffee_noswap) __asm__ volatile ("mcr p15, 0, %0, c3, c0, 0\n isb" :: "r"(DACR_NOSWAP) : "memory");
     CP15TlbInvalidate();
-    CP15MMUEnable();
+    CP15ICacheFlush();
+    CP15BranchPredictorInvalidate();
+    __asm__ volatile ("dsb sy\n isb" ::: "memory");
     CP15ICacheEnable();
     CP15DCacheEnable();
     CP15BranchPredictionEnable();
+    smc_clear();                                                          // (the guest's low RAM and the tables are only mapped from here on)
 }
 
-/// Guest address 0..0xFFFFF is the 1 MB-aligned RAM at `phys` (the vectors and a low image). The cache is cleaned first so the table walk sees the new entry.
-void bbb_map_low(uint32_t phys)
+/// Guest address 0..0xFFFFF is the 1 MB-aligned RAM at `addr` (the vectors and a low image): one of the platform's own addresses (a static array), or a physical one.
+/// The cache is cleaned first so the table walk sees the new entry.
+void bbb_map_low(uint32_t addr)
 {
-    pagetable[0] = pagetable[0x10] = (phys & 0xFFF00000u) | SEC_DDR;
+    uint32_t phys = buffee_pa((const void *)addr) ? buffee_pa((const void *)addr) : addr;
+    pagetable[0] = pagetable[0x10] = (phys & 0xFFF00000u) | SEC_GUEST;
     smc_xlat_low(1);
     CP15DCacheCleanFlushBuff((uint32_t)&pagetable[0], 4); CP15DCacheCleanFlushBuff((uint32_t)&pagetable[0x10], 4);
     CP15TlbInvalidate();
@@ -130,7 +165,7 @@ static struct { uint32_t base, size; } buffee_rg[4];
 static unsigned buffee_nrg;
 static void buffee_install_tag(void)
 {
-    uint8_t *t = (uint8_t *)BUFFEE_MAPROM_PHYS + 0x100;                          // guest $F00100
+    uint8_t *t = (uint8_t *)BUFFEE_MAPROM + 0x100;                               // guest $F00100
     const uint32_t G = 0xF00100u;
     uint8_t *q = t;
 #define B(v) (*q++ = (uint8_t)(v))
@@ -165,41 +200,83 @@ static void buffee_install_tag(void)
 #undef B
     CP15DCacheCleanFlushBuff((uint32_t)t, 0x400);
     printf("[TAG] RomTag at $%06X, %u region(s)\n", (unsigned)G, buffee_nrg);
+    {   uint8_t *c = (uint8_t *)BUFFEE_MAPROM + (BUFFEE_CMD_AT & 0xFFFFFu);    // the resident `buffee` command (amiga/buffee/resident.S): Kickstart 3.0 and later add it
+        for (uint32_t i = 0; i < sizeof buffee_cmd; i++) c[i] = buffee_cmd[i];   // to the Shell's resident list once dos.library is up
+        CP15DCacheCleanFlushBuff((uint32_t)c, sizeof buffee_cmd);
+    }
 }
+
+/* The sealed MapROM megabyte: once the bootloader has staged a Kickstart (MapROM from the flash or a copy of the host's ROM), $F00000-$FFFFFF is read-only for the guest, as a
+   ROM is, and a write there is dropped (maprom_drop). A MiniMig's boot program writes its own Kickstart into the ROM area; with MapROM on, ours stays. */
+#define PAGE_RO      (1u << 9)             // small or large page descriptor: AP[2], read-only for every mode
+#define LARGE_GUEST  0x903Du               // PAGE_GUEST as a 64 KB large page (16 equal entries): TEX 1 in bits 14:12, C, B, AP 3, XN in bit 15
+#define CTL_ENTRY    ((BFC_PAGE >> 12) & 0xFFu)    // the control page's entry in the MapROM megabyte's page table
+static int maprom_sealed;
+uint32_t buffee_rom_writes;                // guest writes dropped there
+int buffee_rom_on_bus;                     // MapROM off: $F80000-$FFFFFF is the host's own bus (below: the RomTag's half stays in the DRAM)
+static uint32_t rom_l2[256] __attribute__((aligned(1024)));    // that megabyte's page table
 
 uint32_t buffee_maprom(uint32_t size)
 {
     volatile uint16_t *src = (volatile uint16_t *)0xF80000u;
-    uint16_t *dst = (uint16_t *)(BUFFEE_MAPROM_PHYS + 0x80000u);
+    uint16_t *dst = (uint16_t *)(BUFFEE_MAPROM + 0x80000u);
     uint32_t sum = 0;
     // The bootloader may have staged the image already (EEPROM: MapROM from the flash or a copy of the Amiga's ROM; the rest of the megabyte is 0xFF): then only the mapping is left.
-    const volatile uint32_t *bi = (const volatile uint32_t *)0x9F5FFF00u;      // bootinfo_t: magic 'BOOT', ..., byte 10 = rom_staged
+    const volatile uint32_t *bi = (const volatile uint32_t *)BUFFEE_BOOTINFO;  // bootinfo_t: magic 'BOOT', ..., byte 10 = rom_staged
     int staged = bi[0] == 0x544F4F42u && ((const volatile uint8_t *)bi)[10] == 1;
+    int rom_off = bi[0] == 0x544F4F42u && ((const volatile uint8_t *)bi)[6] == 0;     // byte 6 = maprom_src, 0 = off
     if (staged) {
         for (uint32_t i = 0; i < 0x80000u / 2; i++) sum += __builtin_bswap16(dst[i]);
+    } else if (rom_off) {                                                      // nothing copied: the host's ROM area is used where it is
+        uint32_t *lo = (uint32_t *)BUFFEE_MAPROM;
+        for (uint32_t i = 0; i < 0x80000u / 4; i++) lo[i] = 0xFFFFFFFFu;
     } else {
         for (uint32_t i = 0; i < 0x80000u / 2; i++) {
             uint16_t v = src[i % (size / 2)];
             dst[i] = v; sum += __builtin_bswap16(v);
         }
-        uint32_t *lo = (uint32_t *)BUFFEE_MAPROM_PHYS;
+        uint32_t *lo = (uint32_t *)BUFFEE_MAPROM;
         for (uint32_t i = 0; i < 0x80000u / 4; i++) lo[i] = 0xFFFFFFFFu;
     }
     // $E00000-$EFFFFF (no extension ROM, and Zorro II autoconfig at $E80000): an empty bus reads 0xFF, which expansion.library takes for "no board". The Amiga's own bus floats
     // there on this accelerator (the previous cycle's data comes back: 0x001F, which looked like a board), so the section is a page of 0xFF in the DRAM.
     buffee_install_tag();
 #ifdef FFPAGE
-    uint32_t *ff = (uint32_t *)(BUFFEE_MAPROM_PHYS - 0x100000u);
+    uint32_t *ff = (uint32_t *)(BUFFEE_MAPROM - 0x100000u);
     for (uint32_t i = 0; i < 0x100000u / 4; i++) ff[i] = 0xFFFFFFFFu;
-    CP15DCacheCleanFlushBuff(BUFFEE_MAPROM_PHYS - 0x100000u, 0x100000u);
-    pagetable[0x00E] = pagetable[0x01E] = ((BUFFEE_MAPROM_PHYS - 0x100000u) & 0xFFF00000u) | SEC_DDR;
+    CP15DCacheCleanFlushBuff(BUFFEE_MAPROM - 0x100000u, 0x100000u);
+    pagetable[0x00E] = pagetable[0x01E] = ((BUFFEE_MAPROM_PHYS - 0x100000u) & 0xFFF00000u) | SEC_GUEST;
 #else
     pagetable[0x00E] = pagetable[0x01E] = (0x02Eu << 20) | sec_bus;                     // the real bus: a Zorro II board in the machine configures itself here ($E80000); with none the pulled-up bus reads high nibbles of F, as the page of 0xFF did
 #endif
     CP15DCacheCleanFlushBuff((uint32_t)&pagetable[0x00E], 4); CP15DCacheCleanFlushBuff((uint32_t)&pagetable[0x01E], 4);
-    CP15DCacheCleanFlushBuff(BUFFEE_MAPROM_PHYS, 0x100000u);
-    pagetable[0x00F] = pagetable[0x01F] = (BUFFEE_MAPROM_PHYS & 0xFFF00000u) | SEC_DDR;
-    smc_xlat_rom(1);                                                            // the ROM is translated code (not tracked for writes: it is read-only to the guest)
+    CP15DCacheCleanFlushBuff(BUFFEE_MAPROM, 0x100000u);
+    maprom_sealed = staged;
+    buffee_rom_on_bus = rom_off && !staged;
+    {   uint8_t *cp = (uint8_t *)BUFFEE_MAPROM + (BFC_PAGE & 0xFFFFFu);         // the control page (control.h): its magic and version, read-only for the guest
+        static const uint8_t head[8] = { 'B', 'U', 'F', 'C', BFC_VERSION >> 24, BFC_VERSION >> 16, BFC_VERSION >> 8, BFC_VERSION };
+        for (uint32_t i = 0; i < 0x1000u; i++) cp[i] = i < 8 ? head[i] : 0;
+        CP15DCacheCleanFlushBuff((uint32_t)cp, 0x1000u);
+    }
+    if (buffee_rom_on_bus) {
+        /* MapROM off: $F80000-$FFFFFF is the host's bus, read and written there (a MiniMig's boot program fills its own ROM area), interpreted and paced like any bus
+           code; $F00000-$F7FFFF stays in the DRAM for the RomTag. Small pages: the DRAM half normal cached, the bus half device memory, or on a board without the
+           byte swapper no access at all, so that every access there traps into the bus emulation as the rest of the Amiga's space does. */
+        for (uint32_t i = 0; i < 256; i++)
+            rom_l2[i] = i < 128 ? ((BUFFEE_MAPROM_PHYS + (i << 12)) | PAGE_GUEST) : ((0x02F00000u + (i << 12)) | (buffee_noswap ? 0x07u : 0x37u));
+        smc_xlat_rom(0);
+    } else {
+        /* The megabyte in the DRAM, read-only once a Kickstart is staged: 64 KB pages (as few TLB entries as the ROM's reads need), small ones for the 64 KB that
+           holds the control page. */
+        for (uint32_t i = 0; i < 256; i++) {
+            uint32_t pa = BUFFEE_MAPROM_PHYS + (i << 12), ro = staged ? PAGE_RO : 0;
+            rom_l2[i] = (i >> 4) == (CTL_ENTRY >> 4) ? (pa | PAGE_GUEST | ro) : ((pa & ~0xFFFFu) | LARGE_GUEST | ro);
+        }
+        smc_xlat_rom(1);                                                        // the ROM is translated code (not tracked for writes: it is read-only to the guest)
+    }
+    rom_l2[CTL_ENTRY] |= PAGE_RO;                                               // a write there is a request (ctl_page_fault)
+    CP15DCacheCleanFlushBuff((uint32_t)rom_l2, sizeof rom_l2);
+    pagetable[0x00F] = pagetable[0x01F] = (buffee_pa(rom_l2) & ~0x3FFu) | 1u;
     CP15DCacheCleanFlushBuff((uint32_t)&pagetable[0x00F], 4); CP15DCacheCleanFlushBuff((uint32_t)&pagetable[0x01F], 4);
     CP15TlbInvalidate();
     CP15BranchPredictorInvalidate();
@@ -209,19 +286,23 @@ uint32_t buffee_maprom(uint32_t size)
 // ---- the Amiga's interrupt lines --------------------------------------------------------------------------------------------------
 // The bootloader's InitIRQ() set up the INTC and the GPIO banks (IPL2..0 on GPIO2_6..8, both edges; RESET GPIO3_16 and HALT GPIO0_13, falling edge). Our vector table
 // replaces its IRQ vector, so this is the ISR: pjit_irq_entry calls pjit_platform_irq() in IRQ mode and takes the 68K level it returns.
-#define INTC            0x48200000u
+#define INTC            BUFFEE_IO(0x48200000u)
 #define INTC_SIR_IRQ    (INTC + 0x40)
 #define INTC_CONTROL    (INTC + 0x48)
-#define GPIO0           0x44E07000u
-#define GPIO2           0x481AC000u
-#define GPIO3           0x481AE000u
+#define GPIO0           BUFFEE_IO(0x44E07000u)
+#define GPIO2           BUFFEE_IO(0x481AC000u)
+#define GPIO3           BUFFEE_IO(0x481AE000u)
 #define G_IRQSTATUS0    0x2C
+#define G_OE            0x134
 #define G_DATAIN        0x138
+#define G_CLEARDATAOUT  0x190
 #define IPL_MASK        (7u << 6)
 #define RESET_BIT       (1u << 16)
 #define HALT_BIT        (1u << 13)
 
 uint32_t pjit_flog[1 + 64];                  // runtime.s (PJIT_DLOG): per delivery {sp after the push, new SR, frame words read back}, big-endian; word 0 = byte offset of the next entry
+uint32_t pjit_oddpc[11];                                     // runtime.s (PJIT_DLOG): the first address error on an odd PC {PC, A5, A6, A7, SR} (little-endian), then the six longs at A7 (big-endian)
+uint32_t pjit_oddvec[9];                                     // runtime.s (PJIT_DLOG): the first and the last delivery whose handler address is odd {vector, entry address, address read, guest PC}, at 0 and 5; the count at 4
 uint32_t pjit_xlog[32], pjit_xlog_pos;                        // runtime.s (PJIT_DLOG): the last 16 exceptions that are not interrupts / Supervisor(): (vector, guest PC after the instruction)
 uint32_t pjit_dlog[256], pjit_dlog_pos, pjit_dlog_count;      // runtime.s (PJIT_DLOG): a ring of (vector, guest PC) of the exceptions delivered
 volatile uint32_t buffee_reset_events, buffee_halt_events, buffee_ipl_events;
@@ -234,6 +315,24 @@ unsigned buffee_ipl(void)
     do { a = b; b = REG32(GPIO2 + G_DATAIN); } while (((a ^ b) & IPL_MASK) != 0);
     b = ~b;
     return ((b >> 6) & 1) << 2 | ((b >> 7) & 1) << 1 | ((b >> 8) & 1);
+}
+
+/// What a 68000's RESET instruction does to the bus: RESET (not HALT) low for 124 clocks, 17.5 us at a PAL Amiga's 7.09 MHz, then let go. Counted in cycles of a 1 GHz core, so a
+/// slower core clock only makes the pulse longer. The line is open drain and rises on the host's pull-up; the falling edge is the board's own, so the host IRQ stays
+/// masked through the pulse and the latched edge is cleared once the line is high again (or after 5 ms, when the host holds it: then it is the host's reset anyway).
+void buffee_pulse_reset(void)
+{
+    uint32_t cpsr, t;
+
+    __asm__ volatile("mrs %0, cpsr\n cpsid i" : "=r"(cpsr) :: "memory");
+    REG32(GPIO3 + G_CLEARDATAOUT) = RESET_BIT;
+    REG32(GPIO3 + G_OE) &= ~RESET_BIT;
+    for (t = bbb_pmu_cycles(); bbb_pmu_cycles() - t < 17500u; ) { }
+    REG32(GPIO3 + G_OE) |= RESET_BIT;
+    for (t = bbb_pmu_cycles(); !(REG32(GPIO3 + G_DATAIN) & RESET_BIT) && bbb_pmu_cycles() - t < 5000000u; ) { }
+    for (t = bbb_pmu_cycles(); bbb_pmu_cycles() - t < 2000u; ) { }                   // the edge detector's own delay
+    REG32(GPIO3 + G_IRQSTATUS0) = RESET_BIT;
+    __asm__ volatile("dsb\n msr cpsr_c, %0" :: "r"(cpsr) : "memory");
 }
 
 /// The lines are a level, not an event: whatever woke us, the answer is the level on the pins now (0 when the source was acknowledged). RESET posts the pseudo level 8: the router
@@ -399,8 +498,8 @@ extern uint32_t pjit_trace_frz __attribute__((weak));
 #ifdef WTRACE
 // WTRACE: a big ring (1 M entries) of the CPU's writes to the blitter registers ($040-$07F), DMACON and the interrupt registers, each with the size and the guest PC (cpu->ipc: exact in the interpreter), kept by
 // buffee_trace_custom()'s permission faults and printed by the ESC report: what did the guest write to the blitter, and from where
-#define WL_N (1u << 20)                                   /* 1 M entries x 12 bytes = 12 MB of free DDR at 0x92000000 (above the xmodem buffer and the unpack scratch; identity-mapped, cached) */
-#define buffee_wl ((uint32_t *)0x92000000u)
+#define WL_N (1u << 20)                                   /* 1 M entries x 12 bytes = 12 MB of free DDR at physical 0x92000000 (above the xmodem buffer and the unpack scratch), mapped by mmu_init() */
+#define buffee_wl ((uint32_t *)WL_VA)
 uint32_t buffee_wl_pos;
 static inline void wl_add(uint32_t a, uint32_t v, int size)
 {
@@ -422,7 +521,7 @@ static void blt_imm(uint32_t a)
 {
     uint32_t r = a & 0x1FE;
     if (r != 0x058 && r != 0x05C && r != 0x05E) return;
-    volatile uint16_t *dmaconr = (volatile uint16_t *)(0x30000000u | 0xFF002u);       // through the writable alias; the first read after the write may miss BBUSY, so look twice
+    volatile uint16_t *dmaconr = (volatile uint16_t *)(BUFFEE_CHIP_ALIAS | 0xFF002u);       // through the writable alias; the first read after the write may miss BBUSY, so look twice
     uint32_t n = 0;
     (void)*dmaconr;
     while ((__builtin_bswap16(*dmaconr) & 0x4000) && n < 4000000) n++;
@@ -435,9 +534,9 @@ static inline int wlog_keep(uint32_t a) { uint32_t r = a & 0x1FE; return buffee_
 void buffee_trace_custom(void)
 {
     if (buffee_noswap) { printf("custom-chip write trace: not on a board without the byte swapper (its accesses are trapped already)\n"); return; }
-    pagetable[0x300] = (0x02Du << 20) | SEC_DEVICE;                   // an alias of the custom-chip section that can be written
-    pagetable[0x00D] = pagetable[0x01D] = (0x02Du << 20) | 0x8C06u;   // privileged read-only: every write is a permission fault that buffee_unaligned() performs through the alias and logs
-    CP15DCacheCleanFlushBuff((uint32_t)&pagetable[0], 0x400 * 4);
+    pagetable[BUFFEE_CHIP_ALIAS >> 20] = (0x02Du << 20) | SEC_DEVICE | SEC_XN;  // an alias of the custom-chip section that can be written
+    pagetable[0x00D] = pagetable[0x01D] = (0x02Du << 20) | 0x8C16u;   // privileged read-only: every write is a permission fault that buffee_unaligned() performs through the alias and logs
+    CP15DCacheCleanFlushBuff((uint32_t)&pagetable[0], 0x200 * 4);
     CP15TlbInvalidate();
     buffee_wlog_on = 1;
 }
@@ -459,7 +558,7 @@ static void rawh(const char *t, uint32_t v) { while (*t) rawc(*t++); for (int i 
 // bitmap offsets: a guest address's tracked offset is (number << 20) | (address & 0xFFFFF). The bitmaps and the 1 KB coarse tables (one per tracked megabyte, for the 4 KB protection) sit in the DDR
 // right behind the last region (smc_regions_init), so their size follows the regions.
 #define POOL_BASE    0x80000000u
-#define POOL_MAX_MB  495u                                     // [0x80000000, 0x9EF00000): below the slot cache's tags and the PJIT image
+#define POOL_MAX_MB  494u                                     // [0x80000000, 0x9EE00000): below the control page's staging megabyte, the slot cache's tags and the PJIT image
 uint8_t pjit_pace_mb[4096] __attribute__((aligned(64)));      // 1 = the megabyte runs unpaced (a zone with flag F), read by the pace governor
 static uint16_t smc_xlat[4096] __attribute__((aligned(64)));
 static uint16_t smc_inv[512];                                 // tracked megabyte -> guest megabyte
@@ -485,19 +584,19 @@ uint32_t *pjit_platform_codeexact(void) { return smc_exact; }
 uint16_t *pjit_platform_xlat(void) { return smc_xlat; }
 static void smc_xlat_rom(int on) { if (smc_rom_idx != ~0u) smc_xlat[0xF] = smc_xlat[0x1F] = on ? smc_rom_idx + 1 : 0; }
 static void smc_xlat_low(int on) { if (smc_low_idx != ~0u) smc_xlat[0] = smc_xlat[0x10] = on ? smc_low_idx + 1 : 0; }
-static int smc_reserved(uint32_t s)                           // guest megabytes the platform keeps for itself (the Amiga window, peripherals, the DDR identity map, the custom-chip alias)
-{
-    return (s >= 0x20 && s < 0x30) || s == 0x300 || (s >= 0x400 && s < 0x404) || s == 0x44E || (s >= 0x480 && s < 0x483) || s == 0x500 || (s >= 0x800 && s < 0xA00);
-}
+static int smc_reserved(uint32_t s) { return s >= BUFFEE_VA_LOW >> 20 && s < 0x200; }     // guest megabytes the platform keeps for itself (buffee.h)
+static struct { uint32_t base, mb; } smc_zero[4];             // the regions below 16 MB, zeroed by smc_clear()
+static unsigned smc_nzero;
 /// The guest RAM regions of the EEPROM (bootinfo, bytes 16..31: base in MB, log2 size, flags, four times; no bootinfo: 128 MB at $08000000): each is mapped as 1 MB sections onto consecutive
 /// megabytes of the DDR from physical 0x80000000 and numbered in the tracked space. A region is rejected (and so is every later one) when it is not a power of two in 1 MB ... 512 MB, runs
 /// past 4 GB, overlaps a megabyte the platform needs or another region, or does not fit with its share of the tracking tables into the 495 MB pool. The tables (1 KB coarse table, 1 KB of line bits,
 /// 8 KB of group bits and 32 bytes of page bits per tracked megabyte) follow the last region. Two more tracked numbers are reserved for the MapROM megabyte and for the low RAM that
-/// bbb_map_low() gives a test. Regions below 16 MB are zeroed (exec probes memory there: stale contents of an earlier boot look like RAM that was in use).
+/// bbb_map_low() gives a test. The tables are mapped at BUFFEE_TRK_VA. Regions below 16 MB are zeroed (exec probes memory there: stale contents of an earlier boot look like RAM that was in
+/// use); that and the tables' zeroing wait for smc_clear(), once this page table is the one in use.
 static void smc_regions_init(void)
 {
     struct { uint16_t base_mb; uint8_t l2, flags; } r[4] = { { 128, 27, 0 }, { 0, 0, 0 }, { 0, 0, 0 }, { 0, 0, 0 } };
-    const volatile uint8_t *bi = (const volatile uint8_t *)0x9F5FFF00u;
+    const volatile uint8_t *bi = BUFFEE_BOOTINFO;
     if (*(const volatile uint32_t *)bi == 0x544F4F42u)
         for (int k = 0; k < 4; k++) { r[k].base_mb = bi[16 + 4 * k] | bi[17 + 4 * k] << 8; r[k].l2 = bi[18 + 4 * k]; r[k].flags = bi[19 + 4 * k]; }
 #ifdef FORCEB
@@ -511,7 +610,7 @@ static void smc_regions_init(void)
 #endif
     int mode24 = *(const volatile uint32_t *)bi == 0x544F4F42u && (bi[9] & 4);          // BOOT_24BIT
     for (uint32_t i = 0; i < 4096; i++) { smc_xlat[i] = 0; pjit_pace_mb[i] = 0; }
-    smc_nregion_mb = 0; smc_l2used = 0; buffee_nrg = 0;
+    smc_nregion_mb = 0; smc_l2used = 0; buffee_nrg = 0; smc_nzero = 0;
     uint32_t ntrk = 0;                                                    // tracked megabytes so far (host DRAM regions and bus regions, in the order they are given); smc_nregion_mb counts only the pool
     for (int k = 0; k < 4 && r[k].l2; k++) {
         if (r[k].l2 < 20 || r[k].l2 > 29) break;
@@ -522,16 +621,16 @@ static void smc_regions_init(void)
         int bad = 0;
         for (uint32_t i = 0; i < mb; i++) if (smc_reserved(base + i) || smc_xlat[base + i]) bad = 1;
         uint32_t nmb = ntrk + mb + 2, meta_mb = (nmb * 10272u + 4096u + 0xFFFFFu) >> 20;
-        if (bad || smc_nregion_mb + (bus ? 0 : mb) + meta_mb > POOL_MAX_MB) break;
+        if (bad || smc_nregion_mb + (bus ? 0 : mb) + meta_mb > POOL_MAX_MB || meta_mb > BUFFEE_TRK_MB) break;
         for (uint32_t i = 0; i < mb; i++) {
-            if (!bus) pagetable[base + i] = ((POOL_BASE >> 20) + smc_nregion_mb + i) << 20 | SEC_DDR;
+            if (!bus) pagetable[base + i] = ((POOL_BASE >> 20) + smc_nregion_mb + i) << 20 | SEC_GUEST;
             else if (buffee_noswap) pagetable[base + i] &= ~DOMAIN_MASK;    // without the byte swapper: RAM that only the CPU reaches keeps the CPU's own byte order consistently (a word
                                                                             // stored reversed reads back reversed, a byte on the other lane reads back from it), so it needs no trap
             if (!(r[k].flags & 1)) smc_xlat[base + i] = ntrk + i + 1;          // flags bit 0 = interpret only: the memory is there, but its code is never translated (and so runs at the pace governor's speed)
             smc_inv[ntrk + i] = base + i;
             if (r[k].flags & 4) pjit_pace_mb[base + i] = 1;                    // flags bit 2 = unpaced (Fast RAM): interpreted at full speed, not at 68000 pace
         }
-        if (!bus && base < 16) for (volatile uint32_t *q = (volatile uint32_t *)(POOL_BASE + (smc_nregion_mb << 20)); q < (volatile uint32_t *)(POOL_BASE + ((smc_nregion_mb + mb) << 20)); q++) *q = 0;
+        if (!bus && base < 16) { smc_zero[smc_nzero].base = base; smc_zero[smc_nzero].mb = mb; smc_nzero++; }
         if (!bus && buffee_nrg < 4 && !(base * 0x100000ull < 0xE00000 && (base + mb) * 0x100000ull > 0xC00000)) { buffee_rg[buffee_nrg].base = base << 20; buffee_rg[buffee_nrg].size = mb << 20; buffee_nrg++; }
         if (!bus) smc_nregion_mb += mb;
         ntrk += mb;
@@ -540,13 +639,20 @@ static void smc_regions_init(void)
         for (uint32_t i = 16; i < 4096; i++) if (!smc_reserved(i)) { pagetable[i] = pagetable[i & 15]; smc_xlat[i] = smc_xlat[i & 15]; pjit_pace_mb[i] = pjit_pace_mb[i & 15]; }
     smc_rom_idx = ntrk; smc_low_idx = ntrk + 1; smc_inv[smc_rom_idx] = 0xF; smc_inv[smc_low_idx] = 0;
     smc_nmb = ntrk + 2;
-    uint32_t p = POOL_BASE + (smc_nregion_mb << 20), start = p;
+    uint32_t p = BUFFEE_TRK_VA, start = p;
     smc_l2 = (uint32_t (*)[256])p;     p += smc_nmb * 1024u; smc_l2n = smc_nmb;
     smc_lines = (uint32_t *)p;         p += smc_nmb * 1024u;
     smc_exact = (uint32_t *)p;         p += smc_nmb * 8192u + 64u;
     smc_prot = (uint32_t *)p;          p += smc_nmb * 32u;
-    for (volatile uint32_t *q = (volatile uint32_t *)start; q < (volatile uint32_t *)p; q++) *q = 0;
+    trk_pa = POOL_BASE + (smc_nregion_mb << 20); trk_mb = (p - start + 0xFFFFFu) >> 20;
+    for (uint32_t k = 0; k < trk_mb; k++) pagetable[(BUFFEE_TRK_VA >> 20) + k] = (trk_pa + (k << 20)) | SEC_DDR | SEC_XN;
     printf("[MEM] %u MB of guest RAM regions, tracking tables %u KB (%u tracked megabytes)\n", (unsigned)smc_nregion_mb, (unsigned)((p - start) >> 10), (unsigned)smc_nmb);
+}
+static void smc_clear(void)
+{
+    for (volatile uint32_t *q = (volatile uint32_t *)BUFFEE_TRK_VA; q < (volatile uint32_t *)(smc_prot + smc_nmb * 8u); q++) *q = 0;
+    for (unsigned k = 0; k < smc_nzero; k++)
+        for (volatile uint32_t *q = (volatile uint32_t *)(smc_zero[k].base << 20); q < (volatile uint32_t *)((smc_zero[k].base + smc_zero[k].mb) << 20); q++) *q = 0;
 }
 static inline int smc_ram_section(uint32_t s) { uint32_t x = smc_xlat[s]; return x && x - 1 != smc_rom_idx; }       // translated, writable memory (the MapROM megabyte is not)
 static uint32_t *smc_pte(uint32_t a)                          // the small-page descriptor of guest address a (splitting its section first), or 0 if it is not protectable
@@ -555,16 +661,16 @@ static uint32_t *smc_pte(uint32_t a)                          // the small-page 
     if (!smc_ram_section(s)) return 0;
     if ((pagetable[s] & 3) == 2) {
         if (smc_l2used >= smc_l2n) return 0;
-        uint32_t d = pagetable[s], base = d & 0xFFF00000u, attr = (d & 0x1000u) ? 0x7Eu : 0x36u;      // normal cached (TEX 1, C, B, AP 3) or device (B, AP 3), small page
+        uint32_t d = pagetable[s], base = d & 0xFFF00000u, attr = (d & 0x1000u) ? PAGE_GUEST : 0x37u;   // normal cached (TEX 1, C, B, AP 3, XN) or device (B, AP 3, XN), small page
         uint32_t *t = smc_l2[smc_l2used++];
         for (uint32_t i = 0; i < 256; i++) t[i] = (base + (i << 12)) | attr;
         CP15DCacheCleanFlushBuff((uint32_t)t, 1024);
-        pagetable[s] = ((uint32_t)t & ~0x3FFu) | (d & DOMAIN_MASK) | 1u;            // (a coarse descriptor keeps the section's domain)
+        pagetable[s] = (buffee_pa(t) & ~0x3FFu) | (d & DOMAIN_MASK) | 1u;           // (a coarse descriptor keeps the section's domain)
         CP15DCacheCleanFlushBuff((uint32_t)&pagetable[s], 4);
         CP15TlbInvalidate();
     }
     if ((pagetable[s] & 3) != 1) return 0;
-    return (uint32_t *)(pagetable[s] & ~0x3FFu) + ((a >> 12) & 255);
+    return trk_va(pagetable[s] & ~0x3FFu) + ((a >> 12) & 255);
 }
 static void smc_set(uint32_t a, int ro)
 {
@@ -579,7 +685,7 @@ static void smc_set(uint32_t a, int ro)
 static void smc_announce(uint32_t start, uint32_t len);
 #ifdef CRUMBS
 /* hang diagnosis (-DCRUMBS): a ring of the last guest code ranges announced for translation and the last write faults, kept in DDR at 0x9F5FFC00 (it survives a watchdog reset; each entry is cleaned out of the data cache); read back by buffee_crumbs */
-#define CRUMB_BASE ((volatile uint32_t *)0x9F5FFC00u)
+#define CRUMB_BASE ((volatile uint32_t *)BUFFEE_DDR(0x9F5FFC00u))
 static void crumb(uint32_t tag, uint32_t a, uint32_t b) { uint32_t n = CRUMB_BASE[0]++; volatile uint32_t *e = CRUMB_BASE + 4 + 4 * (n & 15); e[0] = tag; e[1] = a; e[2] = b; e[3] = n; __asm__ volatile ("mcr p15, 0, %0, c7, c10, 1\n mcr p15, 0, %1, c7, c10, 1\n dsb sy" :: "r"(e), "r"(CRUMB_BASE) : "memory"); }
 #else
 #define crumb(t, a, b) ((void)0)
@@ -641,6 +747,7 @@ static int smc_store(uint32_t a, uint32_t d, int size)
     return hit;
 }
 static int buffee_smc_fault(uint32_t *f, uint32_t dfsr, uint32_t dfar);
+static int ctl_page_fault(uint32_t *f, uint32_t spsr, uint32_t dfsr, uint32_t dfar);
 void buffee_smc_report(void) { printf("SMC: %u write faults in protected pages (%u hit translated code, %u not decoded), %u flushes, %u pages protected so far, %u coarse tables\n", (unsigned)buffee_smc_faults, (unsigned)buffee_smc_hits, (unsigned)buffee_smc_retry, (unsigned)buffee_smc_flushes, (unsigned)buffee_smc_prot_pages, smc_l2used); 
     for (int pass = 0; pass < 2; pass++) { typeof(smc_hot_hit) *h = pass ? &smc_hot_page : &smc_hot_hit; printf("SMC top %s:", pass ? "pages" : "hit lines");
         for (int r = 0; r < 6; r++) { int b = 0; for (int i = 1; i < 24; i++) if ((*h)[i].n > (*h)[b].n) b = i; if (!(*h)[b].n) break; printf(" %06X x%u (last write %06X size %u)", (unsigned)(*h)[b].a, (unsigned)(*h)[b].n, (unsigned)(*h)[b].last, (unsigned)(*h)[b].lastsize); if (!pass && r < 3) { printf("\n   mem:"); for (uint32_t k = 0; k < 64; k += 2) printf(" %04X", __builtin_bswap16(*(volatile uint16_t *)((*h)[b].a + k))); printf("\n"); } (*h)[b].n = 0; } printf("\n"); }
@@ -760,6 +867,41 @@ static int buffee_smc_fault(uint32_t *f, uint32_t dfsr, uint32_t dfar)   // 0: n
     if (wb) sr(f, rn, nb);
     return 1;
 }
+
+/// The base register write-back of a store that is skipped (post-index, pre-index with `!`, STM with `!`), so the guest's address registers move as after a store that took place.
+static void store_writeback(uint32_t *f, uint32_t ins)
+{
+    unsigned rn = ins >> 16 & 15;
+    uint32_t off;
+
+    if (rn == 15) return;
+    if (((ins >> 25) & 7) == 4) {                                                  // STM
+        unsigned n = 0;
+        for (unsigned m = ins & 0xFFFF; m; m &= m - 1) n++;
+        if ((ins >> 21) & 1) sr(f, rn, (ins >> 23 & 1) ? gr(f, rn) + 4 * n : gr(f, rn) - 4 * n);
+        return;
+    }
+    int half = ((ins >> 25) & 7) == 0 && ((ins >> 4) & 15) == 0xB, word = ((ins >> 26) & 3) == 1;
+    if (!half && !word) return;                                                    // (STRD and the rest: no write-back done)
+    if (half) off = (ins & (1u << 22)) ? ((ins >> 4 & 0xF0) | (ins & 0xF)) : gr(f, ins & 15);
+    else if (ins & (1u << 25)) {
+        uint32_t m = gr(f, ins & 15), sh = ins >> 7 & 31;
+        switch (ins >> 5 & 3) { case 0: off = m << sh; break; case 1: off = sh ? m >> sh : 0; break; case 2: off = sh ? (uint32_t)((int32_t)m >> sh) : (uint32_t)((int32_t)m >> 31); break; default: off = 0; }
+    } else off = ins & 0xFFF;
+    if (!(ins & (1u << 24)) || (ins & (1u << 21))) sr(f, rn, (ins & (1u << 23)) ? gr(f, rn) + off : gr(f, rn) - off);
+}
+
+/// A guest write into the sealed MapROM megabyte: dropped, as a write to a ROM is. Returns 1 (handled: skip the instruction) or 0 (not a write there).
+static int maprom_drop(uint32_t *f, uint32_t dfsr, uint32_t dfar)
+{
+    uint32_t s = dfar >> 20;
+
+    if (!maprom_sealed || (s != 0x00F && s != 0x01F) || ((dfsr & 0x40F) != 0xD && (dfsr & 0x40F) != 0xF) || !(dfsr & 0x800)) return 0;
+    buffee_rom_writes++;
+    store_writeback(f, *(volatile uint32_t *)(f[15] - 8));
+    return 1;
+}
+
 // ---- boards without the byte swapper: every access to the Amiga's address space, emulated ---------------------------------------------
 /// Whether a (faulting) instruction's condition holds for the flags in spsr.
 static int cond_passed(uint32_t ins, uint32_t spsr)
@@ -916,10 +1058,27 @@ static uint32_t dump_rd32(uint32_t a)
     return (uint32_t)__builtin_bswap16(q[0]) << 16 | __builtin_bswap16(q[1]);
 }
 
+/// A guest word for a report, read without faulting: the report may run inside the abort handler, where a second fault cannot be emulated (an odd or unmapped address
+/// reads $EEEE; chip RAM on a board without the byte swapper is read on the bus here).
+uint16_t buffee_peek16(uint32_t a)
+{
+    uint32_t d = pagetable[(a & 0xFFFFFFu) >> 20];
+    if ((a & 1) || !(d & 3)) return 0xEEEE;
+    if (buffee_noswap && bus_section(a)) return (uint16_t)bus_load(a, 2, 1);
+    if (buffee_noswap && buffee_rom_on_bus && ((a >> 19) & 0x1F) == 0x1F) return (uint16_t)bus_load(a, 2, 1);       // (MapROM off: the host's ROM)
+    return read_BE_word(a);
+}
+
 static int buffee_unaligned_inner(uint32_t *f, uint32_t spsr, uint32_t dfsr, uint32_t dfar)
 {
     // a board without the byte swapper: a domain fault in the Amiga's address space, or an alignment fault there (it takes precedence over the domain)
     if (buffee_noswap && bus_section(dfar) && ((dfsr & 0x40F) == 0x9 || (dfsr & 0x40F) == 0xB || (dfsr & 0x40F) == 1)) { buffee_bus_align += (dfsr & 0x40F) == 1; return buffee_bus_emulate(f, spsr, dfar); }
+    if (buffee_noswap && buffee_rom_on_bus && ((dfar >> 20) == 0x00F || (dfar >> 20) == 0x01F) && (dfar & 0x80000) && ((dfsr & 0x40F) == 0xF || (dfsr & 0x40F) == 1)) {
+        buffee_bus_align += (dfsr & 0x40F) == 1;                                 // (MapROM off: the host's ROM area, no-access pages)
+        return buffee_bus_emulate(f, spsr, dfar);
+    }
+    if (ctl_page_fault(f, spsr, dfsr, dfar)) return 1;
+    if (maprom_drop(f, dfsr, dfar)) return 1;
     { int r = buffee_smc_fault(f, dfsr, dfar); if (r) return r; }
     if ((dfsr & 0x40F) == 0xD || (dfsr & 0x40F) == 0xF) {         // a write to a read-only custom-chip section (buffee_trace_custom)
         uint32_t ins = *(volatile uint32_t *)(f[15] - 8);
@@ -937,7 +1096,7 @@ static int buffee_unaligned_inner(uint32_t *f, uint32_t spsr, uint32_t dfsr, uin
         int pre = (ins & (1u << 24)) != 0, wb = !pre || (ins & (1u << 21));
         uint32_t a = pre ? nb : base, d = gr(f, rt);
         if (dfar - a > 3) return 0;
-        uint32_t alias = 0x30000000u | (a & 0xFFFFFu);
+        uint32_t alias = BUFFEE_CHIP_ALIAS | (a & 0xFFFFFu);
         int size = half ? 2 : (ins & (1u << 22)) ? 1 : 4;
         if (size == 4) { volatile uint16_t *p = (volatile uint16_t *)alias; p[0] = __builtin_bswap16(d >> 16); p[1] = __builtin_bswap16(d); }
         else if (size == 2) *(volatile uint16_t *)alias = __builtin_bswap16(d);
@@ -968,7 +1127,7 @@ static int buffee_unaligned_inner(uint32_t *f, uint32_t spsr, uint32_t dfsr, uin
     uint32_t a = pre ? nb : base;
     if (a & 1) return 0;                                          // an odd address: the 68000's address error (buffee_guest_abort)
     if (dfar - a > 3) return 0;                                   // (an access that straddles two sections reports the second one)
-    volatile uint16_t *p = (volatile uint16_t *)((buffee_wlog_on && ((a & 0xFFF00000u) == 0xD00000u || (a & 0xFFF00000u) == 0x1D00000u)) ? (0x30000000u | (a & 0xFFFFFu)) : a);   // (the custom chips are read-only while tracing: write through the alias)
+    volatile uint16_t *p = (volatile uint16_t *)((buffee_wlog_on && ((a & 0xFFF00000u) == 0xD00000u || (a & 0xFFF00000u) == 0x1D00000u)) ? (BUFFEE_CHIP_ALIAS | (a & 0xFFFFFu)) : a);   // (the custom chips are read-only while tracing: write through the alias)
     if (ins & (1u << 20)) sr(f, rt, (uint32_t)__builtin_bswap16(p[0]) << 16 | __builtin_bswap16(p[1]));
     else {
         uint32_t d = gr(f, rt);
@@ -979,16 +1138,93 @@ static int buffee_unaligned_inner(uint32_t *f, uint32_t spsr, uint32_t dfsr, uin
     return 1;
 }
 
+// ---- the control page (control.h, control.c) -------------------------------------------------------------------------------------
+// A write to the read-only control page faults; a long written to its first word (one STR, or two STRHs, the high half first) is the address of a request, which control.c
+// serves here with the guest stopped at the store. Every other write there is dropped. The request and its answer are guest memory: chip RAM through the bus (emulated on a
+// board without the byte swapper), DRAM directly, and a page whose code is translated through the same path as a guest store into it (smc).
+void bfc_serve(uint32_t a);
+static uint32_t ctl_hi;
+
+static int ctl_page_fault(uint32_t *f, uint32_t spsr, uint32_t dfsr, uint32_t dfar)
+{
+    if (((dfsr & 0x40F) != 0xD && (dfsr & 0x40F) != 0xF) || !(dfsr & 0x800) || (dfar & 0xFEFFF000u) != BFC_PAGE) return 0;
+    uint32_t ins = *(volatile uint32_t *)(f[15] - 8), off = dfar & 0xFFFu;
+    unsigned rt = ins >> 12 & 15;
+    int half = ((ins >> 25) & 7) == 0 && ((ins >> 4) & 15) == 0xB && !(ins & (1u << 20));
+    int word = ((ins >> 26) & 3) == 1 && !(ins & (1u << 20)) && !(ins & (1u << 22));
+    int be = (spsr >> 9) & 1;                                                       // the store's endianness (CPSR.E): guest code stores big-endian
+    store_writeback(f, ins);
+    if (rt == 15) return 1;
+    uint32_t v = gr(f, rt);
+    if (word && off == 0) bfc_serve(be ? v : __builtin_bswap32(v));
+    else if (half && off == 0) ctl_hi = be ? (v & 0xFFFFu) : __builtin_bswap16((uint16_t)v);
+    else if (half && off == 2) bfc_serve(ctl_hi << 16 | (be ? (v & 0xFFFFu) : __builtin_bswap16((uint16_t)v)));
+    return 1;
+}
+
+void ctl_guest_read(uint32_t a, void *dst, uint32_t n)
+{
+    uint8_t *d = dst;
+    for (uint32_t i = 0; i < n; i++, a++) d[i] = (buffee_noswap && bus_section(a)) ? (uint8_t)bus_load(a, 1, 0) : *(volatile uint8_t *)a;
+}
+
+void ctl_guest_write(uint32_t a, const void *src, uint32_t n)
+{
+    const uint8_t *s = src;
+    while (n) {
+        uint32_t page = a & ~0xFFFu, k = 0x1000u - (a & 0xFFFu) < n ? 0x1000u - (a & 0xFFFu) : n;
+        int ro = smc_protected(page), hit = ro && smc_line_hit(a, k);
+        if (ro) smc_set(page, 0);
+        for (uint32_t i = 0; i < k; i++) {
+            if (buffee_noswap && bus_section(a + i)) bus_store(a + i, s[i], 1, 0);
+            else *(volatile uint8_t *)(a + i) = s[i];
+        }
+        __asm__ volatile ("dsb sy" ::: "memory");
+        if (hit) { buffee_smc_hits++; pjit_post_flush(); }                 // (a translated line was overwritten: the page stays writable until the flush has run)
+        else if (ro) smc_set(page, 1);
+        a += k; s += k; n -= k;
+    }
+}
+
+void ctl_console(char c) { for (uint32_t spin = 0; (UART0_SSR & 1) && spin < 2000000; spin++) { } UART0_THR = (uint8_t)c; }
+uint8_t *ctl_stage(void) { return (uint8_t *)BUFFEE_STAGE_VA; }
+const volatile uint8_t *ctl_bootinfo(void) { return BUFFEE_BOOTINFO; }
+
+/// The Amiga's own ROM through the bus, read twice and compared (a wobbling line shows as a difference); bytes in the Amiga's order.
+int ctl_amiga_rom(uint32_t base, uint32_t size, uint8_t *dst)
+{
+    for (int pass = 0; pass < 2; pass++)
+        for (uint32_t i = 0; i < size; i += 2) {
+            uint16_t v = bus_rd16(base + i);
+            uint8_t hi = buffee_noswap ? v >> 8 : (uint8_t)v, lo = buffee_noswap ? (uint8_t)v : v >> 8;
+            if (pass == 0) { dst[i] = hi; dst[i + 1] = lo; }
+            else if (dst[i] != hi || dst[i + 1] != lo) return -1;
+        }
+    return 0;
+}
+
+void ctl_board_status(void)
+{
+    int ctl_printf(const char *fmt, ...);
+    const volatile uint8_t *bi = BUFFEE_BOOTINFO;
+    uint32_t hz = *(const volatile uint32_t *)bi == 0x544F4F42u ? *(const volatile uint32_t *)(bi + 32) : 0;
+    ctl_printf("Bus       %u.%03u MHz, %s byte swapper\n", (unsigned)(hz / 1000000u), (unsigned)(hz / 1000u % 1000u), buffee_noswap ? "no" : "with the");
+    ctl_printf("Fast RAM  ");
+    if (!buffee_nrg) ctl_printf("none");
+    for (unsigned i = 0; i < buffee_nrg; i++) ctl_printf("%s%u MB at $%06X", i ? ", " : "", (unsigned)(buffee_rg[i].size >> 20), (unsigned)buffee_rg[i].base);
+    ctl_printf("\nMapROM    %s\n", buffee_rom_on_bus ? "off (the Amiga's ROM)" : maprom_sealed ? "Kickstart in board RAM, read-only" : "board RAM");
+}
+
 // ---- 68K function codes ---------------------------------------------------------------------------------------------------------
 // FC0 is tied high on the board (the GreenPAK drives it to 1), FC1 and FC2 are GPIOs behind the level shifters: LCD_DATA3 = GPIO2_9 = FC1, LCD_DATA4 = GPIO2_10 = FC2 (bodged from the strap-resistor pads).
 // FC = 001 user data, 101 supervisor data, 111 interrupt acknowledge, so FC1 = IACK and FC2 = IACK || supervisor. The Amiga ignores the lines; an Atari ST's GLUE needs the supervisor bit
 // for its I/O decode and the IACK to clear its interrupt latches and to reach the MFP, a Mac's glue the IACK for its autovectors. The supervisor bit is kept by the generated SR-write
 // sequences and the exception entry (tools/gen/gen.py _fc_sync, pjit/runtime.s under PJIT_FC); the SET / CLEAR registers are single-bit writes, so the IPL interrupt on the same bank cannot race them.
-#define GPIO2_BASE   0x481AC000u
+#define GPIO2_BASE   BUFFEE_IO(0x481AC000u)
 #define FC1_BIT      (1u << 9)
 #define FC2_BIT      (1u << 10)
-#define CTRL_LCD_DATA3 0x44E108ACu
-#define CTRL_LCD_DATA4 0x44E108B0u
+#define CTRL_LCD_DATA3 BUFFEE_IO(0x44E108ACu)
+#define CTRL_LCD_DATA4 BUFFEE_IO(0x44E108B0u)
 void buffee_fc_init(void)
 {
     *(volatile uint32_t *)CTRL_LCD_DATA3 = 0x2Fu;                      // mode 7 (GPIO), pull disabled, receiver on (DATAIN reads the pad: a contention shows), output
@@ -1041,16 +1277,34 @@ static void buffee_report(void)
     buffee_smc_report();
     printf("LIVE: %u exceptions delivered in total, guest PC at the ESC interrupt %08X (host PC %08X)\n", (unsigned)pjit_dlog_count, (unsigned)guest_pc_of(buffee_irq_pc), (unsigned)buffee_irq_pc);
     printf("REGS:"); for (int i = 0; i < 8; i++) printf(" D%d=%08X", i, (unsigned)__builtin_bswap32((&cpu_state.d0)[i])); for (int i = 0; i < 8; i++) printf(" A%d=%08X", i, (unsigned)__builtin_bswap32((&cpu_state.a0)[i])); printf("\n");   // (through the arena, not r5: a payload that never started a guest has not set r5, whatever it returns)
+    if (pjit_oddpc[0]) {
+        printf("ODD PC: the first address error on an odd PC: $%08X, A5 $%08X A6 $%08X A7 $%08X SR %04X; the longs at A7:", (unsigned)pjit_oddpc[0], (unsigned)pjit_oddpc[1],
+               (unsigned)pjit_oddpc[2], (unsigned)pjit_oddpc[3], (unsigned)__builtin_bswap16((uint16_t)pjit_oddpc[4]));
+        for (int k = 5; k < 11; k++) printf(" %08X", (unsigned)__builtin_bswap32(pjit_oddpc[k]));
+        printf("\n");
+        /* the code those longs return into (an even address in RAM: 32 bytes before, 16 after) and A6's base from +320 (a JSR d16(A6) into a routine the base holds) */
+        uint32_t at[7]; int n = 0;
+        for (int k = 5; k < 11; k++) { uint32_t v = __builtin_bswap32(pjit_oddpc[k]); if (!(v & 1) && v >= 0x400 && v < 0xA00000) at[n++] = v - 32; }
+        at[n++] = pjit_oddpc[2] + 320;
+        for (int k = 0; k < n; k++) {
+            printf("  mem %06X:", (unsigned)at[k]);
+            for (uint32_t a = at[k]; a < at[k] + 48; a += 2) printf(" %04X", buffee_peek16(a));
+            printf("\n");
+        }
+    }
+    if (pjit_oddvec[4]) printf("ODD VECTORS: %u deliveries to an odd handler address; the first: vector %u (entry $%06X) read $%08X, guest PC $%06X; the last: vector %u (entry $%06X) read $%08X, guest PC $%06X\n",
+                               (unsigned)pjit_oddvec[4], (unsigned)pjit_oddvec[0], (unsigned)pjit_oddvec[1], (unsigned)pjit_oddvec[2], (unsigned)pjit_oddvec[3],
+                               (unsigned)pjit_oddvec[5], (unsigned)pjit_oddvec[6], (unsigned)pjit_oddvec[7], (unsigned)pjit_oddvec[8]);
     printf("TRAPS (oldest first; vector@PC after the instruction, the words from PC-8 to PC+4):\n");
     for (int k = 16; k >= 1; k--) {
         uint32_t e = ((pjit_xlog_pos / 8 - k) & 15) * 2, pc = pjit_xlog[e + 1];
         if (!pjit_xlog[e] && !pc) continue;
         printf("  %X@%X:", (unsigned)pjit_xlog[e], (unsigned)pc);
-        if (pc >= 8 && pc < 0x1000000) for (int d = -8; d <= 4; d += 2) printf(" %04X", (unsigned)read_BE_word(pc + d));
+        if (pc >= 8 && pc < 0x1000000) for (int d = -8; d <= 4; d += 2) printf(" %04X", (unsigned)buffee_peek16(pc + d));
         printf("\n");
         if (pc >= 0x1000 && pc < 0x200000) {                                  // the memory before the PC, to see whether the bad words are one or a pattern (a blit's rows, a stray store)
             printf("  mem %06X..%06X:", (unsigned)(pc - 256), (unsigned)(pc + 32));
-            for (uint32_t a = pc - 256; a < pc + 32; a += 2) { if (((a - (pc - 256)) & 31) == 0) printf("\n   %06X:", (unsigned)a); printf(" %04X", (unsigned)read_BE_word(a)); }
+            for (uint32_t a = pc - 256; a < pc + 32; a += 2) { if (((a - (pc - 256)) & 31) == 0) printf("\n   %06X:", (unsigned)a); printf(" %04X", (unsigned)buffee_peek16(a)); }
             printf("\n");
         }
     }
@@ -1128,21 +1382,37 @@ static void buffee_report(void)
         for (int i = 0; i < 320; i++) { if (i % 16 == 0) printf("\n   %06X:", (unsigned)(pc - 512 + 2 * i)); printf(" %04X", (unsigned)__builtin_bswap16(pjit_xmem[i])); }
         printf("\n");
     }
-    { printf("VECTORS (guest $00..$7E, chip RAM):"); for (uint32_t a = 0; a < 0x80; a += 2) { if (a % 32 == 0) printf("\n   %02X:", (unsigned)a); printf(" %04X", (unsigned)read_BE_word(a)); } printf("\n"); }
+    { printf("VECTORS (guest $00..$7E, chip RAM):"); for (uint32_t a = 0; a < 0x80; a += 2) { if (a % 32 == 0) printf("\n   %02X:", (unsigned)a); printf(" %04X", (unsigned)buffee_peek16(a)); } printf("\n"); }
     { extern uint32_t pjit_vdbg[] __attribute__((weak)); if (pjit_vdbg) { printf("VECREAD (vector: first/second read, recorded when they differ or are 0xAAAAxxxx):"); for (int v = 0; v < 256; v++) { uint32_t a = __builtin_bswap32(pjit_vdbg[2 * v]), b = __builtin_bswap32(pjit_vdbg[2 * v + 1]); if (a || b) printf(" %X:%08X/%08X", v, (unsigned)a, (unsigned)b); } printf("\n"); } }
     {                                                                            // exec's memory list: what the guest found (chip RAM, expansion boards, our region tag)
-#define RL(x) ((uint32_t)read_BE_word(x) << 16 | read_BE_word((x) + 2))
+#define RL(x) ((uint32_t)buffee_peek16(x) << 16 | buffee_peek16((x) + 2))
 #define PTR_OK(p) ((p) >= 0x400 && (p) < 0x1000000 && !((p) & 1))                  /* a pointer read from chip RAM worth following (a guest that died early leaves garbage) */
         uint32_t eb = RL(4); printf("MEMLIST (ExecBase %06X):", (unsigned)eb);
         if (PTR_OK(eb)) {
             uint32_t n = RL(eb + 0x142);
-            for (int k = 0; k < 10 && n < 0x10000000 && !(n & 1) && n && RL(n); k++, n = RL(n)) printf(" [%06X-%06X attr %04X free %u KB pri %d]", (unsigned)RL(n + 20), (unsigned)RL(n + 24), (unsigned)read_BE_word(n + 14), (unsigned)(RL(n + 28) >> 10), (int)(int8_t)(read_BE_word(n + 8) >> 8));
+            for (int k = 0; k < 10 && n < 0x10000000 && !(n & 1) && n && RL(n); k++, n = RL(n)) printf(" [%06X-%06X attr %04X free %u KB pri %d]", (unsigned)RL(n + 20), (unsigned)RL(n + 24), (unsigned)buffee_peek16(n + 14), (unsigned)(RL(n + 28) >> 10), (int)(int8_t)(buffee_peek16(n + 8) >> 8));
         }
         printf("\n");
+#ifdef TASKSTACKS
+        /* -DTASKSTACKS: exec's waiting and ready tasks with the top of each stack (Task: type +8 (1 a task, 13 a process), name +10, tc_TrapCode +50, tc_SPReg +54, tc_SPLower +58, tc_SPUpper +62). A task
+           that trapped and sits behind a "Program failed" requester still has the return address of the call that went wrong on its stack. */
+        for (int w = 0; w < 2 && PTR_OK(eb); w++) {
+            uint32_t t = RL(eb + (w ? 0x196 : 0x1A4));
+            for (int k = 0; k < 40 && PTR_OK(t) && RL(t); k++, t = RL(t)) {
+                uint32_t nm = RL(t + 10), sp = RL(t + 54), up = RL(t + 62);
+                printf("TASK %06X %s \"", (unsigned)t, w ? "ready" : "waiting");
+                for (int i = 0; i < 24 && PTR_OK(nm & ~1u); i++) { uint8_t c = (uint8_t)(buffee_peek16((nm + i) & ~1u) >> ((nm + i) & 1 ? 0 : 8)); if (!c) break; printf("%c", c >= 32 && c < 127 ? c : '.'); }
+                printf("\" type %u SP %06X (stack %06X-%06X%s) trap code %06X:", (unsigned)(buffee_peek16(t + 8) >> 8), (unsigned)sp, (unsigned)RL(t + 58), (unsigned)up,
+                       smc_protected(sp) || smc_protected(up - 2) ? ", in a write-protected page" : "", (unsigned)RL(t + 50));
+                for (uint32_t a = sp; PTR_OK(sp) && a < sp + 4 * (TASKSTACKS) && a < up; a += 4) printf(" %08X", (unsigned)RL(a));
+                printf("\n");
+            }
+        }
+#endif
         {   uint32_t q = PTR_OK(eb) ? RL(eb + 0x17A) : 0, xb = 0;               // expansion.library's BoardList: the boards it found (ConfigDev: flags +14, ExpansionRom +16, BoardAddr +32, BoardSize +36)
             for (int k = 0; k < 40 && PTR_OK(q) && RL(q); k++, q = RL(q)) { uint32_t nm = RL(q + 10); if (PTR_OK(nm) && RL(nm) == 0x65787061u) { xb = q; break; } }       // "expa"
             printf("EXPANSION.LIBRARY %06X:", (unsigned)xb);
-            if (xb) { uint32_t c = RL(xb + 0x3C); for (int k = 0; k < 8 && PTR_OK(c) && RL(c); k++, c = RL(c)) printf(" [ConfigDev %06X flags %02X type %02X prod %02X mfr %04X addr %06X size %06X]", (unsigned)c, (unsigned)(read_BE_word(c + 14) >> 8), (unsigned)(read_BE_word(c + 16) >> 8), (unsigned)(read_BE_word(c + 16) & 0xFF), (unsigned)read_BE_word(c + 20), (unsigned)RL(c + 32), (unsigned)RL(c + 36)); }
+            if (xb) { uint32_t c = RL(xb + 0x3C); for (int k = 0; k < 8 && PTR_OK(c) && RL(c); k++, c = RL(c)) printf(" [ConfigDev %06X flags %02X type %02X prod %02X mfr %04X addr %06X size %06X]", (unsigned)c, (unsigned)(buffee_peek16(c + 14) >> 8), (unsigned)(buffee_peek16(c + 16) >> 8), (unsigned)(buffee_peek16(c + 16) & 0xFF), (unsigned)buffee_peek16(c + 20), (unsigned)RL(c + 32), (unsigned)RL(c + 36)); }
             printf("\n"); }
         printf("AUTOCONFIG after the run, $E80000:"); for (uint32_t a = 0xE80000; a < 0xE80010; a += 2) printf(" %04X", read_BE_word(a));
         printf("; first word of $200000..$9FFFFF by megabyte (value, R = write / read-back works):"); for (uint32_t mb = 2; mb < 10; mb++) { uint32_t ad = mb * 0x100000 + 0x1000; uint16_t o = read_BE_word(ad), t; write_BE_word(ad, 0x5A5A); t = read_BE_word(ad); if (t == 0x5A5A) { write_BE_word(ad, 0xA5A5); t = read_BE_word(ad) == 0xA5A5 ? 1 : 0; } else t = 0; write_BE_word(ad, o); printf(" %04X%s", o, t ? "R" : ""); } printf("\n");
@@ -1151,6 +1421,7 @@ static void buffee_report(void)
           printf("RAM64K: %u of the 64 KB blocks in $200000-$DFFFFF hold RAM (first %06X last %06X)\n", (unsigned)hits, (unsigned)first, (unsigned)last); }
     }
     printf("LASTEXC (oldest first):"); for (int k = 16; k >= 1; k--) { uint32_t e = ((pjit_dlog_pos / 8 - k) & 31) * 2; printf(" %X@%X", (unsigned)pjit_dlog[e], (unsigned)pjit_dlog[e + 1]); } printf("\n");
+    printf("MAPROM: %s; %u guest writes there dropped\n", maprom_sealed ? "sealed (a staged Kickstart)" : buffee_rom_on_bus ? "off ($F80000-$FFFFFF is the host's bus)" : "writable (the host's ROM area copied)", (unsigned)buffee_rom_writes);
     printf("ABORTS: %u bus errors, %u address errors delivered to the guest; the last at guest PC %08X, address %08X\n", (unsigned)buffee_abort_bus, (unsigned)buffee_abort_addr, (unsigned)buffee_abort_last_pc, (unsigned)buffee_abort_last_addr);
     if (sample_n) {
         unsigned k;
@@ -1201,8 +1472,9 @@ static void buffee_report(void)
 
 void bbb_exit(uint32_t code)
 {
+    static uint32_t exits;                                                          // (bss: zero again when the payload restarts)
     printf("[BUFFEE] exit %u\n", (unsigned)code);
-    if (pjit_dt == pjit_arena.dt) buffee_report();                                  // r5 is the dispatch table only once a guest was set up (pjit_cache_init)
+    if (!exits++ && pjit_dt == pjit_arena.dt) buffee_report();                      // a fault inside the report comes back here: no second report, straight back to the bootloader                                  // r5 is the dispatch table only once a guest was set up (pjit_cache_init)
     /* the PC sampler (INTC line 3, the PMU counter overflow) must not outlive the payload: the bootloader's IRQ handler does not know line 3 and would take it forever */
     __asm__ volatile("mcr p15, 0, %0, c9, c14, 2" :: "r"(0xFFFFFFFFu));              // PMINTENCLR: no counter raises an interrupt
     __asm__ volatile("mcr p15, 0, %0, c9, c12, 3" :: "r"(0xFFFFFFFFu));              // PMOVSR: clear the overflow flags

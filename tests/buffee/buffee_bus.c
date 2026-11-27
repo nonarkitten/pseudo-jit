@@ -16,7 +16,7 @@
 #define CW(off, v) write_BE_word(0xDFF000 + (off), (v))
 #ifdef SEGMENT
 /* Phase-check mode: SEGMENTS runs of LOOPS cycles; after each the bootloader recalibrates (exit 0x110: ASNCalibrate scores both clock phases and prints the choice), then calls us again. */
-#define SEG ((volatile uint32_t *)0x9F5FFFD0u)                                                    /* [0] segment number, [1] read errors so far */
+#define SEG ((volatile uint32_t *)BUFFEE_DDR(0x9F5FFFD0u))                                                    /* [0] segment number, [1] read errors so far */
 #endif
 int main(void)
 {

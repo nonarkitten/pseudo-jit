@@ -7,7 +7,7 @@
 # ======================================================================================================================================
 
 BBB_INCLUDES = $(INCLUDES) -Iplatform/beaglebone -Iplatform/buffee -Igolden
-BBB_CFLAGS   = -mcpu=cortex-a8 -marm -ffreestanding -nostdlib -O1 -g -Wall $(BBB_INCLUDES) $(CORE_DEFS) $(BLK_CEXTRA)
+BBB_CFLAGS   = -mcpu=cortex-a8 -marm -ffreestanding -nostdlib -O1 -g -Wall $(BBB_INCLUDES) $(CORE_DEFS) $(BLK_CEXTRA) $(EXTRA_CFLAGS)
 BBB_ASFLAGS  = -mcpu=cortex-a8 -marm -ffreestanding -nostdlib -g -Ipjit -Iplatform -Iplatform/beaglebone -Iplatform/buffee -I$(GEN) \
                -Wa,--defsym,PJIT_A8=1 -Wa,--defsym,PJIT_A8_HZ=1000000000 $(CORE_ASM) $(BUFFEE_ASM) $(BBB_ASEXTRA) $(ASX)
 BBB_LDFLAGS  = -nostdlib -Wl,--build-id=none
@@ -43,7 +43,20 @@ BBB_CORE_OBJS = $(patsubst %.c,$(BO)/%.o,$(PJIT_C_SRCS)) $(patsubst %.s,$(BO)/%.
                 $(BO)/platform/pjit_libc.o $(BO)/platform/mmu_stub.o $(BO)/platform/arm_cache.o $(BO)/platform/cp15.o $(BO)/platform/mem_be.o
 BBB_TABLE_OBJS = $(BO)/tables.o $(if $(HAS_BLOCKS),$(BO)/btables.o)
 BBB_OBJS    = $(BBB_CORE_OBJS) $(BO)/platform/beaglebone/boot.o $(BO)/platform/beaglebone/bbb.o $(BBB_TABLE_OBJS)
-BUFFEE_OBJS = $(BBB_CORE_OBJS) $(BBB_TABLE_OBJS) $(BO)/platform/buffee/buffee.o $(BO)/platform/buffee/boot.o
+# the control page (platform/buffee/control.c): the bootloader's own flash, EEPROM and settings code built into the payload, its registers where the payload maps them
+BUFFEE_BL_SRCS = bootloader/hal/flash.c bootloader/hal/i2c0.c bootloader/hal/config.c bootloader/hal/dmtimer.c bootloader/src/store.c bootloader/src/settings_set.c
+BUFFEE_BL_OBJS = $(patsubst %.c,$(BO)/bl/%.o,$(BUFFEE_BL_SRCS)) $(BO)/platform/buffee/control_board.o
+BUFFEE_BL_FLAGS = -DBUFFEE_PAYLOAD -include platform/buffee/bootloader_shim.h -Ibootloader/inc -Ibootloader/src -Wno-unused-variable -Wno-unused-but-set-variable
+$(patsubst %.c,$(BO)/bl/%.o,$(BUFFEE_BL_SRCS)): $(BO)/bl/%.o: %.c platform/buffee/bootloader_shim.h $(BBB_STAMP)
+	@mkdir -p $(dir $@)
+	$(CC) $(BBB_CFLAGS) $(BUFFEE_BL_FLAGS) -MMD -MP -c $< -o $@
+$(BO)/platform/buffee/control_board.o: platform/buffee/control_board.c platform/buffee/bootloader_shim.h $(BBB_STAMP)
+	@mkdir -p $(dir $@)
+	$(CC) $(BBB_CFLAGS) $(BUFFEE_BL_FLAGS) -MMD -MP -c $< -o $@
+$(BO)/platform/buffee/control.o: platform/buffee/control.c platform/buffee/control.h $(BBB_STAMP)
+	@mkdir -p $(dir $@)
+	$(CC) $(BBB_CFLAGS) -Ibootloader/inc -Ibootloader/src -MMD -MP -c $< -o $@
+BUFFEE_OBJS = $(BBB_CORE_OBJS) $(BBB_TABLE_OBJS) $(BO)/platform/buffee/buffee.o $(BO)/platform/buffee/boot.o $(BO)/platform/buffee/control.o $(BUFFEE_BL_OBJS)
 
 # ONBUFFEE=1: the BeagleBone benchmarks (tests/bbb) linked with the Buffee board layer instead, to run on a Buffee (make ONBUFFEE=1 VARIANT=onbuffee bundle-bbb_dhrystone)
 ifeq ($(ONBUFFEE),1)
@@ -52,16 +65,15 @@ BBB_LD      = platform/buffee/bench_dram.ld
 BBB_LDFLAGS += -Wl,--wrap=pjit_cache_init
 BBB_CFLAGS  += -DON_BUFFEE
 endif
-# the bundles of all the benchmarks: make ONBUFFEE=1 VARIANT=onbuffee onbuffee-all, then tools/buffee/run_bench.py build/onbuffee/buffee
-onbuffee-all: $(patsubst %,$(BUNDLES)/%.lzt,$(BBB_TESTS))
-
--include $(BBB_OBJS:.o=.d) $(BUFFEE_OBJS:.o=.d)
+-include $(BBB_OBJS:.o=.d) $(BUFFEE_OBJS:.o=.d) $(wildcard $(BO)/tests/*.d)   # (the tests' too: a header or an included .c rebuilds them)
 
 # ---- BeagleBone images -----------------------------------------------------------------------------------------------------------
 # `make bbb-bbb_dhrystone` -> $(BBB)/bbb_dhrystone.bin; U-Boot loads it at 0x82000000 and runs it (tools/bbb/run.py, platform/beaglebone/README.md).
 # Everything is built for -mcpu=cortex-a8: QEMU's A15 would accept a udiv the board cannot execute.
 BBB_TESTS = bbb_dhrystone bbb_bogomips bbb_micro bbb_branch bbb_opcost bbb_tinybasic bbb_cadence bbb_wcet bbb_claimcost bbb_window bbb_bcache \
 	bbb_mispred bbb_tbsample bbb_tbcycles bbb_blocks bbb_blocks_cf bbb_blocks_sched bbb_dhcycles bbb_irq bbb_chain bbb_chain_prof bbb_lzt
+# the bundles of all the benchmarks: make ONBUFFEE=1 VARIANT=onbuffee onbuffee-all, then tools/buffee/run_bench.py build/onbuffee/buffee (after the list: make expands a prerequisite list where it reads it)
+onbuffee-all: $(patsubst %,$(BUNDLES)/%.lzt,$(BBB_TESTS))
 
 $(BBB)/%.elf: $(BO)/tests/%.o $(BBB_OBJS) $(BBB_LD)
 	$(CC) $(BBB_CFLAGS) $(BBB_LDFLAGS) -T $(BBB_LD) $(BBB_OBJS) $< -o $@ -lgcc
@@ -85,7 +97,7 @@ bbb-%: $(BBB)/%.bin
 # stores; docs/buffee/BUFFEE_MAP.md).   `make buffee-hello` stops at the ELF.   Tests: tests/buffee/.
 BUFFEE_TESTS = buffee_chips buffee_floppy buffee_fc buffee_weight buffee_shotgun buffee_cia4 buffee_top buffee_endian buffee_hello \
 	buffee_boot buffee_fried buffee_blit buffee_bus buffee_reroll buffee_speed buffee_peekrom buffee_smc buffee_abort buffee_regtest \
-	buffee_blitdur buffee_chipfull buffee_crumbs buffee_kspeed buffee_gpreset buffee_boardkind
+	buffee_blitdur buffee_chipfull buffee_crumbs buffee_kspeed buffee_gpreset buffee_boardkind buffee_minimigcfg buffee_mouse buffee_ide buffee_audio buffee_probe buffee_busdma
 
 $(patsubst %,$(BBB)/%.elf,$(BUFFEE_TESTS)): $(BBB)/%.elf: $(BO)/tests/%.o $(BUFFEE_OBJS) platform/buffee/pjit_dram.ld
 	$(CC) $(BBB_CFLAGS) $(BBB_LDFLAGS) -T platform/buffee/pjit_dram.ld $(BUFFEE_OBJS) $< -o $@ -lgcc
@@ -156,7 +168,9 @@ bootloader: $(BL_DIR)/bootloader.bin
 # ---- make firmware ----------------------------------------------------------------------------------------------------------------
 # What goes on a board: the bootloader (flash sector 0) and the standard Kickstart bundle (flash slot PJIT): the interpreter, slot cache and
 # blocks, the Amiga window, the pace governor at 100% of a 68000, RAM code translated from $1000.   -> build/firmware/{bootloader.bin,buffee_boot.lzt}
-# Install them with tools/buffee/restore_bootloader.py and restore_state.py (docs/getting-started.md).
+# and the JTAG installer next to them. Install them over the UART with tools/buffee/restore_bootloader.py and restore_state.py (docs/getting-started.md),
+# or over JTAG with buffee_jtag.py (docs/getting-started-jtag.md). `make firmware-zip` packs the three and the `buffee` floppy (make adf) with the two bring-up
+# guides and the licence notices.
 FIRMWARE_CEXTRA = -DCLEAN -DDRT=0x1000u -DPACE=100
 FIRMWARE_ASX    = -Wa,--defsym,PJIT_PACE=1
 firmware: bootloader
@@ -164,6 +178,17 @@ firmware: bootloader
 	@mkdir -p build/firmware
 	cp build/bootloader/asn/bootloader.bin build/firmware/bootloader.bin
 	cp build/fw/buffee/buffee_boot.lzt build/firmware/buffee_boot.lzt
+	cp tools/buffee/buffee_jtag.py build/firmware/buffee_jtag.py
 	@ls -l build/firmware
 
-.PHONY: bbb-all bootloader firmware a8-test
+FIRMWARE_ZIP = build/firmware/buffee-firmware.zip
+firmware-zip: firmware adf
+	rm -rf build/firmware/zip $(FIRMWARE_ZIP)
+	mkdir -p build/firmware/zip/buffee-firmware
+	cp build/firmware/bootloader.bin build/firmware/buffee_boot.lzt build/firmware/buffee_jtag.py build/amiga/buffee.adf LICENSE NOTICE build/firmware/zip/buffee-firmware/
+	cp -R LICENSES build/firmware/zip/buffee-firmware/
+	cp docs/getting-started-jtag.md docs/getting-started.md build/firmware/zip/buffee-firmware/
+	cd build/firmware/zip && zip -qr ../buffee-firmware.zip buffee-firmware
+	@unzip -l $(FIRMWARE_ZIP)
+
+.PHONY: bbb-all bootloader firmware firmware-zip a8-test

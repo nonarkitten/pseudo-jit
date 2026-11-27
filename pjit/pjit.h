@@ -33,6 +33,12 @@
 /// A pseudo-vector, not a 68K one: the interpretive STOP raises it to end
 /// pjit_run() (nothing can wake a STOP yet). pjit_run() returns it.
 #define PJIT_VEC_STOP 0x100
+/// The RESET instruction in supervisor mode raises this pseudo-vector. With PJIT_RESET_EXIT (a board with a bus to reset) pjit_run() returns it, with the PC
+/// after the RESET in cpu_state.pc, and the platform pulses the bus's RESET line; without it, RESET has nothing to reset and the guest goes on.
+#define PJIT_VEC_RESET 0x108
+/// A double fault: a bus or address error whose handler address (its vector) is odd, where a 68000 halts. pjit_run() returns it with the handler's address in
+/// cpu->r0 and the vector in cpu->r1, the registers and SR as they were when that exception came, and no frame pushed.
+#define PJIT_VEC_HALT 0x10C
 
 typedef enum {
     RESET_SP,       // 0  Initial stack pointer
@@ -403,8 +409,8 @@ extern uint32_t pjit_ext_word_count(uint16_t opcode);
 //   |-- tag --|     |---- line ----| |- word -|     one guest word = 16 host bytes (4 ARM words)
 //
 // A cache line (CL) is 1 << DR_HL_SHIFT host bytes = 1 << (DR_CL_SHIFT - 1) guest words, made of
-// cache-line entries (CLE) of 64 bytes (16 ARM words, 4 slots = 4 guest words). Default 512 guest bytes (4KB
-// host, 64 entries): Dhrystone, ARM instructions per run: 128 B 4,924; 256 B 4,820; 512 B 4,614 (more same-line
+// cache-line entries (CLE) of 128 bytes (8 slots = 8 guest words, two of the A8's 64-byte cache lines). Default 512 guest bytes (4KB
+// host, 32 entries): Dhrystone, ARM instructions per run: 128 B 4,924; 256 B 4,820; 512 B 4,614 (more same-line
 // branches). The upper bound is the slot mask having to be an ARM immediate (<= 255, so 512 B).
 #define DR_CACHE_BYTES  (4u * 1024u * 1024u)
 #ifndef DR_CL_SHIFT

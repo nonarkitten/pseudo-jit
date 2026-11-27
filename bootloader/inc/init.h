@@ -3,7 +3,11 @@
 
 #include "main.h"
 
-extern void InitCorePLL(int clock, int div);        /* core PLL */
+extern void InitCorePLL(int clock, int div, int m4);    /* core PLL: CLKDCOLDO = 48 MHz x clock / div, L3F = that / m4 */
+extern int SetCoreM4(int m4);                       /* L3F = CLKDCOLDO / m4, the DPLL left locked (0, or -1: not acknowledged) */
+extern double CoreM4kHz(void);                      /* the PRU's clock (L3F, twice the GPMC's) as the core PLL is set now */
+extern double CorePLLFor(double bus_khz, int units, int* mult, int* div);   /* the core PLL for `units` GPMC units = 4 bus clocks; returns how many ppm fast */
+#define PLL_MARGIN_PPM 20                           /* the GPMC's cycle is made at least this much shorter than the host's 4 clocks */
 extern void InitMPUPLL(int clock);                  /* CPU clock */
 extern void InitPERPLL(void);                       /* peripheral clock */
 extern void InitL3L4Wakeup(void);                   /* the interconnect and wake-up domain clocks */

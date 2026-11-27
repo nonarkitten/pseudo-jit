@@ -15,6 +15,7 @@
 #include "gpak.h"
 #include "amiga.h"
 #include "../src/busclock.h"
+#include "../src/request.h"
 
 #define ROM_JMP        0x4EF9u          /* JMP abs.L: the second word of every Kickstart ROM, after the 0x1111 / 0x1114 marker */
 #define DETECT_TRIES   50               /* 1 ms apart: the ROM answers as soon as the bus runs, the tries only cover a slow start */
@@ -47,6 +48,51 @@ void AmigaWrite8(uint32_t a, uint8_t v) {
     *(volatile uint8_t*)(amiga_lanes == LANES_STRAIGHT ? a ^ 1u : a) = v;
 }
 
+/* A Kickstart's 32-bit words, added with each carry folded back in, come to FFFFFFFF (a 256 KB one seen twice in 512 KB too). The sum does not change when words
+   change places, so it misses a read from the wrong address; AmigaCopyROM compares two reads as well. An image that is not a Kickstart is not checked. */
+int KickstartSumOK(const void* image, uint32_t bytes) {
+    const uint8_t* p = (const uint8_t*)image;
+    uint32_t sum = 0, w, i;
+
+    if (bytes < 0x40000u || p[0] != 0x11 || (p[1] != 0x11 && p[1] != 0x14)) return 1;
+    for (i = 0; i < bytes; i += 4) {
+        w = (uint32_t)p[i] << 24 | (uint32_t)p[i + 1] << 16 | (uint32_t)p[i + 2] << 8 | p[i + 3];
+        sum += w;
+        if (sum < w) sum++;
+    }
+    return sum == 0xFFFFFFFFu;
+}
+
+uint32_t AmigaCompare(const void* copy, uint32_t src, uint32_t bytes) {
+    const uint16_t* c = (const uint16_t*)copy;
+    uint32_t i, bad = 0;
+    uint16_t w;
+
+    for (i = 0; i < bytes / 2; i++) {
+        w = raw16(src + 2 * i);
+        if (amiga_lanes == LANES_STRAIGHT) w = __builtin_bswap16(w);
+        bad += w != c[i];
+    }
+    return bad;
+}
+
+/* A ROM read through the bus for MapROM or the flash: read, read again and compare, and check a Kickstart's sum; a few tries, each line of the console saying why. */
+int AmigaCopyROM(void* dst, uint32_t src, uint32_t bytes) {
+    const uint32_t step = 0x2000u;                                 /* between looks at ESC */
+    uint32_t i, bad;
+    int k;
+
+    for (k = 0; k < ROM_COPY_TRIES; k++) {
+        for (i = 0; i < bytes; i += step) { AmigaCopy((uint8_t*)dst + i, src + i, step); if (uart_break) return -2; }
+        for (i = 0, bad = 0; i < bytes; i += step) { bad += AmigaCompare((uint8_t*)dst + i, src + i, step); if (uart_break) return -2; }
+        if (bad) printf("ROM at %06lX: %lu words read differently twice: reading it again\n", (unsigned long)src, (unsigned long)bad);
+        else if (!KickstartSumOK(dst, bytes)) printf("ROM at %06lX: a bad Kickstart checksum: reading it again\n", (unsigned long)src);
+        else return 0;
+    }
+    printf("ROM at %06lX: no good copy in %d tries: the bus misreads\n", (unsigned long)src, ROM_COPY_TRIES);
+    return -1;
+}
+
 void AmigaCopy(void* dst, uint32_t src, uint32_t bytes) {
     uint16_t* d = (uint16_t*)dst;
     uint32_t i;
@@ -77,8 +123,8 @@ static void UseLanes(int lanes, int from) {
     GPUseImage(lanes == LANES_STRAIGHT);
 }
 
-static int StoreKind(int kind) {
-    if (boot.eeprom == CFG_NO_EEPROM || SaveBoardKind(kind)) return 0;
+static int StoreKind(int kind) {                                /* not under the debugger, where only a request writes: the next boot from the flash stores it */
+    if (boot.eeprom == CFG_NO_EEPROM || jtag_entry[0] == JTAG_MAGIC || SaveBoardKind(kind)) return 0;
     info("Board kind stored in the EEPROM\n");
     return 1;
 }

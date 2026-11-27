@@ -179,6 +179,7 @@ static int vformat(struct sink *s, const char *fmt, va_list ap)
             while (*fmt >= '0' && *fmt <= '9') { precision = precision * 10 + (*fmt - '0'); fmt++; }
         }
         if (left_justify) zero_pad = 0; /* '-' overrides '0', as in real printf */
+        if ((*fmt == 'l' && fmt[1] != 'l') || *fmt == 'z') fmt++;   /* long and size_t are an int's width on this CPU; 'll' stays unknown */
 
         switch (*fmt) {
         case 'd': case 'i':

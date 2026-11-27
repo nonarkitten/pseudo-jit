@@ -26,6 +26,8 @@
 	.endm
 	.equ	VEC_TRAP15, 47          @ vector_t TRAP15 in pjit.h
 	.equ	VEC_STOP,   0x100       @ PJIT_VEC_STOP in pjit.h
+	.equ	VEC_RESET,  0x108       @ PJIT_VEC_RESET in pjit.h
+	.equ	VEC_HALT,   0x10C       @ PJIT_VEC_HALT in pjit.h
 
 @ \rd = a host address inside the DR cache -> the guest address it translates. E=LE.
 @ (Also defined in runtime_dr.s, where the cores use it.)
@@ -761,6 +763,12 @@ pjit_i_pc_leader:                       @ the svc is the instruction's leader, i
 
 	cmp	r3, #0x104              @ a step request (the differential harness's prefetch hook, tests/qemu/amiga_hook.S): the guest is parked, pjit_run() returns 0x104
 	beq	pjit_i_leave
+	cmp	r3, #VEC_RESET          @ RESET: on a board with a bus, pjit_run() returns and the platform pulses the line; elsewhere there is nothing to reset
+	.ifdef	PJIT_RESET_EXIT
+	beq	pjit_i_leave
+	.else
+	beq	pjit_i_resume_next
+	.endif
 	cmp	r3, #VEC_STOP           @ STOP: with interrupts on it waits for one; otherwise it ends pjit_run()
 	bne	1f
 	.ifdef	PJIT_LATCH
@@ -1191,7 +1199,81 @@ pjit_i_deliver:
 	cmp	r0, r2
 	movne	r2, r0
 	bne	.Lvec_again
-	ldrh	r0, [r5, #CPU_SR]       @ r0 = the SR as the program had it
+	@ An odd handler address: the 68000 builds the frame and takes an address error when it fetches the handler's first word (here the odd PC faults in the router), but
+	@ for a bus or address error's own handler that is a double fault, and it halts. pjit_run() returns VEC_HALT with the handler's address in cpu->r0 and the vector
+	@ in cpu->r1 (little-endian), the guest's registers and SR as they were when the exception came, and nothing pushed.
+	.ifdef	PJIT_DLOG
+	cmp	r3, #VEC_ADDRESSERR             @ debug: the first address error on an odd PC (a jump or return to an odd address), with what led there, at pjit_oddpc:
+	bne	3f                              @ {the PC, A5, A6, A7, the SR (as stored)} little-endian, then the six longs at A7 as the guest reads them (big-endian)
+	tst	r4, #1
+	beq	3f
+	.weak	pjit_oddpc
+	setend	le
+	movw	r0, #:lower16:pjit_oddpc
+	movt	r0, #:upper16:pjit_oddpc
+	cmp	r0, #0
+	beq	4f
+	ldr	r1, [r0]
+	cmp	r1, #0
+	bne	4f
+	str	r4, [r0]
+	str	r11, [r0, #4]
+	str	r12, [r0, #8]
+	str	sp, [r0, #12]
+	ldrh	r1, [r5, #CPU_SR]
+	str	r1, [r0, #16]
+	tst	sp, #1
+	bne	4f
+	setend	be
+	ldr	r1, [sp]
+	str	r1, [r0, #20]
+	ldr	r1, [sp, #4]
+	str	r1, [r0, #24]
+	ldr	r1, [sp, #8]
+	str	r1, [r0, #28]
+	ldr	r1, [sp, #12]
+	str	r1, [r0, #32]
+	ldr	r1, [sp, #16]
+	str	r1, [r0, #36]
+	ldr	r1, [sp, #20]
+	str	r1, [r0, #40]
+4:	setend	be
+3:
+	.endif
+	tst	r2, #1
+	beq	1f
+	.ifdef	PJIT_DLOG
+	.weak	pjit_oddvec
+	setend	le                              @ debug: the first and the last delivery whose handler address is odd, {vector, the table entry's address, the address read,
+	str	r1, [r5, #CPU_R2]               @ the guest PC}, at pjit_oddvec + 0 and + 20 (little-endian), with their count at + 16 (CPU_R2: scratch, no register is free)
+	movw	r0, #:lower16:pjit_oddvec
+	movt	r0, #:upper16:pjit_oddvec
+	cmp	r0, #0
+	beq	2f
+	str	r3, [r0, #20]
+	str	r1, [r0, #24]
+	str	r2, [r0, #28]
+	str	r4, [r0, #32]
+	ldr	r1, [r0, #16]
+	add	r1, r1, #1
+	str	r1, [r0, #16]
+	cmp	r1, #1
+	bne	2f
+	str	r3, [r0]
+	ldr	r1, [r5, #CPU_R2]
+	str	r1, [r0, #4]
+	str	r2, [r0, #8]
+	str	r4, [r0, #12]
+2:	setend	be
+	.endif
+	cmp	r3, #VEC_ADDRESSERR
+	bhi	1f
+	setend	le
+	str	r2, [r5, #CPU_R0]
+	str	r3, [r5, #CPU_R1]
+	mov	r3, #VEC_HALT
+	b	pjit_i_leave
+1:	ldrh	r0, [r5, #CPU_SR]       @ r0 = the SR as the program had it
 
 	tst	r0, #0x2000             @ from user mode? park A7 as USP and use the
 	streq	sp, [r5, #CPU_USP]      @ supervisor stack: frames always go there
@@ -1230,8 +1312,8 @@ pjit_i_deliver:
 	bic	r0, r0, #0x8000         @ ... T clear; the interrupt mask and CCR are unchanged
 	strh	r0, [r5, #CPU_SR]
 	.ifdef	PJIT_FC
-	movw	r3, #0xC194                    @ FC2 (GPIO2_10) high: the exception runs in supervisor state (GPIO2 SETDATAOUT; the BE store of 0x40000 is the LE word 0x400)
-	movt	r3, #0x481A
+	movw	r3, #:lower16:(PJIT_GPIO2 + 0x194)  @ FC2 (GPIO2_10) high: the exception runs in supervisor state (GPIO2 SETDATAOUT; the BE store of 0x40000 is the LE word 0x400)
+	movt	r3, #:upper16:(PJIT_GPIO2 + 0x194)
 	mov	r1, #0x40000
 	str	r1, [r3]
 	dsb	sy

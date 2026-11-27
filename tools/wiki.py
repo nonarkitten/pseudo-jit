@@ -20,7 +20,8 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # (wiki page name, source file, section of the sidebar)
 PAGES = [
     ("Home", "docs/README.md", None),
-    ("Getting-Started", "docs/getting-started.md", "Use"),
+    ("Bring-up-over-UART", "docs/getting-started.md", "Use"),
+    ("Bring-up-over-JTAG", "docs/getting-started-jtag.md", "Use"),
     ("Building-and-Testing", "docs/building.md", "Use"),
     ("Repository-Map", "docs/repo-map.md", "Use"),
     ("Tools", "docs/tools.md", "Use"),

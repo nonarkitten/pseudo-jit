@@ -17,13 +17,13 @@ extern void emit_opcode_table(void);
 // through the prescaler if TCLR has it on (PRE, bit 5: divide by 2^(PTV+1), PTV = bits 4:2).
 static void clock_report(void)
 {
-    uint32_t sel = REG(0x44E0042Cu), m2 = REG(0x44E004A8u) & 0x1F, mode = REG(0x44E00488u) & 7;
+    uint32_t sel = REG(BBB_IO(0x44E0042Cu)), m2 = REG(BBB_IO(0x44E004A8u)) & 0x1F, mode = REG(BBB_IO(0x44E00488u)) & 7;
     uint32_t M = (sel >> 8) & 0x7FF, N = sel & 0x7F;
-    uint32_t tclr = REG(0x48040038u), div = (tclr & 0x20) ? 2u << ((tclr >> 2) & 7) : 1u;
+    uint32_t tclr = REG(BBB_IO(0x48040038u)), div = (tclr & 0x20) ? 2u << ((tclr >> 2) & 7) : 1u;
     printf("[CLK] DPLL_MPU mode %u (4 = MN bypass, 7 = locked), M=%u N=%u M2=%u -> %u MHz\n", mode, M, N, m2, m2 ? M * 24 / (N + 1) / m2 : 0);
-    uint32_t c0 = bbb_pmu_cycles(), t0 = REG(0x4804003Cu);
-    while (REG(0x4804003Cu) - t0 < 2400000u / div) ;
-    uint32_t c1 = bbb_pmu_cycles(), t1 = REG(0x4804003Cu);
+    uint32_t c0 = bbb_pmu_cycles(), t0 = REG(BBB_IO(0x4804003Cu));
+    while (REG(BBB_IO(0x4804003Cu)) - t0 < 2400000u / div) ;
+    uint32_t c1 = bbb_pmu_cycles(), t1 = REG(BBB_IO(0x4804003Cu));
     printf("[CLK] %u PMU cycles in %u DMTIMER2 ticks (TCLR %02X, 24 MHz / %u): %u MHz measured\n", c1 - c0, t1 - t0, tclr, div,
            (uint32_t)(((uint64_t)(c1 - c0) * 24 / div) / (t1 - t0)));
 }

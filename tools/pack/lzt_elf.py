@@ -4,7 +4,7 @@ each table symbol's bytes, at its link address, with the best of plain / 4 / 8 /
   tools/pack/lzt_elf.py <elf> <out.lzt> [--interp] [--rel] [--header out.h]
       --interp: leave out the block translator's tables; --rel: offsets from the lowest table instead of
       absolute addresses;
-      --image: the whole linked image (every LOAD segment cut at the table symbols; writes <out>.entry too);
+      --image: the whole linked image (every LOAD segment cut at the table symbols, at its load address; writes <out>.entry too);
       --no-code: leave out .text; --header: also a C header with the bundle and a checksum per part
       (tests/bbb/bbb_lzt.c)
 A symbol's size is the distance to the next symbol (rounded up to 256; the zero tail is harmless)."""
@@ -32,10 +32,10 @@ def main():
         struct.unpack_from("<H", elf, 44)[0],
     )
     segs = [struct.unpack_from("<IIIIIIII", elf, phoff + i * phentsize) for i in range(phnum)]
-    segs = [(va, off, fsz) for t, off, va, pa, fsz, msz, fl, al in segs if t == 1 and fsz]
+    segs = [(va, off, fsz, pa) for t, off, va, pa, fsz, msz, fl, al in segs if t == 1 and fsz]
 
     def read(addr, n):
-        for va, off, fsz in segs:
+        for va, off, fsz, pa in segs:
             if va <= addr and addr + n <= va + fsz:
                 return elf[off + addr - va : off + addr - va + n]
         sys.exit("address %08X not in the file" % addr)
@@ -55,13 +55,14 @@ def main():
     ):  # the whole linked image: every LOAD segment, cut at the table symbols so each gets its own stride
         cuts = sorted({addr[n] for n in INTERP + BLOCKS if n in addr})
         parts = []
-        for va, off, fsz in segs:
+        for va, off, fsz, pa in segs:
             pts = [va] + [c for c in cuts if va < c < va + fsz] + [va + fsz]
             for lo, hi in zip(pts, pts[1:]):
                 for c in range(lo, hi, CHUNK):
-                    # chunks of at most CHUNK bytes (a multiple of 256): the unpack scratch stays small
-                    parts.append((c, read(c, min(hi, c + CHUNK) - c)))
+                    # chunks of at most CHUNK bytes (a multiple of 256): the unpack scratch stays small; each goes to its load address
+                    parts.append((c + pa - va, read(c, min(hi, c + CHUNK) - c)))
         entry = struct.unpack_from("<I", elf, 24)[0]
+        entry += next((pa - va for va, off, fsz, pa in segs if va <= entry < va + fsz), 0)  # (the load address)
         parts.sort(key=lambda p: p[0])
         img = lzt.bundle([(v - (parts[0][0] if "--rel" in sys.argv else 0), b) for v, b in parts])
         open(a[1], "wb").write(img)
@@ -87,7 +88,7 @@ def main():
         INTERP + ([] if "--interp" in sys.argv else BLOCKS), key=lambda n: addr[n]
     ):  # ascending: a part's zero padding only spills into parts loaded after it
         v = addr[name]
-        end = max(va + fsz for va, off, fsz in segs if va <= v < va + fsz)
+        end = max(va + fsz for va, off, fsz, pa in segs if va <= v < va + fsz)
         size = sized.get(name) or min(x for x in allv if x > v) - v
         size = min(size, end - v)
         parts.append((v, read(v, size)))

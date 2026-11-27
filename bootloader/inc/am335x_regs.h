@@ -17,22 +17,27 @@
 #define __WRITE
 #define __READ_WRITE
 
+/* Where a register is: its physical address, unless the program that includes this maps the peripherals elsewhere (the PJIT payload: AM335X_VA = BUFFEE_IO). */
+#ifndef AM335X_VA
+#define AM335X_VA(pa) (pa)
+#endif
+
 /* one register: NAME->LONG (or ->BYTE) is the whole register; the _BIT forms add NAME->BIT.FIELD for the fields this code names (anonymous padding between them) */
 #define AM335X_REG32(NAME, ADDR, ACCESS) \
     typedef union { volatile uint32_t LONG; } NAME##_t; \
-    static ACCESS NAME##_t * const NAME = (ACCESS NAME##_t *)(ADDR)
+    static ACCESS NAME##_t * const NAME = (ACCESS NAME##_t *)AM335X_VA(ADDR)
 #define AM335X_REG32_BIT(NAME, ADDR, ACCESS, FIELDS) \
     typedef union { volatile uint32_t LONG; volatile struct { FIELDS } BIT; } NAME##_t; \
-    static ACCESS NAME##_t * const NAME = (ACCESS NAME##_t *)(ADDR)
+    static ACCESS NAME##_t * const NAME = (ACCESS NAME##_t *)AM335X_VA(ADDR)
 #define AM335X_REG32_TYPED(NAME, ADDR, ACCESS, BITS) \
     typedef union { volatile uint32_t LONG; volatile BITS BIT; } NAME##_t; \
-    static ACCESS NAME##_t * const NAME = (ACCESS NAME##_t *)(ADDR)
+    static ACCESS NAME##_t * const NAME = (ACCESS NAME##_t *)AM335X_VA(ADDR)
 #define AM335X_REG8(NAME, ADDR, ACCESS) \
     typedef union { volatile uint8_t BYTE; } NAME##_t; \
-    static ACCESS NAME##_t * const NAME = (ACCESS NAME##_t *)(ADDR)
+    static ACCESS NAME##_t * const NAME = (ACCESS NAME##_t *)AM335X_VA(ADDR)
 #define AM335X_REG8_BIT(NAME, ADDR, ACCESS, FIELDS) \
     typedef union { volatile uint8_t BYTE; volatile struct { FIELDS } BIT; } NAME##_t; \
-    static ACCESS NAME##_t * const NAME = (ACCESS NAME##_t *)(ADDR)
+    static ACCESS NAME##_t * const NAME = (ACCESS NAME##_t *)AM335X_VA(ADDR)
 
 
 /* a register whose bit-field type is named because the code keeps one in a variable */

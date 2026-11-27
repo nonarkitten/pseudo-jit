@@ -43,11 +43,15 @@ $(ELF): $(OBJECTS) linker.lds
 	$(Q)$(CROSS)size $@
 	$(Q)$(CROSS)nm --print-size --size-sort --radix=x $@ | grep -v -E "\.debug|\.group" > $(@:.elf=.sz)
 
-$(OBJDIR)/%.o: %.c | $(OBJDIR)
+# the flags of the last build: when VERSION or DEFS change, every object is built again (make looks at file times only)
+FLAGFILE := $(OBJDIR)/flags
+$(shell mkdir -p $(OBJDIR); echo '$(CFLAGS)' | cmp -s - $(FLAGFILE) || echo '$(CFLAGS)' > $(FLAGFILE))
+
+$(OBJDIR)/%.o: %.c $(FLAGFILE) | $(OBJDIR)
 	@echo Compiling $<...
 	$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
 
-$(OBJDIR)/%.o: %.s | $(OBJDIR)
+$(OBJDIR)/%.o: %.s $(FLAGFILE) | $(OBJDIR)
 	@echo Assembling $<...
 	$(CC) $(CFLAGS) -c $< -o $@
 
